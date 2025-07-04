@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from '../../db/schema';
+import * as relations from '../../db/relations';
 
 // Database connection for server-side API endpoints
 // This should only be used in server-side code
@@ -38,4 +39,6 @@ try {
 }
 
 // Create drizzle ORM instance
-export const db = drizzle(client, { schema });
+export const db = drizzle(client, {
+  schema: { ...schema, ...relations }
+});

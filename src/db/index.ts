@@ -9,3 +9,7 @@
 
 // Re-export the db instance from the server directory
 export { db } from '../lib/server/drizzle';
+
+// Export schema and relations
+export * from './schema';
+export * from './relations';

@@ -1,4 +1,4 @@
-import { pgTable, text, serial, varchar, integer, timestamp } from 'drizzle-orm/pg-core';
+import { pgTable, text, serial, varchar, integer, timestamp, jsonb } from 'drizzle-orm/pg-core';
 
 // Example users table
 export const users = pgTable('users', {
@@ -15,5 +15,33 @@ export const posts = pgTable('posts', {
   title: text('title').notNull(),
   content: text('content'),
   authorId: integer('author_id').references(() => users.id),
+  createdAt: timestamp('created_at').defaultNow().notNull()
+});
+
+// APIs table - stores uploaded Swagger/OpenAPI specifications
+export const apis = pgTable('apis', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull(),
+  description: text('description'),
+  specFormat: varchar('spec_format', { length: 10 }).notNull(), // "yaml" or "json"
+  specContent: text('spec_content').notNull(), // The full OpenAPI/Swagger spec content
+  userId: integer('user_id').references(() => users.id),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull()
+});
+
+// API Endpoints table - stores individual endpoints extracted from APIs
+export const apiEndpoints = pgTable('api_endpoints', {
+  id: serial('id').primaryKey(),
+  apiId: integer('api_id').notNull().references(() => apis.id),
+  path: text('path').notNull(),
+  method: varchar('method', { length: 10 }).notNull(), // GET, POST, PUT, DELETE, etc.
+  operationId: text('operation_id'),
+  summary: text('summary'),
+  description: text('description'),
+  requestSchema: jsonb('request_schema'),
+  responseSchema: jsonb('response_schema'),
+  parameters: jsonb('parameters'),
+  tags: text('tags').array(),
   createdAt: timestamp('created_at').defaultNow().notNull()
 });
