@@ -1,7 +1,22 @@
 <script lang="ts">
   import { onMount } from 'svelte';
 
-  let posts: any[] = [];
+  interface Post {
+    post: {
+      id: string;
+      title: string;
+      content: string | null;
+      authorId: string;
+      createdAt: string;
+    };
+    author?: {
+      id: string;
+      name: string;
+      email: string;
+    };
+  }
+
+  let posts: Post[] = [];
   let loading = false;
   let error: string | null = null;
 
@@ -32,108 +47,32 @@
   });
 </script>
 
-<div class="drizzle-relations-example">
-  <h2>Drizzle Relations Example</h2>
+<div class="p-4">
+  <h2 class="text-xl font-semibold mb-4">Drizzle Relations Example</h2>
   
-  <button on:click={fetchPostsWithAuthors}>Fetch Posts with Authors</button>
+  <button 
+    on:click={fetchPostsWithAuthors}
+    class="mb-4 rounded-md bg-blue-600 px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600">
+    Fetch Posts with Authors
+  </button>
   
   {#if loading}
-    <p>Loading posts...</p>
+    <p class="py-4">Loading posts...</p>
   {:else if error}
-    <p class="error">Error: {error}</p>
+    <p class="text-red-600 py-4">Error: {error}</p>
   {:else if posts.length > 0}
-    <div class="posts-grid">
+    <div class="grid grid-cols-1 gap-4 mt-4 md:grid-cols-2">
       {#each posts as post}
-        <div class="post-card">
-          <h3>{post.post.title}</h3>
-          <p class="post-content">{post.post.content || 'No content'}</p>
-          <div class="author-info">
-            <strong>Author:</strong> {post.author?.name || 'Unknown'}
+        <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+          <h3 class="text-lg font-medium text-gray-900 mt-0">{post.post.title}</h3>
+          <p class="italic text-gray-600">{post.post.content || 'No content'}</p>
+          <div class="mt-4 pt-2 border-t border-gray-100">
+            <strong class="text-gray-700">Author:</strong> {post.author?.name || 'Unknown'}
           </div>
         </div>
       {/each}
     </div>
   {:else}
-    <p>No posts found. Click the button to fetch posts.</p>
+    <p class="py-4 text-gray-600">No posts found. Click the button to fetch posts.</p>
   {/if}
-  </div>
-
-<style>
-  .drizzle-relations-example {
-    padding: 1rem;
-  }
-  
-  button {
-    padding: 0.5rem 1rem;
-    background-color: #0070f3;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    margin-bottom: 1rem;
-  }
-  
-  button:hover {
-    background-color: #0060df;
-  }
-  
-  .error {
-    color: red;
-  }
-  
-  .posts-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 1rem;
-    margin-top: 1rem;
-  }
-  
-  @media (min-width: 768px) {
-    .posts-grid {
-      grid-template-columns: repeat(2, 1fr);
-    }
-  }
-  
-  .post-card {
-    padding: 1rem;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    background-color: #f9f9f9;
-  }
-  
-  .post-card h3 {
-    margin-top: 0;
-  }
-  
-  .post-content {
-    font-style: italic;
-    color: #555;
-  }
-  
-  .author-info {
-    margin-top: 1rem;
-    padding-top: 0.5rem;
-    border-top: 1px solid #eee;
-  }
-  
-  .code-example {
-    margin-top: 2rem;
-    padding: 1rem;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    background-color: #f4f4f4;
-  }
-  
-  .code-example h3 {
-    margin-top: 0;
-    margin-bottom: 1rem;
-  }
-  
-  pre {
-    background-color: #272822;
-    color: #f8f8f2;
-    padding: 1rem;
-    border-radius: 4px;
-    overflow-x: auto;
-  }
-</style>
+</div>

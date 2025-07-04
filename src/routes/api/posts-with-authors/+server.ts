@@ -2,10 +2,15 @@ import { json } from '@sveltejs/kit';
 import { db } from '$lib/server/drizzle';
 import { posts, users } from '../../../db/schema';
 import { eq } from 'drizzle-orm';
+import { authenticateRequest } from '$lib/server/auth';
+import type { RequestEvent } from '@sveltejs/kit';
 
-export async function GET() {
+export async function GET(event: RequestEvent) {
   try {
     console.log('Fetching posts with authors...');
+    
+    // Authenticate the request
+    const { user } = await authenticateRequest(event);
     
     // Start with a basic query to check database connectivity
     try {
