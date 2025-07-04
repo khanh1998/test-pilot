@@ -4,6 +4,12 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
 	plugins: [tailwindcss(), sveltekit()],
+	optimizeDeps: {
+		exclude: ['postgres', 'drizzle-orm', 'drizzle-orm/postgres-js']
+	},
+	ssr: {
+		noExternal: ['drizzle-orm', 'postgres']
+	},
 	test: {
 		projects: [
 			{
