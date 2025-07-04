@@ -13,9 +13,9 @@ export async function parseSwaggerSpec(content: string, format: 'yaml' | 'json')
   try {
     // Convert the content to JSON if it's in YAML format
     const jsonContent = format === 'yaml' ? yaml.load(content) : JSON.parse(content);
-    
     // Validate and dereference the OpenAPI/Swagger spec
-    const api = await SwaggerParser.dereference(jsonContent as SwaggerDocument);
+    // Use type assertion to tell TypeScript that this method exists
+    const api = await (SwaggerParser as any).dereference(jsonContent as SwaggerDocument);
     
     return api;
   } catch (error) {

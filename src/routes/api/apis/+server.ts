@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { db } from '$lib/server/drizzle';
 import { apis, apiEndpoints } from '../../../db/schema';
-import { eq, sql } from 'drizzle-orm';
+import { eq, sql, inArray } from 'drizzle-orm';
 import type { RequestEvent } from '@sveltejs/kit';
 
 export async function GET({ locals }: RequestEvent) {
@@ -20,24 +20,25 @@ export async function GET({ locals }: RequestEvent) {
       .orderBy(apis.createdAt);
 
     // Get counts using a separate query with a join to count endpoints
-    const endpointCounts = await db
-      .select({
-        apiId: apiEndpoints.apiId,
-        count: sql<number>`count(*)::int`
-      })
-      .from(apiEndpoints)
-      .where(
-        userApis.length > 0 
-          ? sql`${apiEndpoints.apiId} IN (${userApis.map(api => api.id).join(',')})` 
-          : sql`1=0` // No APIs, so add a condition that never matches
-      )
-      .groupBy(apiEndpoints.apiId);
-    
-    // Create a map of API ID to endpoint count
     const countByApiId: Record<number, number> = {};
-    endpointCounts.forEach(count => {
-      countByApiId[count.apiId] = count.count;
-    });
+    
+    if (userApis.length > 0) {
+      // Use Drizzle's inArray operator for proper parameter binding
+      const apiIds = userApis.map(api => api.id);
+      const endpointCounts = await db
+        .select({
+          apiId: apiEndpoints.apiId,
+          count: sql<number>`count(*)::int`
+        })
+        .from(apiEndpoints)
+        .where(inArray(apiEndpoints.apiId, apiIds))
+        .groupBy(apiEndpoints.apiId);
+      
+      // Create a map of API ID to endpoint count
+      endpointCounts.forEach(count => {
+        countByApiId[count.apiId] = count.count;
+      });
+    }
 
     // Format the response
     const formattedApis = userApis.map(api => ({

@@ -37,7 +37,7 @@
   $: allTags = [...new Set(endpoints.flatMap(e => e.tags || []))].sort();
   
   // Filter state
-  let selectedTag: string | null = null;
+  let selectedTag: string = '';
   let searchQuery = '';
   
   // Filter endpoints by tag and search query
@@ -93,7 +93,7 @@
   }
   
   function resetFilters() {
-    selectedTag = null;
+    selectedTag = '';
     searchQuery = '';
   }
 </script>
@@ -155,7 +155,7 @@
               bind:value={selectedTag}
               class="px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
             >
-              <option value={null}>All Tags</option>
+              <option value="">All Tags</option>
               {#each allTags as tag}
                 <option value={tag}>{tag}</option>
               {/each}
