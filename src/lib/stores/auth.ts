@@ -47,7 +47,8 @@ function createAuthStore() {
         }
         
         const data = await response.json();
-        const token = data.session.access_token;
+        // Use our custom JWT token instead of Supabase session token
+        const token = data.token;
         const user = data.user;
         
         // Store token in localStorage for persistence
@@ -85,7 +86,28 @@ function createAuthStore() {
           throw new Error(errorData.message || 'Sign up failed');
         }
         
-        update(state => ({ ...state, loading: false }));
+        const data = await response.json();
+        
+        // After successful signup, automatically sign in the user
+        if (data.token) {
+          const token = data.token;
+          const user = data.user;
+          
+          // Store token in localStorage for persistence
+          localStorage.setItem('authToken', token);
+          localStorage.setItem('authUser', JSON.stringify(user));
+          
+          // Update store
+          set({
+            isAuthenticated: true,
+            user,
+            token,
+            loading: false
+          });
+        } else {
+          update(state => ({ ...state, loading: false }));
+        }
+        
         return { success: true };
       } catch (error: any) {
         update(state => ({ ...state, loading: false }));

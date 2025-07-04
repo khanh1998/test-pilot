@@ -2,7 +2,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { supabase } from '$lib/supabase/client';
-  
+  import { fetchWithAuth } from '$lib/api';
+
   let loading = false;
   let error: string | null = null;
   let data: any = null;
@@ -15,7 +16,7 @@
       error = null;
       
       // Proper way - use a server API endpoint that uses Drizzle internally
-      const response = await fetch('/api/users');
+      const response = await fetchWithAuth('/api/users');
       
       if (!response.ok) {
         throw new Error(`API error: ${response.status} ${response.statusText}`);
@@ -36,11 +37,8 @@
       error = null;
       
       // Call the server-side API endpoint to create sample data
-      const response = await fetch('/api/seed', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        }
+      const response = await fetchWithAuth('/api/seed', {
+        method: 'POST'
       });
       
       if (!response.ok) {

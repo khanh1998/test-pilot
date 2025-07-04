@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { fetchWithAuth } from '$lib/api';
 
   interface Post {
     post: {
@@ -27,7 +28,7 @@
       error = null;
       
       // This would call a server endpoint that uses Drizzle's relation capabilities
-      const response = await fetch('/api/posts-with-authors');
+      const response = await fetchWithAuth('/api/posts-with-authors');
       
       if (!response.ok) {
         throw new Error(`API error: ${response.status}`);

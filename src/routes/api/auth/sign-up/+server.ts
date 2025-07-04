@@ -3,6 +3,7 @@ import { db } from '$lib/server/drizzle';
 import { users } from '../../../../db/schema';
 import { createClient } from '@supabase/supabase-js';
 import type { RequestEvent } from '@sveltejs/kit';
+import { generateToken } from '$lib/server/auth';
 
 // Create a Supabase admin client for server-side operations
 const supabaseAdmin = createClient(
@@ -44,13 +45,21 @@ export async function POST({ request }: RequestEvent) {
       supabaseAuthId: authData.user.id
     }).returning();
 
+    // Create user data object
+    const userData = {
+      id: newUser[0].id,
+      name: newUser[0].name,
+      email: newUser[0].email
+    };
+    
+    // Generate JWT token
+    const token = generateToken(userData);
+
     return json({ 
       message: 'User registered successfully',
-      user: {
-        id: newUser[0].id,
-        name: newUser[0].name,
-        email: newUser[0].email
-      }
+      user: userData,
+      token,
+      session: authData.user // Include Supabase session for compatibility
     });
     
   } catch (err: unknown) {

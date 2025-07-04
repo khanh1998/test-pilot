@@ -4,6 +4,7 @@ import { users } from '../../../../db/schema';
 import { createClient } from '@supabase/supabase-js';
 import { eq } from 'drizzle-orm';
 import type { RequestEvent } from '@sveltejs/kit';
+import { generateToken } from '$lib/server/auth';
 
 // Create a Supabase admin client for server-side operations
 const supabaseAdmin = createClient(
@@ -49,26 +50,36 @@ export async function POST({ request }: RequestEvent) {
         supabaseAuthId: authData.user.id
       }).returning();
       
+      // Create a custom JWT token
+      const userData = {
+        id: newUser[0].id,
+        name: newUser[0].name,
+        email: newUser[0].email
+      };
+      const token = generateToken(userData);
+
       return json({
         message: 'User signed in and synchronized',
         session: authData.session,
-        user: {
-          id: newUser[0].id,
-          name: newUser[0].name,
-          email: newUser[0].email
-        }
+        token,
+        user: userData
       });
     }
 
     // Regular sign-in with existing user
+    // Create a custom JWT token
+    const userData = {
+      id: userRecord[0].id,
+      name: userRecord[0].name,
+      email: userRecord[0].email
+    };
+    const token = generateToken(userData);
+
     return json({
       message: 'User signed in successfully',
       session: authData.session,
-      user: {
-        id: userRecord[0].id,
-        name: userRecord[0].name,
-        email: userRecord[0].email
-      }
+      token,
+      user: userData
     });
     
   } catch (err: unknown) {
