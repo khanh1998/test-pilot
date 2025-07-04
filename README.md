@@ -14,6 +14,42 @@ npx sv create
 npx sv create my-app
 ```
 
+## Backend Authentication Setup
+
+This project uses Supabase for authentication while maintaining a local user database with Drizzle ORM. Here's how it works:
+
+1. Users sign up/sign in through our frontend component
+2. The requests are sent to our backend API endpoints
+3. The backend handles Supabase authentication and synchronizes with our local user database
+
+### Environment Variables
+
+Copy the `.env.example` file to `.env` and fill in your values:
+
+```bash
+cp .env.example .env
+```
+
+You'll need:
+- Supabase URL and anon key (for client-side)
+- Supabase service key (for server-side, keep this secret!)
+- Your database connection string
+
+### Database Migration
+
+Run the migration to add the Supabase auth ID column:
+
+```bash
+psql -U your_username -d your_database -f drizzle/migration_supabase_auth_id.sql
+```
+
+Or use Drizzle's migration system if set up:
+
+```bash
+npm run drizzle:generate
+npm run drizzle:migrate
+```
+
 ## Developing
 
 Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:

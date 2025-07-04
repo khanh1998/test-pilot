@@ -56,34 +56,7 @@
   {:else}
     <p>No posts found. Click the button to fetch posts.</p>
   {/if}
-  
-  <div class="code-example">
-    <h3>Drizzle Relations Example Code</h3>
-    <pre><code>{`// Server-side API route example
-import { db } from '$lib/server/drizzle';
-import { posts, users } from '../../../db/schema';
-import { eq } from 'drizzle-orm';
-import { json } from '@sveltejs/kit';
-
-export async function GET() {
-  try {
-    // Fetch posts with related author information
-    const postsWithAuthors = await db
-      .select({
-        post: posts,
-        author: users
-      })
-      .from(posts)
-      .leftJoin(users, eq(posts.authorId, users.id));
-    
-    return json(postsWithAuthors);
-  } catch (err) {
-    console.error('Error fetching posts with authors:', err);
-    return json({ error: 'Failed to fetch posts' }, { status: 500 });
-  }
-}`}</code></pre>
   </div>
-</div>
 
 <style>
   .drizzle-relations-example {

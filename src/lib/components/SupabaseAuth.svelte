@@ -6,7 +6,9 @@
   let loading = false;
   let email = '';
   let password = '';
+  let name = ''; // New field for sign up
   let user: User | null = null;
+  let isSignUp = false; // Toggle between sign in and sign up forms
   
   // Check for existing session on mount
   // Initialize auth on component mount
@@ -40,12 +42,20 @@
   async function handleSignIn() {
     try {
       loading = true;
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password
+      
+      // Call our backend sign-in endpoint
+      const response = await fetch('/api/auth/sign-in', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
       });
       
-      if (error) throw error;
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Sign in failed');
+      }
+      
+      // No need to manually update user state as the auth listener will do it
     } catch (err: any) {
       alert(err?.message || 'An error occurred during sign in');
     } finally {
@@ -56,13 +66,26 @@
   async function handleSignUp() {
     try {
       loading = true;
-      const { error } = await supabase.auth.signUp({
-        email,
-        password
+      
+      // Validate name field for sign up
+      if (!name) {
+        throw new Error('Name is required for registration');
+      }
+      
+      // Call our backend sign-up endpoint
+      const response = await fetch('/api/auth/sign-up', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, name })
       });
       
-      if (error) throw error;
-      alert('Check your email for the confirmation link!');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Sign up failed');
+      }
+      
+      alert('Registration successful! You can now sign in.');
+      isSignUp = false; // Switch to sign in form after successful registration
     } catch (err: any) {
       alert(err?.message || 'An error occurred during sign up');
     } finally {
@@ -81,6 +104,11 @@
       loading = false;
     }
   }
+  
+  // Helper function to toggle between sign in and sign up forms
+  function toggleAuthMode() {
+    isSignUp = !isSignUp;
+  }
 </script>
 
 <div class="auth-container">
@@ -93,7 +121,7 @@
       <button on:click={handleSignOut} disabled={loading}>Sign Out</button>
     </div>
   {:else}
-    <form class="auth-form" on:submit|preventDefault={handleSignIn}>
+    <form class="auth-form" on:submit|preventDefault={isSignUp ? handleSignUp : handleSignIn}>
       <div class="form-group">
         <label for="email">Email</label>
         <input
@@ -104,6 +132,19 @@
           required
         />
       </div>
+      
+      {#if isSignUp}
+        <div class="form-group">
+          <label for="name">Full Name</label>
+          <input
+            id="name"
+            type="text"
+            bind:value={name}
+            placeholder="Your full name"
+            required
+          />
+        </div>
+      {/if}
       
       <div class="form-group">
         <label for="password">Password</label>
@@ -117,8 +158,15 @@
       </div>
       
       <div class="buttons">
-        <button type="submit" disabled={loading}>Sign In</button>
-        <button type="button" on:click={handleSignUp} disabled={loading}>Sign Up</button>
+        <button type="submit" disabled={loading}>
+          {isSignUp ? 'Sign Up' : 'Sign In'}
+        </button>
+      </div>
+      
+      <div class="toggle-auth">
+        <button type="button" class="link-button" on:click={toggleAuthMode}>
+          {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
+        </button>
       </div>
     </form>
   {/if}
@@ -176,5 +224,25 @@
     padding: 1rem;
     background-color: #f4f4f4;
     border-radius: 4px;
+  }
+  
+  .toggle-auth {
+    margin-top: 1rem;
+    text-align: center;
+  }
+  
+  .link-button {
+    background: none;
+    border: none;
+    color: #0070f3;
+    padding: 0;
+    font: inherit;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+  
+  .link-button:hover {
+    color: #0060df;
+    background: none;
   }
 </style>
