@@ -50,6 +50,12 @@
     return endpoints.find(e => e.id === id);
   }
   
+  // Helper to generate unique display ID for an endpoint in a step
+  // This helps with UI rendering when the same endpoint is used multiple times
+  function getEndpointDisplayId(endpointId: string | number, endpointIndex: number): string {
+    return `${endpointId}-${endpointIndex}`;
+  }
+  
   function removeEndpoint(endpointIndex: number) {
     dispatch('removeEndpoint', { stepIndex, endpointIndex });
   }
@@ -294,7 +300,19 @@
   
   <!-- Endpoints in this step -->
   <div class="mb-4">
-    <h4 class="text-sm font-medium text-gray-500 mb-2">Endpoints:</h4>
+    <div class="flex justify-between items-center mb-2">
+      <h4 class="text-sm font-medium text-gray-500">Endpoints:</h4>
+      <div class="relative group">
+        <button class="text-gray-400 hover:text-gray-600 focus:outline-none" aria-label="Information about adding endpoints">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </button>
+        <div class="absolute right-0 w-64 p-2 bg-gray-800 text-white text-xs rounded shadow-lg transform translate-y-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
+          You can add the same endpoint multiple times to test different scenarios or parameter combinations.
+        </div>
+      </div>
+    </div>
     
     {#if step.endpoints.length === 0}
       <p class="text-gray-400 italic text-sm">No endpoints in this step yet</p>
@@ -302,6 +320,9 @@
       <div class="flex flex-row gap-3 overflow-x-auto pb-2">
         {#each step.endpoints as stepEndpoint, endpointIndex}
           {@const endpoint = findEndpoint(stepEndpoint.endpoint_id)}
+          {@const endpointDisplayId = getEndpointDisplayId(stepEndpoint.endpoint_id, endpointIndex)}
+          {@const duplicateCount = step.endpoints.filter((e: StepEndpoint) => e.endpoint_id === stepEndpoint.endpoint_id).length}
+          {@const instanceIndex = step.endpoints.slice(0, endpointIndex + 1).filter((e: StepEndpoint) => e.endpoint_id === stepEndpoint.endpoint_id).length}
           {#if endpoint}
             <div class="bg-gray-50 rounded-md p-3 min-w-[280px] max-w-[300px] flex-shrink-0">
               <div class="flex justify-between items-start mb-2">
@@ -310,6 +331,11 @@
                     {endpoint.method}
                   </span>
                   <span class="font-mono text-sm">{endpoint.path}</span>
+                  {#if duplicateCount > 1}
+                    <span class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded ml-2">
+                      #{instanceIndex}
+                    </span>
+                  {/if}
                 </div>
                 <button 
                   class="text-red-600 hover:text-red-800"
@@ -323,11 +349,11 @@
               </div>
               
               <div class="mb-2">
-                <label for="response-{stepIndex}-{endpointIndex}" class="block text-xs font-medium text-gray-500 mb-1">
+                <label for="response-{stepIndex}-{endpointIndex}-{instanceIndex}" class="block text-xs font-medium text-gray-500 mb-1">
                   Store Response As:
                 </label>
                 <input 
-                  id="response-{stepIndex}-{endpointIndex}"
+                  id="response-{stepIndex}-{endpointIndex}-{instanceIndex}"
                   type="text" 
                   bind:value={stepEndpoint.store_response_as}
                   class="text-sm px-2 py-1 border rounded w-full"
@@ -404,7 +430,10 @@
 
 <!-- Parameter Editor Slide-out Panel -->
 {#if isParamEditorMounted && activeEndpointIndex !== null}
-  {@const activeEndpoint = findEndpoint(step.endpoints[activeEndpointIndex].endpoint_id)}
+  {@const safeIndex = activeEndpointIndex!}
+  {@const activeEndpoint = findEndpoint(step.endpoints[safeIndex].endpoint_id)}
+  {@const duplicateCount = step.endpoints.filter((e: StepEndpoint) => e.endpoint_id === step.endpoints[safeIndex].endpoint_id).length}
+  {@const instanceIndex = step.endpoints.slice(0, safeIndex + 1).filter((e: StepEndpoint) => e.endpoint_id === step.endpoints[safeIndex].endpoint_id).length}
   <div class="fixed inset-0 z-40 flex justify-end transition-opacity duration-200 ease-in-out {isParamEditorOpen ? 'opacity-100' : 'opacity-0'}"
        on:keydown={(e) => e.key === 'Escape' && closeParamEditor()}
        role="dialog" 
@@ -431,6 +460,11 @@
               {activeEndpoint?.method}
             </span>
             <span class="font-mono text-sm">{activeEndpoint?.path}</span>
+            {#if duplicateCount > 1}
+              <span class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded ml-2">
+                Instance #{instanceIndex}
+              </span>
+            {/if}
           </h3>
         </div>
         <div class="flex items-center gap-2">
@@ -454,6 +488,16 @@
       
       <!-- Tabs -->
       <div class="border-b px-4 bg-gray-50">
+        {#if duplicateCount > 1}
+          <div class="bg-blue-50 text-blue-700 text-xs py-1.5 px-3 mb-2 rounded border border-blue-100">
+            <span class="flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              This endpoint appears {duplicateCount} times in this step. Changes here only affect instance #{instanceIndex}.
+            </span>
+          </div>
+        {/if}
         <div class="flex -mb-px overflow-x-auto">
           {#if activeEndpoint?.parameters?.some((p: Parameter) => p.in === 'path')}
             <button 
@@ -527,14 +571,14 @@
             <h4 class="font-medium text-sm text-gray-700 mb-2">Path Parameters</h4>
             {#each activeEndpoint.parameters.filter((p: Parameter) => p.in === 'path') as param, paramIndex}
               <div class="flex flex-col mb-4">
-                <label class="text-sm mb-1" for="path-param-{stepIndex}-{activeEndpointIndex}-{paramIndex}">
+                <label class="text-sm mb-1" for="path-param-{stepIndex}-{activeEndpointIndex}-{paramIndex}-{instanceIndex}">
                   {param.name} {param.required ? '*' : ''}
                   {#if param.description}
                     <span class="text-xs text-gray-500 ml-1">({param.description})</span>
                   {/if}
                 </label>
                 <input 
-                  id="path-param-{stepIndex}-{activeEndpointIndex}-{paramIndex}"
+                  id="path-param-{stepIndex}-{activeEndpointIndex}-{paramIndex}-{instanceIndex}"
                   type="text" 
                   class="px-3 py-2 border rounded-md text-sm"
                   placeholder={param.example || param.name}
@@ -560,14 +604,14 @@
             {#each activeEndpoint.parameters.filter((p: Parameter) => p.in === 'query') as param, paramIndex}
               <div class="flex flex-col mb-4">
                 <div class="flex items-center justify-between">
-                  <label class="text-sm mb-1" for="query-param-checkbox-{stepIndex}-{activeEndpointIndex}-{paramIndex}">
+                  <label class="text-sm mb-1" for="query-param-checkbox-{stepIndex}-{activeEndpointIndex}-{paramIndex}-{instanceIndex}">
                     {param.name} {param.required ? '*' : ''}
                     {#if param.description}
                       <span class="text-xs text-gray-500 ml-1">({param.description})</span>
                     {/if}
                   </label>
                   <input 
-                    id="query-param-checkbox-{stepIndex}-{activeEndpointIndex}-{paramIndex}"
+                    id="query-param-checkbox-{stepIndex}-{activeEndpointIndex}-{paramIndex}-{instanceIndex}"
                     type="checkbox"
                     checked={step.endpoints[activeEndpointIndex!]?.queryParams?.[param.name] !== undefined}
                     on:change={(e) => {
@@ -586,7 +630,7 @@
                 </div>
                 {#if activeEndpointIndex !== null && step.endpoints[activeEndpointIndex]?.queryParams?.[param.name] !== undefined}
                   <input 
-                    id="query-param-{stepIndex}-{activeEndpointIndex}-{paramIndex}"
+                    id="query-param-{stepIndex}-{activeEndpointIndex}-{paramIndex}-{instanceIndex}"
                     type="text" 
                     class="px-3 py-2 border rounded-md text-sm"
                     placeholder={param.example || param.name}
@@ -670,7 +714,7 @@
                     type="checkbox"
                     bind:checked={header.enabled}
                     class="w-4 h-4 accent-blue-600"
-                    id="header-checkbox-{headerIndex}"
+                    id="header-checkbox-{stepIndex}-{activeEndpointIndex}-{headerIndex}-{instanceIndex}"
                   />
                   <input 
                     type="text" 

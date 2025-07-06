@@ -129,12 +129,9 @@
     const step = flowJson.steps[stepIndex];
     if (!step) return;
     
-    // Check if endpoint already exists in this step
-    const exists = step.endpoints.some((e: any) => e.endpoint_id === endpoint.id);
-    if (exists) {
-      error = 'This endpoint already exists in this step';
-      return;
-    }
+    // Get count of same endpoints already in this step for variable naming
+    const sameEndpoints = step.endpoints.filter((e: any) => e.endpoint_id === endpoint.id).length;
+    const instanceSuffix = sameEndpoints > 0 ? `_${sameEndpoints + 1}` : '';
     
     // Add endpoint to the step
     step.endpoints = [
@@ -144,7 +141,7 @@
         input_params: [],
         path_params: [],
         headers: [],
-        store_response_as: `${endpoint.operationId || endpoint.path.replace(/\//g, '_')}_response`
+        store_response_as: `${endpoint.operationId || endpoint.path.replace(/\//g, '_')}${instanceSuffix}_response`
       }
     ];
     
