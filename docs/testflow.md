@@ -45,7 +45,7 @@ The blueprint includes:
   "description": "...",
   "api_ids": ["api-1", "api-2"],
   "flow_json": {
-    "settings": { "cookie_mode": "auto" },
+    "settings": { "api_host": "https://api.example.com" },
     "steps": [...],
     "assertions": [...]
   }
@@ -60,7 +60,7 @@ The blueprint includes:
 
 ```json
 {
-  "cookie_mode": "auto" // store and reuse Set-Cookie cookies automatically
+  "api_host": "https://api.example.com" // base URL for API requests
 }
 ```
 
@@ -182,6 +182,6 @@ Define how to check whether the flow is successful:
 | `steps[]`       | Ordered groups of concurrently executable endpoints  |
 | `input_params`  | Define how input is resolved                         |
 | `assertions[]`  | Define final flow success conditions                 |
-| `cookie_mode`   | Auto-mode only, stores and reuses Set-Cookie headers |
+| `api_host`      | Base URL for all API requests in the flow           |
 
 This blueprint structure serves as the foundation for future execution and analysis.

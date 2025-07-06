@@ -4,6 +4,8 @@
   export let stepIndex: number;
   export let isFirstStep: boolean = false;
   export let isLastStep: boolean = false;
+  export let isRunning: boolean = false;
+  export let executionState: Record<string, any> = {}; // Tracks execution status for each endpoint
   
   // Emitted events will be handled by the parent component
   import { createEventDispatcher } from 'svelte';
@@ -44,6 +46,12 @@
   let activeTab: 'path' | 'query' | 'body' | 'headers' = 'path';
   let jsonBodyContent = '{}';
   let headers: {name: string; value: string; enabled: boolean}[] = [];
+  
+  // Response viewer state
+  let isResponseViewerOpen = false;
+  let isResponseViewerMounted = false;
+  let activeResponseEndpointIndex: number | null = null;
+  let activeResponseTab: 'request' | 'response' | 'headers' = 'response';
   
   // Helper to find an endpoint by ID
   function findEndpoint(id: string | number) {
@@ -249,6 +257,82 @@
   function removeHeader(index: number) {
     headers = headers.filter((_, i) => i !== index);
   }
+  
+  // Open response viewer panel for a specific endpoint
+  function openResponseViewer(endpointIndex: number) {
+    activeResponseEndpointIndex = endpointIndex;
+    
+    // First set the panel as mounted but with transform to the right
+    isResponseViewerMounted = true;
+    isResponseViewerOpen = false;
+    
+    // Add a class to the body to prevent scrolling while modal is open
+    document.body.classList.add('overflow-hidden');
+    
+    // Use requestAnimationFrame to ensure the DOM is updated before applying the animation
+    requestAnimationFrame(() => {
+      // Then in the next frame, trigger the animation by setting open to true
+      isResponseViewerOpen = true;
+    });
+  }
+  
+  // Close response viewer panel
+  function closeResponseViewer() {
+    isResponseViewerOpen = false;
+    
+    // Add a small delay to allow for animation to complete before unmounting
+    setTimeout(() => {
+      isResponseViewerMounted = false;
+      activeResponseEndpointIndex = null;
+      
+      // Remove the class from body to re-enable scrolling
+      document.body.classList.remove('overflow-hidden');
+    }, 300);
+  }
+  
+  // Helper to format JSON for display
+  function formatJson(obj: any): string {
+    try {
+      return JSON.stringify(obj, null, 2);
+    } catch (e) {
+      return String(obj);
+    }
+  }
+  
+  // Get status color based on response status code
+  function getStatusColor(status: number): string {
+    if (status >= 200 && status < 300) return 'bg-green-500';
+    if (status >= 400 && status < 500) return 'bg-yellow-500';
+    if (status >= 500) return 'bg-red-500';
+    return 'bg-gray-500';
+  }
+  
+  // Check if an endpoint is currently running
+  function isEndpointRunning(endpointIndex: number): boolean {
+    // Uses isRunning prop to determine if we should check execution status
+    if (!isRunning) return false;
+    
+    const endpointId = getEndpointDisplayId(step.endpoints[endpointIndex].endpoint_id, endpointIndex);
+    return executionState[endpointId]?.status === 'running';
+  }
+  
+  // Check if an endpoint has completed execution
+  function isEndpointCompleted(endpointIndex: number): boolean {
+    const endpointId = getEndpointDisplayId(step.endpoints[endpointIndex].endpoint_id, endpointIndex);
+    return executionState[endpointId]?.status === 'completed';
+  }
+  
+  // Check if an endpoint has failed
+  function isEndpointFailed(endpointIndex: number): boolean {
+    const endpointId = getEndpointDisplayId(step.endpoints[endpointIndex].endpoint_id, endpointIndex);
+    return executionState[endpointId]?.status === 'failed';
+  }
+  
+  // Get the response status code for an endpoint
+  function getEndpointStatusCode(endpointIndex: number): number | null {
+    const endpointId = getEndpointDisplayId(step.endpoints[endpointIndex].endpoint_id, endpointIndex);
+    return executionState[endpointId]?.response?.status || null;
+  }
 </script>
 
 <div class="bg-white border rounded-lg shadow-sm p-4">
@@ -324,7 +408,7 @@
           {@const duplicateCount = step.endpoints.filter((e: StepEndpoint) => e.endpoint_id === stepEndpoint.endpoint_id).length}
           {@const instanceIndex = step.endpoints.slice(0, endpointIndex + 1).filter((e: StepEndpoint) => e.endpoint_id === stepEndpoint.endpoint_id).length}
           {#if endpoint}
-            <div class="bg-gray-50 rounded-md p-3 min-w-[280px] max-w-[300px] flex-shrink-0">
+            <div class="bg-gray-50 rounded-md p-3 min-w-[280px] max-w-[300px] flex-shrink-0 relative {isEndpointRunning(endpointIndex) ? 'border-2 border-blue-400 animate-pulse' : ''} {isEndpointCompleted(endpointIndex) ? 'border border-green-500' : ''} {isEndpointFailed(endpointIndex) ? 'border border-red-500' : ''}">
               <div class="flex justify-between items-start mb-2">
                 <div>
                   <span class="bg-green-100 text-green-800 text-xs px-2 py-1 rounded mr-2">
@@ -347,6 +431,23 @@
                   </svg>
                 </button>
               </div>
+              
+              <!-- Execution Status Indicator -->
+              {#if isEndpointRunning(endpointIndex)}
+                <div class="absolute top-1 right-8 flex items-center justify-center">
+                  <div class="w-4 h-4">
+                    <div class="w-full h-full border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                  </div>
+                </div>
+              {:else if isEndpointCompleted(endpointIndex) || isEndpointFailed(endpointIndex)}
+                {#if getEndpointStatusCode(endpointIndex)}
+                  <div class="absolute top-1 right-8 flex items-center justify-center">
+                    <span class="text-xs font-medium px-1.5 py-0.5 rounded-full {getStatusColor(getEndpointStatusCode(endpointIndex) || 0)} text-white">
+                      {getEndpointStatusCode(endpointIndex)}
+                    </span>
+                  </div>
+                {/if}
+              {/if}
               
               <div class="mb-2">
                 <label for="response-{stepIndex}-{endpointIndex}-{instanceIndex}" class="block text-xs font-medium text-gray-500 mb-1">
@@ -373,6 +474,19 @@
                   </svg>
                   Configure Parameters
                 </button>
+                
+                <!-- Response Viewer Button (only visible when response exists) -->
+                {#if executionState[getEndpointDisplayId(stepEndpoint.endpoint_id, endpointIndex)]?.response}
+                  <button 
+                    class="text-purple-600 hover:text-purple-800 text-xs flex items-center mb-2 ml-4"
+                    on:click={() => openResponseViewer(endpointIndex)}
+                  >
+                    <svg class="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clip-rule="evenodd" />
+                    </svg>
+                    View Response
+                  </button>
+                {/if}
                 
                 <!-- Parameter summary -->
                 {#if endpoint.parameters && endpoint.parameters.length > 0}
@@ -750,6 +864,258 @@
         {/if}
       </div>
       
+    </div>
+  </div>
+{/if}
+
+<!-- Response Viewer Slide-out Panel -->
+{#if isResponseViewerMounted && activeResponseEndpointIndex !== null}
+  {@const safeIndex = activeResponseEndpointIndex!}
+  {@const activeEndpoint = findEndpoint(step.endpoints[safeIndex].endpoint_id)}
+  {@const duplicateCount = step.endpoints.filter((e: StepEndpoint) => e.endpoint_id === step.endpoints[safeIndex].endpoint_id).length}
+  {@const instanceIndex = step.endpoints.slice(0, safeIndex + 1).filter((e: StepEndpoint) => e.endpoint_id === step.endpoints[safeIndex].endpoint_id).length}
+  {@const endpointId = getEndpointDisplayId(step.endpoints[safeIndex].endpoint_id, safeIndex)}
+  {@const executionData = executionState[endpointId] || {}}
+  
+  <div class="fixed inset-0 z-40 flex justify-end transition-opacity duration-200 ease-in-out {isResponseViewerOpen ? 'opacity-100' : 'opacity-0'}"
+       on:keydown={(e) => e.key === 'Escape' && closeResponseViewer()}
+       role="dialog" 
+       aria-modal="true" 
+       tabindex="-1">
+    <!-- Transparent clickable overlay -->
+    <div 
+      class="absolute inset-y-0 left-0 right-0 sm:right-[75%] md:right-[600px] lg:right-[500px] bg-transparent transition-opacity duration-300 ease-in-out"
+      on:click={closeResponseViewer}
+      role="presentation"
+      aria-hidden="true"
+    ></div>
+    
+    <!-- The panel itself - responsive sizing -->
+    <div class="fixed inset-y-0 right-0 w-full sm:w-[75%] md:w-[600px] lg:w-[500px] bg-white shadow-xl overflow-y-auto z-50 transition-transform duration-300 ease-in-out"
+         style="transform: {isResponseViewerOpen ? 'translateX(0)' : 'translateX(100%)'};"
+         aria-hidden={!isResponseViewerOpen ? 'true' : 'false'}>
+      
+      <!-- Header -->
+      <div class="bg-gray-100 px-4 py-3 flex justify-between items-center sticky top-0 z-10 border-b shadow-sm w-full">
+        <div>
+          <h3 class="font-medium flex items-center">
+            <span class="bg-green-100 text-green-800 text-xs px-2 py-1 rounded mr-2">
+              {activeEndpoint?.method}
+            </span>
+            <span class="font-mono text-sm">{activeEndpoint?.path}</span>
+            {#if duplicateCount > 1}
+              <span class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded ml-2">
+                Instance #{instanceIndex}
+              </span>
+            {/if}
+            {#if executionData.response?.status}
+              <span class="ml-2 text-xs font-medium px-1.5 py-0.5 rounded-full {getStatusColor(executionData.response.status || 0)} text-white">
+                {executionData.response.status}
+              </span>
+            {/if}
+          </h3>
+        </div>
+        <div>
+          <button 
+            class="text-gray-600 hover:text-gray-800 p-1 rounded-full hover:bg-gray-200 transition-colors"
+            on:click={closeResponseViewer}
+            aria-label="Close"
+          >
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+      
+      <!-- Tabs -->
+      <div class="border-b px-4 bg-gray-50">
+        <div class="flex -mb-px overflow-x-auto">
+          <button 
+            class="px-4 py-2 border-b-2 text-sm font-medium transition-colors {activeResponseTab === 'request' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"
+            on:click={() => activeResponseTab = 'request'}
+          >
+            <div class="flex items-center">
+              <span class="mr-1.5 text-blue-600">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16l-4-4m0 0l4-4m-4 4h18" />
+                </svg>
+              </span>
+              Request
+            </div>
+          </button>
+          
+          <button 
+            class="px-4 py-2 border-b-2 text-sm font-medium transition-colors {activeResponseTab === 'response' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"
+            on:click={() => activeResponseTab = 'response'}
+          >
+            <div class="flex items-center">
+              <span class="mr-1.5 text-green-600">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                </svg>
+              </span>
+              Response
+            </div>
+          </button>
+          
+          <button 
+            class="px-4 py-2 border-b-2 text-sm font-medium transition-colors {activeResponseTab === 'headers' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"
+            on:click={() => activeResponseTab = 'headers'}
+          >
+            <div class="flex items-center">
+              <span class="mr-1.5 text-yellow-600">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </span>
+              Headers
+            </div>
+          </button>
+        </div>
+      </div>
+      
+      <!-- Tab Content -->
+      <div class="p-4">
+        <!-- Request Tab -->
+        {#if activeResponseTab === 'request'}
+          <div class="space-y-4">
+            <h4 class="font-medium text-sm text-gray-700 mb-2">Request Details</h4>
+            
+            <!-- URL -->
+            <div class="mb-4">
+              <h5 class="text-xs font-medium text-gray-500 mb-1">URL:</h5>
+              <div class="bg-gray-50 p-2 rounded border text-sm font-mono break-all">
+                {executionData.request?.url || 'N/A'}
+              </div>
+            </div>
+            
+            <!-- Request Body -->
+            {#if executionData.request?.body}
+              <div class="mb-4">
+                <h5 class="text-xs font-medium text-gray-500 mb-1">Body:</h5>
+                <div class="bg-gray-50 p-2 rounded border overflow-auto max-h-80">
+                  <pre class="text-xs font-mono whitespace-pre-wrap">{formatJson(executionData.request.body)}</pre>
+                </div>
+              </div>
+            {/if}
+            
+            <!-- Path Params -->
+            {#if executionData.request?.pathParams && Object.keys(executionData.request.pathParams).length > 0}
+              <div class="mb-4">
+                <h5 class="text-xs font-medium text-gray-500 mb-1">Path Parameters:</h5>
+                <div class="bg-gray-50 p-2 rounded border overflow-auto max-h-60">
+                  <pre class="text-xs font-mono whitespace-pre-wrap">{formatJson(executionData.request.pathParams)}</pre>
+                </div>
+              </div>
+            {/if}
+            
+            <!-- Query Params -->
+            {#if executionData.request?.queryParams && Object.keys(executionData.request.queryParams).length > 0}
+              <div class="mb-4">
+                <h5 class="text-xs font-medium text-gray-500 mb-1">Query Parameters:</h5>
+                <div class="bg-gray-50 p-2 rounded border overflow-auto max-h-60">
+                  <pre class="text-xs font-mono whitespace-pre-wrap">{formatJson(executionData.request.queryParams)}</pre>
+                </div>
+              </div>
+            {/if}
+          </div>
+        {/if}
+        
+        <!-- Response Tab -->
+        {#if activeResponseTab === 'response'}
+          <div class="space-y-4">
+            <h4 class="font-medium text-sm text-gray-700 mb-2">Response Details</h4>
+            
+            <!-- Status -->
+            <div class="mb-4">
+              <h5 class="text-xs font-medium text-gray-500 mb-1">Status:</h5>
+              <div class="flex items-center">              <span class="text-sm px-2 py-1 rounded font-medium {getStatusColor(executionData.response?.status || 0)} text-white">
+                {executionData.response?.status || 'N/A'}
+              </span>
+                <span class="ml-2 text-sm">{executionData.response?.statusText || ''}</span>
+              </div>
+            </div>
+            
+            <!-- Timing -->
+            {#if executionData.timing}
+              <div class="mb-4">
+                <h5 class="text-xs font-medium text-gray-500 mb-1">Timing:</h5>
+                <div class="text-sm">
+                  {executionData.timing}ms
+                </div>
+              </div>
+            {/if}
+            
+            <!-- Response Body -->
+            {#if executionData.response?.body}
+              <div>
+                <h5 class="text-xs font-medium text-gray-500 mb-1">Body:</h5>
+                <div class="bg-gray-50 p-2 rounded border overflow-auto max-h-96">
+                  <pre class="text-xs font-mono whitespace-pre-wrap">{formatJson(executionData.response.body)}</pre>
+                </div>
+              </div>
+            {/if}
+          </div>
+        {/if}
+        
+        <!-- Headers Tab -->
+        {#if activeResponseTab === 'headers'}
+          <div class="space-y-4">
+            <div class="mb-4">
+              <h4 class="font-medium text-sm text-gray-700 mb-2">Request Headers</h4>
+              {#if executionData.request?.headers && Object.keys(executionData.request.headers).length > 0}
+                <div class="bg-gray-50 rounded border">
+                  <table class="w-full text-sm">
+                    <thead class="bg-gray-100 border-b">
+                      <tr>
+                        <th class="text-left py-2 px-3 text-xs font-medium text-gray-600">Name</th>
+                        <th class="text-left py-2 px-3 text-xs font-medium text-gray-600">Value</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#each Object.entries(executionData.request.headers) as [name, value]}
+                        <tr class="border-b border-gray-200 last:border-0">
+                          <td class="py-2 px-3 font-medium">{name}</td>
+                          <td class="py-2 px-3 font-mono text-xs break-all">{value}</td>
+                        </tr>
+                      {/each}
+                    </tbody>
+                  </table>
+                </div>
+              {:else}
+                <p class="text-sm text-gray-500">No request headers</p>
+              {/if}
+            </div>
+            
+            <div>
+              <h4 class="font-medium text-sm text-gray-700 mb-2">Response Headers</h4>
+              {#if executionData.response?.headers && Object.keys(executionData.response.headers).length > 0}
+                <div class="bg-gray-50 rounded border">
+                  <table class="w-full text-sm">
+                    <thead class="bg-gray-100 border-b">
+                      <tr>
+                        <th class="text-left py-2 px-3 text-xs font-medium text-gray-600">Name</th>
+                        <th class="text-left py-2 px-3 text-xs font-medium text-gray-600">Value</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#each Object.entries(executionData.response.headers) as [name, value]}
+                        <tr class="border-b border-gray-200 last:border-0">
+                          <td class="py-2 px-3 font-medium">{name}</td>
+                          <td class="py-2 px-3 font-mono text-xs break-all">{value}</td>
+                        </tr>
+                      {/each}
+                    </tbody>
+                  </table>
+                </div>
+              {:else}
+                <p class="text-sm text-gray-500">No response headers</p>
+              {/if}
+            </div>
+          </div>
+        {/if}
+      </div>
     </div>
   </div>
 {/if}

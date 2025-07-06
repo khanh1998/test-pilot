@@ -6,6 +6,7 @@
   // Import the components we created
   import EndpointSelector from '$lib/components/TestFlow/EndpointSelector.svelte';
   import StepEditor from '$lib/components/TestFlow/StepEditor.svelte';
+  import FlowRunner from '$lib/components/TestFlow/FlowRunner.svelte';
   
   $: testFlowId = parseInt($page.params.id || '0');
   
@@ -14,10 +15,21 @@
   let selectedEndpoint: any = null;
   let loading = true;
   let error: string | null = null;
-  let currentTab: 'steps' | 'assertions' | 'settings' = 'steps';
-  let flowJson: any = { settings: { cookie_mode: "auto" }, steps: [], assertions: [] };
+  let currentTab: 'steps' | 'assertions' | 'settings' | 'dry-run' = 'steps';
+  let flowJson: any = { 
+    settings: { 
+      api_host: "" 
+    }, 
+    steps: [], 
+    assertions: [] 
+  };
   let isDirty = false;
   let isSaving = false;
+  
+  // Dry run execution state
+  let isRunning = false;
+  let executionState: Record<string, any> = {};
+  let apiHost = '';
   
   // New step related state
   let showNewStepModal = false;
@@ -25,6 +37,15 @@
   
   onMount(async () => {
     await fetchTestFlow();
+    
+    // Try to get API host from settings first if available
+    if (flowJson?.settings?.api_host && flowJson.settings.api_host.trim() !== '') {
+      console.log('Setting initial API host from settings:', flowJson.settings.api_host);
+      apiHost = flowJson.settings.api_host;
+    }
+    
+    // Then fetch the API host from the API (will use settings value if it exists)
+    await fetchApiHost();
   });
   
   async function fetchTestFlow() {
@@ -46,7 +67,30 @@
       const data = await response.json();
       testFlow = data.testFlow;
       endpoints = testFlow.endpoints || [];
-      flowJson = testFlow.flowJson || { settings: { cookie_mode: "auto" }, steps: [], assertions: [] };
+      
+      // Initialize flowJson with proper defaults if not provided from backend
+      flowJson = testFlow.flowJson || { 
+        settings: { 
+          api_host: ""
+        }, 
+        steps: [], 
+        assertions: [] 
+      };
+      
+      // Make sure settings object has all required properties
+      if (!flowJson.settings) {
+        flowJson.settings = { api_host: "" };
+      } else {
+        // Ensure api_host is initialized
+        if (!flowJson.settings.hasOwnProperty('api_host')) {
+          flowJson.settings.api_host = "";
+        } else if (flowJson.settings.api_host && flowJson.settings.api_host.trim() !== '') {
+          // If we have an API host in settings, update our local variable
+          apiHost = flowJson.settings.api_host;
+          console.log('Setting apiHost from loaded flowJson:', apiHost);
+        }
+      }
+      
       isDirty = false;
       
     } catch (err: any) {
@@ -55,6 +99,58 @@
     } finally {
       loading = false;
     }
+  }
+  
+  async function fetchApiHost() {
+    if (!testFlow || !testFlow.apiId) return;
+    
+    try {
+      const response = await fetch(`/api/apis/${testFlow.apiId}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+        }
+      });
+      
+      if (response.ok) {
+        const apiData = await response.json();
+        console.log('API data fetched:', apiData); // Debug log
+        
+        // Set the API host from the 'host' column in the apis table
+        const hostFromApi = apiData.host || '';
+        
+        // Store the host in the flow settings if not already set or if empty
+        if (hostFromApi && (!flowJson.settings.api_host || flowJson.settings.api_host === '')) {
+          console.log(`Setting API host from API: ${hostFromApi}`); // Debug log
+          flowJson.settings.api_host = hostFromApi;
+          apiHost = hostFromApi;
+        } else if (flowJson.settings.api_host && flowJson.settings.api_host.trim() !== '') {
+          // If flow settings already has a non-empty host, prefer that one
+          console.log(`Using API host from settings: ${flowJson.settings.api_host}`); // Debug log
+          apiHost = flowJson.settings.api_host;
+        } else if (hostFromApi) {
+          // Last resort: if we have a host from the API but somehow didn't handle it above
+          console.log(`Fallback to API host: ${hostFromApi}`); // Debug log
+          apiHost = hostFromApi;
+          flowJson.settings.api_host = hostFromApi;
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching API host:', err);
+    }
+    
+    console.log('Final apiHost value:', apiHost); // Debug log
+  }
+  
+  // Reset execution state
+  function handleReset() {
+    executionState = {};
+    isRunning = false;
+  }
+  
+  // Handle execution completion
+  function handleExecutionComplete(event: CustomEvent) {
+    console.log('Execution completed:', event.detail);
+    // Additional handling if needed
   }
   
   function markDirty() {
@@ -392,6 +488,13 @@
             >
               Settings
             </button>
+            <button 
+              class="px-6 py-3 text-gray-700 border-b-2 font-medium text-sm 
+                    {currentTab === 'dry-run' ? 'border-blue-500 text-blue-500' : 'border-transparent hover:border-gray-300'}"
+              on:click={() => currentTab = 'dry-run'}
+            >
+              Dry Run
+            </button>
           </nav>
         </div>
         
@@ -424,6 +527,8 @@
                     {stepIndex}
                     isFirstStep={stepIndex === 0}
                     isLastStep={stepIndex === flowJson.steps.length - 1}
+                    isRunning={(currentTab as string) === 'dry-run' ? isRunning : false}
+                    executionState={(currentTab as string) === 'dry-run' ? executionState : {}}
                     on:removeStep={() => removeStep(stepIndex)}
                     on:removeEndpoint={(e) => removeEndpointFromStep(stepIndex, e.detail.endpointIndex)}
                     on:moveStep={(e) => moveStep(stepIndex, e.detail.direction)}
@@ -436,6 +541,7 @@
                     <div slot="endpoint-selector">
                       <EndpointSelector
                         {endpoints}
+                        disabled={(currentTab as string) === 'dry-run' ? isRunning : false}
                         on:select={(e) => addEndpointToStep(stepIndex, e.detail)}
                       />
                     </div>
@@ -577,26 +683,80 @@
             </div>
             
             <div class="max-w-lg">
-              <div class="mb-4">
-                <label class="flex items-center">
+              <!-- API Host Setting -->
+              <div class="mb-6">
+                <label for="settings-api-host" class="block text-sm font-medium text-gray-700 mb-1">API Host URL</label>
+                <div class="flex items-center">
                   <input 
-                    type="checkbox" 
-                    checked={flowJson.settings?.cookie_mode === 'auto'}
-                    on:change={(e) => {
-                      if (e.target) {
-                        const target = e.target as HTMLInputElement;
-                        flowJson.settings.cookie_mode = target.checked ? 'auto' : 'none';
-                        markDirty();
-                      }
+                    id="settings-api-host"
+                    type="text" 
+                    bind:value={flowJson.settings.api_host}
+                    on:input={() => {
+                      apiHost = flowJson.settings.api_host;
+                      markDirty();
                     }}
-                    class="mr-2"
+                    class="px-3 py-2 border border-gray-300 rounded-md flex-1"
+                    placeholder="https://api.example.com"
                   />
-                  <span>Automatically store and use cookies between requests</span>
-                </label>
-                <p class="text-sm text-gray-500 mt-1 ml-6">
-                  When enabled, cookies set by responses will be automatically sent in subsequent requests.
+                </div>
+                <p class="text-sm text-gray-500 mt-1">
+                  The base URL for API requests. Will be automatically populated from the API's host setting if available.
                 </p>
               </div>
+            </div>
+          {/if}
+          
+          <!-- Dry Run Tab -->
+          {#if currentTab === 'dry-run'}
+            <div class="mb-6">
+              <h2 class="text-xl font-semibold">Dry Run Test Flow</h2>
+              <p class="text-gray-600 mb-4">
+                Execute the test flow without saving changes. Useful for testing and debugging.
+              </p>
+              
+              <!-- Always show the API host input field -->
+              <div class="mb-4">
+                <label for="api-host" class="block text-sm font-medium text-gray-700 mb-1">API Host</label>
+                <div class="flex">
+                  <input 
+                    id="api-host"
+                    type="text" 
+                    bind:value={apiHost}
+                    class="px-3 py-2 border border-gray-300 rounded-l-md flex-1"
+                    placeholder="https://api.example.com"
+                  />
+                  <button 
+                    class="px-4 py-2 bg-blue-600 text-white rounded-r-md hover:bg-blue-700"
+                    on:click={() => {
+                      // Save API host to flow settings
+                      flowJson.settings.api_host = apiHost;
+                      markDirty();
+                    }}
+                  >
+                    Save
+                  </button>
+                </div>
+                <p class="text-sm text-gray-500 mt-1">
+                  This host URL will be used as the base for all API requests during the dry run.
+                </p>
+              </div>
+              
+              {#if !apiHost || apiHost.trim() === ''}
+                <div class="bg-yellow-100 border border-yellow-300 text-yellow-800 px-4 py-3 rounded mb-4">
+                  <p class="font-medium">API Host is not configured</p>
+                  <p>Please enter an API host URL above or set it in the Settings tab before running the test flow.</p>
+                </div>
+              {/if}
+              
+              <!-- Always show the Flow Runner Component -->
+              <FlowRunner 
+                flowData={{...flowJson, endpoints}} 
+                apiHost={apiHost || ''}
+                bind:isRunning
+                bind:executionState
+                on:reset={handleReset}
+                on:executionComplete={handleExecutionComplete}
+              />
             </div>
           {/if}
         </div>

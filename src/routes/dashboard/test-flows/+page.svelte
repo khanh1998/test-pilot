@@ -106,7 +106,7 @@
           description: newFlowDescription,
           apiIds: selectedApiIds,
           flowJson: {
-            settings: { cookie_mode: "auto" },
+            settings: { api_host: "" },
             steps: [],
             assertions: []
           }

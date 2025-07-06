@@ -109,7 +109,7 @@ export async function POST({ request, locals }: RequestEvent) {
 
     // Create default flow JSON structure if not provided
     const defaultFlowJson = {
-      settings: { cookie_mode: "auto" },
+      settings: { api_host: "" },
       steps: [],
       assertions: []
     };
