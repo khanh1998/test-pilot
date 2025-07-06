@@ -2,6 +2,8 @@
   export let step: any;
   export let endpoints: any[] = [];
   export let stepIndex: number;
+  export let isFirstStep: boolean = false;
+  export let isLastStep: boolean = false;
   
   // Emitted events will be handled by the parent component
   import { createEventDispatcher } from 'svelte';
@@ -19,6 +21,14 @@
   function updateParam(endpointIndex: number, paramType: string, paramIndex: number, field: string, value: any) {
     dispatch('updateParam', { stepIndex, endpointIndex, paramType, paramIndex, field, value });
   }
+  
+  function moveStepUp() {
+    dispatch('moveStep', { stepIndex, direction: 'up' });
+  }
+  
+  function moveStepDown() {
+    dispatch('moveStep', { stepIndex, direction: 'down' });
+  }
 </script>
 
 <div class="bg-white border rounded-lg shadow-sm p-4">
@@ -29,9 +39,35 @@
       </span>
       {step.label}
     </h3>
-    <div>
+    <div class="flex items-center space-x-2">
+      {#if !isFirstStep}
+        <button 
+          class="text-gray-600 hover:text-gray-800 p-1"
+          on:click={moveStepUp}
+          aria-label="Move Step Up"
+          title="Move Step Up"
+        >
+          <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
+          </svg>
+        </button>
+      {/if}
+      
+      {#if !isLastStep}
+        <button 
+          class="text-gray-600 hover:text-gray-800 p-1"
+          on:click={moveStepDown}
+          aria-label="Move Step Down"
+          title="Move Step Down"
+        >
+          <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+          </svg>
+        </button>
+      {/if}
+      
       <button 
-        class="text-red-600 hover:text-red-800"
+        class="text-red-600 hover:text-red-800 p-1"
         on:click={() => dispatch('removeStep', { stepIndex })}
         aria-label="Remove Step"
       >

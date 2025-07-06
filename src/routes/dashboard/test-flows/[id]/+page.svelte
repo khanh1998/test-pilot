@@ -223,6 +223,54 @@
     return sources;
   }
   
+  // Move a step up or down
+  function moveStep(stepIndex: number, direction: 'up' | 'down') {
+    const originalStepIds = flowJson.steps.map((s: any) => s.step_id);
+    
+    if (direction === 'up' && stepIndex > 0) {
+      // Swap with previous step
+      const temp = flowJson.steps[stepIndex - 1];
+      flowJson.steps[stepIndex - 1] = flowJson.steps[stepIndex];
+      flowJson.steps[stepIndex] = temp;
+    } else if (direction === 'down' && stepIndex < flowJson.steps.length - 1) {
+      // Swap with next step
+      const temp = flowJson.steps[stepIndex + 1];
+      flowJson.steps[stepIndex + 1] = flowJson.steps[stepIndex];
+      flowJson.steps[stepIndex] = temp;
+    }
+    
+    // Create a mapping from old step_id to new step_id
+    const oldToNewStepIdMap = new Map();
+    
+    // Update step_id to keep them in order
+    flowJson.steps = flowJson.steps.map((step: any, index: number) => {
+      const oldId = step.step_id;
+      const newId = `step${index + 1}`;
+      
+      oldToNewStepIdMap.set(oldId, newId);
+      
+      return {
+        ...step,
+        step_id: newId
+      };
+    });
+    
+    // Update assertion references to steps
+    if (flowJson.assertions && flowJson.assertions.length > 0) {
+      flowJson.assertions = flowJson.assertions.map((assertion: any) => {
+        if (assertion.step_id && oldToNewStepIdMap.has(assertion.step_id)) {
+          return {
+            ...assertion,
+            step_id: oldToNewStepIdMap.get(assertion.step_id)
+          };
+        }
+        return assertion;
+      });
+    }
+    
+    markDirty();
+  }
+  
   // Update a parameter source in a step's endpoint
   function updateParameterSource(stepIndex: number, endpointIndex: number, paramType: string, paramIndex: number, source: string, value: any) {
     const step = flowJson.steps[stepIndex];
@@ -377,8 +425,11 @@
                     {step} 
                     {endpoints} 
                     {stepIndex}
+                    isFirstStep={stepIndex === 0}
+                    isLastStep={stepIndex === flowJson.steps.length - 1}
                     on:removeStep={() => removeStep(stepIndex)}
                     on:removeEndpoint={(e) => removeEndpointFromStep(stepIndex, e.detail.endpointIndex)}
+                    on:moveStep={(e) => moveStep(stepIndex, e.detail.direction)}
                     on:change={markDirty}
                     on:updateParam={(e) => {
                       // Handle parameter updates when implemented
