@@ -16,6 +16,7 @@ export const apis = pgTable('apis', {
   description: text('description'),
   specFormat: varchar('spec_format', { length: 10 }).notNull(), // "yaml" or "json"
   specContent: text('spec_content').notNull(), // The full OpenAPI/Swagger spec content
+  host: text('host'), // The host URL for the API (can be extracted from swagger or user-provided)
   userId: integer('user_id').references(() => users.id),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull()

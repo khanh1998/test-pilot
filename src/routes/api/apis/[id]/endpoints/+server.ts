@@ -50,6 +50,7 @@ export async function GET({ params, locals }: RequestEvent) {
         id: api.id,
         name: api.name,
         description: api.description,
+        host: api.host,
         createdAt: api.createdAt,
         updatedAt: api.updatedAt
       },

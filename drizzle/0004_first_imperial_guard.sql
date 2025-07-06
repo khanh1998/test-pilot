@@ -1,0 +1,1 @@
+ALTER TABLE "apis" ADD COLUMN "host" text;

@@ -4,10 +4,12 @@
   let fileInput: HTMLInputElement;
   let nameInput: string = '';
   let descriptionInput: string = '';
+  let hostInput: string = '';
   let file: File | null = null;
   let uploading = false;
   let error: string | null = null;
   let fileError: string | null = null;
+  let hostDetected: boolean = false;
   
   function handleFileChange(event: Event) {
     const input = event.target as HTMLInputElement;
@@ -45,6 +47,9 @@
       formData.append('name', nameInput.trim());
       if (descriptionInput.trim()) {
         formData.append('description', descriptionInput.trim());
+      }
+      if (hostInput.trim()) {
+        formData.append('host', hostInput.trim());
       }
       
       // Send the request
@@ -144,6 +149,25 @@
           class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
           placeholder="Describe your API..."
         ></textarea>
+      </div>
+      
+      <!-- API Host -->
+      <div>
+        <label for="host" class="block text-sm font-medium text-gray-700 mb-1">
+          API Host (optional)
+        </label>
+        <div class="flex flex-col">
+          <input
+            type="text"
+            id="host"
+            bind:value={hostInput}
+            class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            placeholder="api.example.com"
+          />
+          <p class="mt-1 text-xs text-gray-500">
+            Enter the host if not included in the specification
+          </p>
+        </div>
       </div>
     </div>
     

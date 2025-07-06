@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { db } from '$lib/server/drizzle';
 import { apis, apiEndpoints } from '../../../../db/schema';
-import { parseSwaggerSpec, extractEndpoints } from '$lib/swagger/parser';
+import { parseSwaggerSpec, extractEndpoints, extractHost } from '$lib/swagger/parser';
 import type { RequestEvent } from '@sveltejs/kit';
 
 export async function POST({ request, locals }: RequestEvent) {
@@ -19,6 +19,7 @@ export async function POST({ request, locals }: RequestEvent) {
     const file = formData.get('file') as File | null;
     const name = formData.get('name') as string;
     const description = formData.get('description') as string;
+    const userProvidedHost = formData.get('host') as string;
 
     if (!file || !name) {
       return new Response(JSON.stringify({ error: 'File and name are required' }), {
@@ -38,6 +39,14 @@ export async function POST({ request, locals }: RequestEvent) {
     // Parse the Swagger/OpenAPI spec
     const api = await parseSwaggerSpec(content, format);
     
+    // Extract host information from the spec
+    let hostValue = extractHost(api);
+    
+    // If no host in spec but user provided one, use that
+    if (!hostValue && userProvidedHost) {
+      hostValue = userProvidedHost;
+    }
+    
     // Insert the API into the database
     const [createdApi] = await db
       .insert(apis)
@@ -46,6 +55,7 @@ export async function POST({ request, locals }: RequestEvent) {
         description,
         specFormat: format,
         specContent: content,
+        host: hostValue,
         userId: locals.user.userId
       })
       .returning();
@@ -81,6 +91,7 @@ export async function POST({ request, locals }: RequestEvent) {
         id: createdApi.id,
         name: createdApi.name,
         description: createdApi.description,
+        host: createdApi.host,
         endpointCount: endpoints.length
       }
     });

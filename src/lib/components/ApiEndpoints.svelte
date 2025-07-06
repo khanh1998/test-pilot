@@ -7,6 +7,7 @@
     id: number;
     name: string;
     description: string;
+    host?: string;
     createdAt: string;
     updatedAt: string;
   } | null = null;
@@ -109,6 +110,11 @@
       <h1 class="text-2xl font-bold">{api.name}</h1>
       {#if api.description}
         <p class="text-gray-600 mt-2">{api.description}</p>
+      {/if}
+      {#if api.host}
+        <p class="text-md text-blue-600 font-medium mt-2">
+          Host: <span class="font-normal">{api.host}</span>
+        </p>
       {/if}
       <p class="text-sm text-gray-500 mt-1">
         Last updated: {new Date(api.updatedAt).toLocaleString()}

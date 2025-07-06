@@ -54,6 +54,7 @@ export async function GET({ params, locals }: RequestEvent) {
       id: apiData[0].id,
       name: apiData[0].name,
       description: apiData[0].description,
+      host: apiData[0].host,
       createdAt: apiData[0].createdAt,
       updatedAt: apiData[0].updatedAt,
       endpointCount: endpointCount[0].count

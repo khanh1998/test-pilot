@@ -87,6 +87,41 @@ export function extractEndpoints(api: SwaggerDocument) {
   return endpoints;
 }
 
+/**
+ * Extract host information from an OpenAPI/Swagger specification
+ * @param api - The parsed OpenAPI/Swagger specification
+ * @returns The host URL if available, otherwise null
+ */
+export function extractHost(api: SwaggerDocument): string | null {
+  // For OpenAPI 3.x
+  if ('openapi' in api && api.openapi.startsWith('3.')) {
+    if (api.servers && api.servers.length > 0) {
+      // Get the first server URL
+      const serverUrl = api.servers[0].url;
+      try {
+        // Extract host from server URL
+        const url = new URL(serverUrl);
+        return url.host;
+      } catch (error) {
+        // If not a valid URL, just return the server URL as is
+        // It might be a relative URL or a templated URL
+        return serverUrl;
+      }
+    }
+    return null;
+  } 
+  // For Swagger 2.0
+  else if ('swagger' in api && api.swagger === '2.0') {
+    // In Swagger 2.0, host is directly specified
+    if (api.host) {
+      return api.host;
+    }
+    return null;
+  }
+  
+  return null;
+}
+
 // Helper functions for OpenAPI 3.x
 function extractRequestSchema(operation: any) {
   if (!operation.requestBody) return null;

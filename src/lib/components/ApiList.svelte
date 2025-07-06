@@ -6,6 +6,7 @@
     id: number;
     name: string;
     description: string;
+    host?: string;
     createdAt: string;
     updatedAt: string;
     endpointCount: number;
@@ -133,6 +134,11 @@
           >
             <h2 class="text-xl font-semibold mb-2">{api.name}</h2>
             <p class="text-gray-600 text-sm mb-4 line-clamp-2">{api.description || 'No description'}</p>
+            {#if api.host}
+              <p class="text-sm text-blue-600 mb-2">
+                <span class="font-medium">Host:</span> {api.host}
+              </p>
+            {/if}
             <div class="flex items-center justify-between text-sm text-gray-500">
               <span>{api.endpointCount} endpoint{api.endpointCount === 1 ? '' : 's'}</span>
               <span>Updated {new Date(api.updatedAt).toLocaleDateString()}</span>
