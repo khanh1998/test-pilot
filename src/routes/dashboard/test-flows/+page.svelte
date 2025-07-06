@@ -171,19 +171,25 @@
 </script>
 
 <div class="container mx-auto px-4 py-8">
-  <div class="flex justify-between items-center mb-8">
-    <h1 class="text-3xl font-bold">Test Flow Blueprints</h1>
-    <button
-      class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition"
-      on:click={() => showCreateModal = true}
-    >
-      Create New Test Flow
-    </button>
+  <div class="mb-6">
+    <a href="/dashboard" class="text-blue-500 hover:text-blue-600 text-sm">
+      ← Back to Dashboard
+    </a>
   </div>
   
+  <div class="flex justify-between items-center mb-8">
+    <h1 class="text-2xl font-bold text-gray-800">Test Flows</h1>
+    <button
+      class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
+      on:click={() => showCreateModal = true}
+    >
+      Create Test Flow
+    </button>
+  </div>
+
   {#if error}
-    <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4 relative">
-      <span class="block sm:inline">{error}</span>
+    <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4" role="alert">
+      <p>{error}</p>
     </div>
   {/if}
   
