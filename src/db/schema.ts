@@ -9,15 +9,6 @@ export const users = pgTable('users', {
   createdAt: timestamp('created_at').defaultNow().notNull()
 });
 
-// Example posts table
-export const posts = pgTable('posts', {
-  id: serial('id').primaryKey(),
-  title: text('title').notNull(),
-  content: text('content'),
-  authorId: integer('author_id').references(() => users.id),
-  createdAt: timestamp('created_at').defaultNow().notNull()
-});
-
 // APIs table - stores uploaded Swagger/OpenAPI specifications
 export const apis = pgTable('apis', {
   id: serial('id').primaryKey(),

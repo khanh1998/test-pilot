@@ -45,4 +45,3 @@ The application uses a token-based authentication system with the following comp
 - `src/lib/server/auth.ts`: Authentication middleware for API endpoints
 - `src/routes/api/auth/sign-in/+server.ts`: Sign in endpoint
 - `src/routes/api/auth/sign-up/+server.ts`: Sign up endpoint
-- `src/routes/api/posts-with-authors/+server.ts`: Example of a protected API endpoint
