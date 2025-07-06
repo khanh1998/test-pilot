@@ -89,6 +89,9 @@
             <li>
               <a href="/dashboard/apis" class="text-gray-700 hover:text-blue-600 text-sm">APIs</a>
             </li>
+            <li>
+              <a href="/dashboard/test-flows" class="text-gray-700 hover:text-blue-600 text-sm">Test Flows</a>
+            </li>
           </ul>
         </nav>
       </div>

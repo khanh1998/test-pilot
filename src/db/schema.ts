@@ -45,3 +45,21 @@ export const apiEndpoints = pgTable('api_endpoints', {
   tags: text('tags').array(),
   createdAt: timestamp('created_at').defaultNow().notNull()
 });
+
+// Test Flows table - stores blueprints for API test flows
+export const testFlows = pgTable('test_flows', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull(),
+  description: text('description'),
+  userId: integer('user_id').references(() => users.id),
+  flowJson: jsonb('flow_json').notNull(), // Will store the entire flow structure including steps, inputs, assertions
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull()
+});
+
+// Join table for many-to-many relationship between test_flows and apis
+export const testFlowApis = pgTable('test_flow_apis', {
+  testFlowId: integer('test_flow_id').notNull().references(() => testFlows.id),
+  apiId: integer('api_id').notNull().references(() => apis.id),
+  // Composite primary key is defined in relations.ts
+});

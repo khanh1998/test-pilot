@@ -1,4 +1,4 @@
-import { pgTable, unique, serial, text, varchar, timestamp, foreignKey, integer, jsonb } from "drizzle-orm/pg-core"
+import { pgTable, unique, serial, text, varchar, timestamp, foreignKey, integer, jsonb, uuid, primaryKey } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm"
 
 
@@ -63,5 +63,39 @@ export const apiEndpoints = pgTable("api_endpoints", {
 		columns: [table.apiId],
 		foreignColumns: [apis.id],
 		name: "api_endpoints_api_id_apis_id_fk"
+	}),
+]);
+
+export const testFlows = pgTable("test_flows", {
+	id: serial().primaryKey().notNull(),
+	name: text().notNull(),
+	description: text(),
+	userId: integer("user_id"),
+	flowJson: jsonb("flow_json").notNull(), // Will store the entire flow structure
+	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
+	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow().notNull(),
+}, (table) => [
+	foreignKey({
+		columns: [table.userId],
+		foreignColumns: [users.id],
+		name: "test_flows_user_id_users_id_fk"
+	}),
+]);
+
+// Join table for many-to-many relationship between test_flows and apis
+export const testFlowApis = pgTable("test_flow_apis", {
+	testFlowId: integer("test_flow_id").notNull(),
+	apiId: integer("api_id").notNull(),
+}, (table) => [
+	primaryKey({ columns: [table.testFlowId, table.apiId] }),
+	foreignKey({
+		columns: [table.testFlowId],
+		foreignColumns: [testFlows.id],
+		name: "test_flow_apis_test_flow_id_test_flows_id_fk"
+	}),
+	foreignKey({
+		columns: [table.apiId],
+		foreignColumns: [apis.id],
+		name: "test_flow_apis_api_id_apis_id_fk"
 	}),
 ]);

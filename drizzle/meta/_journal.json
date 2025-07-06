@@ -15,6 +15,13 @@
       "when": 1751616921803,
       "tag": "0001_new_betty_ross",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1751764765972,
+      "tag": "0002_late_plazm",
+      "breakpoints": true
     }
   ]
 }
