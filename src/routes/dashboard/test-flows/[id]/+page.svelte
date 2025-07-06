@@ -5,6 +5,7 @@
   
   // Import the components we created
   import EndpointSelector from '$lib/components/TestFlow/EndpointSelector.svelte';
+  import StepEditor from '$lib/components/TestFlow/StepEditor.svelte';
   
   $: testFlowId = parseInt($page.params.id || '0');
   
@@ -352,14 +353,8 @@
         <div class="p-6">
           <!-- Steps Tab -->
           {#if currentTab === 'steps'}
-            <div class="flex justify-between items-center mb-6">
+            <div class="mb-6">
               <h2 class="text-xl font-semibold">Test Flow Steps</h2>
-              <button 
-                class="bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 transition text-sm"
-                on:click={() => showNewStepModal = true}
-              >
-                Add Step
-              </button>
             </div>
             
             {#if flowJson.steps.length === 0}
@@ -378,88 +373,39 @@
             {:else}
               <div class="space-y-8">
                 {#each flowJson.steps as step, stepIndex}
-                  <div class="bg-white border rounded-lg shadow-sm p-4">
-                    <div class="flex justify-between items-center mb-4">
-                      <h3 class="text-lg font-medium flex items-center">
-                        <span class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full mr-2">
-                          {step.step_id}
-                        </span>
-                        {step.label}
-                      </h3>
-                      <div>
-                        <button 
-                          class="text-red-600 hover:text-red-800"
-                          on:click={() => removeStep(stepIndex)}
-                          aria-label="Remove Step"
-                        >
-                          <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"></path>
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
-                    
-                    <!-- Endpoints in this step -->
-                    <div class="mb-4">
-                      <h4 class="text-sm font-medium text-gray-500 mb-2">Endpoints:</h4>
-                      
-                      {#if step.endpoints.length === 0}
-                        <p class="text-gray-400 italic text-sm">No endpoints in this step yet</p>
-                      {:else}
-                        <div class="space-y-4">
-                          {#each step.endpoints as stepEndpoint, endpointIndex}
-                            {@const endpoint = findEndpoint(stepEndpoint.endpoint_id)}
-                            {#if endpoint}
-                              <div class="bg-gray-50 rounded-md p-3">
-                                <div class="flex justify-between items-start mb-2">
-                                  <div>
-                                    <span class="bg-green-100 text-green-800 text-xs px-2 py-1 rounded mr-2">
-                                      {endpoint.method}
-                                    </span>
-                                    <span class="font-mono text-sm">{endpoint.path}</span>
-                                  </div>
-                                  <button 
-                                    class="text-red-600 hover:text-red-800"
-                                    on:click={() => removeEndpointFromStep(stepIndex, endpointIndex)}
-                                    aria-label="Remove Endpoint"
-                                  >
-                                    <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                                      <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
-                                    </svg>
-                                  </button>
-                                </div>
-                                
-                                <div class="mb-2">
-                                  <label for="store-response-{stepIndex}-{endpointIndex}" class="block text-xs font-medium text-gray-500 mb-1">
-                                    Store Response As:
-                                  </label>
-                                  <input 
-                                    id="store-response-{stepIndex}-{endpointIndex}"
-                                    type="text" 
-                                    bind:value={stepEndpoint.store_response_as}
-                                    class="text-sm px-2 py-1 border rounded w-full"
-                                    on:change={markDirty}
-                                  />
-                                </div>
-                                
-                                <!-- Parameter configuration would go here -->
-                                <!-- Will be implemented in StepEditor component -->
-                              </div>
-                            {/if}
-                          {/each}
-                        </div>
-                      {/if}
-                    </div>
-                    
-                    <!-- Add endpoint button -->
-                    <div>
+                  <StepEditor 
+                    {step} 
+                    {endpoints} 
+                    {stepIndex}
+                    on:removeStep={() => removeStep(stepIndex)}
+                    on:removeEndpoint={(e) => removeEndpointFromStep(stepIndex, e.detail.endpointIndex)}
+                    on:change={markDirty}
+                    on:updateParam={(e) => {
+                      // Handle parameter updates when implemented
+                      markDirty();
+                    }}
+                  >
+                    <div slot="endpoint-selector">
                       <EndpointSelector
                         {endpoints}
-                        on:select={(e: CustomEvent) => addEndpointToStep(stepIndex, e.detail)}
+                        on:select={(e) => addEndpointToStep(stepIndex, e.detail)}
                       />
                     </div>
-                  </div>
+                  </StepEditor>
                 {/each}
+                
+                <!-- Add Step button moved to the bottom -->
+                <div class="flex justify-center mt-6">
+                  <button 
+                    class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition flex items-center"
+                    on:click={() => showNewStepModal = true}
+                  >
+                    <svg class="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                    </svg>
+                    Add Step
+                  </button>
+                </div>
               </div>
             {/if}
           {/if}

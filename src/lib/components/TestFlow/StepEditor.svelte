@@ -49,11 +49,11 @@
     {#if step.endpoints.length === 0}
       <p class="text-gray-400 italic text-sm">No endpoints in this step yet</p>
     {:else}
-      <div class="space-y-4">
+      <div class="flex flex-row gap-3 overflow-x-auto pb-2">
         {#each step.endpoints as stepEndpoint, endpointIndex}
           {@const endpoint = findEndpoint(stepEndpoint.endpoint_id)}
           {#if endpoint}
-            <div class="bg-gray-50 rounded-md p-3">
+            <div class="bg-gray-50 rounded-md p-3 min-w-[280px] max-w-[300px] flex-shrink-0">
               <div class="flex justify-between items-start mb-2">
                 <div>
                   <span class="bg-green-100 text-green-800 text-xs px-2 py-1 rounded mr-2">
