@@ -361,6 +361,7 @@
           body: body ? JSON.stringify(body) : null,
           signal: controller.signal,
           mode: 'cors', // Enable CORS for cross-origin requests
+          credentials: 'include',
         });
       }
       

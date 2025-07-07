@@ -562,9 +562,9 @@
     ></div>
     
     <!-- The panel itself - responsive sizing for different screens -->
-    <div class="fixed inset-y-0 right-0 w-full sm:w-[75%] md:w-[600px] lg:w-[500px] bg-white shadow-xl overflow-y-auto z-50 transition-transform duration-300 ease-in-out"
+    <div class="fixed inset-y-0 right-0 w-full sm:w-[75%] md:w-[600px] lg:w-[500px] bg-white shadow-xl overflow-y-auto z-50 transition-transform duration-300 ease-in-out {!isParamEditorOpen ? 'pointer-events-none' : ''}"
          style="transform: {isParamEditorOpen ? 'translateX(0)' : 'translateX(100%)'};"
-         aria-hidden={!isParamEditorOpen ? 'true' : 'false'}>
+         aria-hidden={!isParamEditorOpen}>
       
       <!-- Header - with added width to ensure it fills full panel width -->
       <div class="bg-gray-100 px-4 py-3 flex justify-between items-center sticky top-0 z-10 border-b shadow-sm w-full">
@@ -891,9 +891,9 @@
     ></div>
     
     <!-- The panel itself - responsive sizing -->
-    <div class="fixed inset-y-0 right-0 w-full sm:w-[75%] md:w-[600px] lg:w-[500px] bg-white shadow-xl overflow-y-auto z-50 transition-transform duration-300 ease-in-out"
+    <div class="fixed inset-y-0 right-0 w-full sm:w-[75%] md:w-[600px] lg:w-[500px] bg-white shadow-xl overflow-y-auto z-50 transition-transform duration-300 ease-in-out {!isResponseViewerOpen ? 'pointer-events-none' : ''}"
          style="transform: {isResponseViewerOpen ? 'translateX(0)' : 'translateX(100%)'};"
-         aria-hidden={!isResponseViewerOpen ? 'true' : 'false'}>
+         aria-hidden={!isResponseViewerOpen}>
       
       <!-- Header -->
       <div class="bg-gray-100 px-4 py-3 flex justify-between items-center sticky top-0 z-10 border-b shadow-sm w-full">
