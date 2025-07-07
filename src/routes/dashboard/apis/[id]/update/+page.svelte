@@ -1,0 +1,66 @@
+<script lang="ts">
+  import { page } from '$app/stores';
+  import ApiFileUpload from '$lib/components/ApiFileUpload.svelte';
+  import { onMount } from 'svelte';
+
+  const apiId = parseInt($page.params.id);
+
+  let loading = true;
+  let error: string | null = null;
+  let api: {
+    id: number;
+    name: string;
+    description: string;
+    host?: string;
+  } | null = null;
+
+  onMount(async () => {
+    try {
+      const response = await fetch(`/api/apis/${apiId}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      api = data.api;
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'An error occurred while fetching API details';
+    } finally {
+      loading = false;
+    }
+  });
+</script>
+
+<div class="container mx-auto px-4 py-6">
+  <div class="mb-6">
+    <a href={`/dashboard/apis/${apiId}`} class="text-blue-500 hover:text-blue-700">
+      &larr; Back to API Details
+    </a>
+  </div>
+  
+  {#if loading}
+    <div class="flex justify-center py-12">
+      <div class="animate-pulse text-gray-500">Loading API details...</div>
+    </div>
+  {:else if error}
+    <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 my-4" role="alert">
+      <p>{error}</p>
+    </div>
+  {:else if api}
+    <ApiFileUpload 
+      apiId={api.id}
+      apiName={api.name}
+      apiDescription={api.description || ''}
+      apiHost={api.host || ''}
+    />
+  {:else}
+    <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 my-4" role="alert">
+      <p>API not found</p>
+    </div>
+  {/if}
+</div>
