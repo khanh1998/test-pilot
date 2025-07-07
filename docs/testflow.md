@@ -64,6 +64,8 @@ The blueprint includes:
 }
 ```
 
+> **Cookie Handling**: When testing APIs that use cookies for authentication or session management, the "Use server for cookie handling" option in the Dry Run tab will route requests through a server-side proxy to maintain cookie state across requests.
+
 ---
 
 ### 2. **Steps**

@@ -11,6 +11,7 @@
   export let preferences = {
     parallelExecution: true, // Whether to execute endpoints in parallel
     stopOnError: true, // Whether to stop execution on error
+    serverCookieHandling: false, // Whether to use server for cookie handling
     retryCount: 0, // Number of retries for failed requests
     timeout: 30000 // Request timeout in ms
   };
@@ -27,6 +28,19 @@
     message: string;
     details?: string;
   }> = []; // Logs for the execution
+  
+  // Cookie management
+  // Define the cookie interface for consistency across the component
+  interface RequestCookie {
+    name: string;
+    value: string;
+    domain: string;
+    path?: string;
+  }
+  
+  let cookieMessage: string = '';
+  let cookieStore: Map<string, Array<RequestCookie>> = new Map();
+  // Format: Map<"stepId-endpointIndex", Array<RequestCookie>>
   
   // Emitted events will be handled by the parent component
   const dispatch = createEventDispatcher();
@@ -248,13 +262,107 @@
       addRequestDebugLogs(endpointDef.path, headers);
       
       // Make the request
-      const response = await fetch(url, {
-        method: endpointDef.method,
-        headers,
-        body: body ? JSON.stringify(body) : null,
-        signal: controller.signal,
-        mode: 'cors', // Enable CORS for cross-origin requests
-      });
+      let response;
+      
+      if (preferences.serverCookieHandling) {
+        // Use server proxy for cookie handling
+        const proxyUrl = '/api/proxy/request';
+        
+        // Prepare cookies to send with the request
+        const targetUrl = new URL(url);
+        const domain = targetUrl.hostname;
+        
+        let requestCookies: RequestCookie[] = [];
+        
+        // Gather all cookies from previous steps regardless of domain (temporary solution)
+        for (const [key, cookies] of cookieStore.entries()) {
+          // Add all cookies regardless of domain
+          if (cookies.length > 0) {
+            for (const cookie of cookies) {
+                if (cookie.value.length > 0) {
+                    requestCookies.push(cookie);
+                }
+            }
+          }
+        }
+        
+        // Log the cookies being sent
+        executionLogs.push({
+          timestamp: new Date(),
+          level: 'debug',
+          message: `Sending ${requestCookies.length} cookies with request`,
+          details: `Target domain: ${domain}`
+        });
+        
+        // Make the proxy request
+        const proxyResponse = await fetch(proxyUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+          },
+          body: JSON.stringify({
+            url,
+            method: endpointDef.method,
+            headers,
+            body: body ? JSON.stringify(body) : null,
+            cookies: requestCookies
+          }),
+          signal: controller.signal
+        });
+        
+        // Extract the response data from the proxy
+        const proxyData = await proxyResponse.json();
+        
+        // Create a synthetic Response object from proxy data
+        response = new Response(
+          proxyData.body ? JSON.stringify(proxyData.body) : null,
+          {
+            status: proxyData.status,
+            statusText: proxyData.statusText,
+            headers: new Headers(proxyData.headers)
+          }
+        );
+        
+        // Store cookies from the response
+        if (proxyData.cookies && proxyData.cookies.length > 0) {
+          // Generate a unique ID for this endpoint
+          const endpointKey = `${stepId}-${endpointIndex}`;
+          
+          // Store cookies by endpoint
+          cookieStore.set(endpointKey, proxyData.cookies.map((c: any) => ({
+            name: c.name,
+            value: c.value,
+            domain: c.domain || targetUrl.hostname,
+            path: c.path
+          })));
+          
+          // Add cookie info to logs
+          executionLogs.push({
+            timestamp: new Date(),
+            level: 'info',
+            message: `Received ${proxyData.cookies.length} cookies from server`,
+            details: `Cookies stored for endpoint: ${endpointKey}`
+          });
+        }
+        
+        // Add proxy info to logs
+        executionLogs.push({
+          timestamp: new Date(),
+          level: 'info',
+          message: 'Request proxied through server for cookie handling',
+          details: `Original URL: ${url}\nProxy URL: ${proxyUrl}`
+        });
+      } else {
+        // Direct fetch without proxy
+        response = await fetch(url, {
+          method: endpointDef.method,
+          headers,
+          body: body ? JSON.stringify(body) : null,
+          signal: controller.signal,
+          mode: 'cors', // Enable CORS for cross-origin requests
+        });
+      }
       
       // Clear timeout
       clearTimeout(timeoutId);
@@ -332,6 +440,11 @@
     isRunning = false;
     executionLogs = []; // Clear execution logs
     
+    // Reset cookies if user wants to start fresh
+    if (preferences.serverCookieHandling) {
+      cookieStore.clear();
+    }
+    
     // Add initial log entry
     executionLogs.push({
       timestamp: new Date(),
@@ -351,6 +464,14 @@
           level: 'info',
           message: 'Cross-Origin API detected',
           details: `Frontend: ${frontend}\nAPI: ${apiUrl.origin}`
+        });
+        
+        // Add suggestion about cookie handling if cross-origin
+        executionLogs.push({
+          timestamp: new Date(),
+          level: 'info',
+          message: 'Tip: For APIs that use cookies',
+          details: 'If this API uses cookies for auth or sessions, enable "Use server for cookie handling" in Execution Preferences.'
         });
       }
     }
@@ -509,6 +630,30 @@
       details: JSON.stringify(reqHeaders, null, 2)
     });
   }
+  
+  // Function to clear all cookies in the client-side cookie store
+  function clearCookies() {
+    try {
+      cookieStore.clear();
+      cookieMessage = 'All cookies cleared successfully';
+      
+      // Add log entry
+      executionLogs.push({
+        timestamp: new Date(),
+        level: 'info',
+        message: 'Cookies cleared',
+        details: 'All cookies have been cleared from the client-side cookie store'
+      });
+      
+      // Reset message after 3 seconds
+      setTimeout(() => {
+        cookieMessage = '';
+      }, 3000);
+    } catch (error) {
+      cookieMessage = 'Failed to clear cookies';
+      console.error('Error clearing cookies:', error);
+    }
+  }
 </script>
 
 <div class="bg-white border rounded-lg shadow-sm p-4 mb-6">
@@ -600,6 +745,22 @@
         </label>
       </div>
       
+      <div class="flex items-center">
+        <input 
+          type="checkbox" 
+          id="server-cookie-handling" 
+          bind:checked={preferences.serverCookieHandling} 
+          class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+          disabled={isRunning}
+        >
+        <label for="server-cookie-handling" class="ml-2 text-sm text-gray-700 flex items-center">
+          Use server for cookie handling
+          <span class="ml-1 text-xs text-gray-500 bg-gray-100 px-1 rounded">
+            CORS fix
+          </span>
+        </label>
+      </div>
+      
       <div>
         <label for="retry-count" class="block text-sm text-gray-700">
           Retry attempts
@@ -631,6 +792,25 @@
       </div>
     </div>
   </div>
+  
+  <!-- Cookie Management Info - Only visible when serverCookieHandling is enabled -->
+  {#if preferences.serverCookieHandling}
+    <div class="mt-4 pt-4 border-t">
+      <div class="flex items-center justify-between">
+        <h4 class="text-sm font-medium text-gray-700">Cookie Management</h4>
+        <button 
+          on:click={clearCookies} 
+          class="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded"
+          disabled={isRunning}
+        >
+          Clear All Cookies
+        </button>
+      </div>
+      <p class="text-xs text-gray-500 mt-1">
+        {cookieMessage || 'Cookies will be passed between endpoints to maintain session state.'}
+      </p>
+    </div>
+  {/if}
   
   <!-- Execution Logs Section -->
   <div class="mt-6 pt-4 border-t">
