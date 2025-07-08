@@ -12,6 +12,10 @@
   let executionState: Record<string, any> = {};
   let flowRunner: FlowRunner;
   
+  // Create a store to track execution state changes
+  import { writable } from 'svelte/store';
+  const executionStore = writable<Record<string, any>>({});
+  
   // Execution options panel
   let showExecutionOptions = false;
   
@@ -97,22 +101,44 @@
   
   // Handle execution state reset
   function handleReset() {
-    // Directly reset the state instead of calling flowRunner.resetExecution() to avoid infinite recursion
+    // Reset the execution state store
+    executionStore.set({});
     executionState = {};
     isRunning = false;
+    
+    // Dispatch reset event to parent
+    dispatch('reset');
   }
   
   // Handle execution completion
   function handleExecutionComplete(event: CustomEvent) {
     console.log('Execution completed:', event.detail);
-    // Additional handling could be done here
+    isRunning = false;
+    // Force an update of all components that depend on the execution state
+    executionStore.update(state => ({ ...state }));
+    
+    // Dispatch event to parent
+    dispatch('executionComplete', event.detail);
+  }
+  
+  // Handle execution state update from FlowRunner
+  function handleExecutionStateUpdate(event: CustomEvent) {
+    // Update the execution state with the new state from FlowRunner
+    executionState = event.detail;
+    // Update the store to trigger reactivity across all components
+    executionStore.set(executionState);
   }
   
   // Run the entire flow
   function runFlow() {
     if (flowRunner) {
+      // Reset the execution state before starting a new run
+      executionState = {};
+      executionStore.set({});
+      
       flowRunner.runFlow().catch(err => {
         console.error('Error running flow:', err);
+        isRunning = false;
       });
     }
   }
@@ -124,6 +150,22 @@
     }
     isRunning = false;
   }
+  
+  // Subscribe to execution state changes for debugging
+  import { onMount, onDestroy } from 'svelte';
+  
+  let unsubscribe: () => void;
+  
+  onMount(() => {
+    unsubscribe = executionStore.subscribe(state => {
+      // Create a new reference to ensure reactive updates
+      executionState = { ...state };
+    });
+  });
+  
+  onDestroy(() => {
+    if (unsubscribe) unsubscribe();
+  });
 </script>
 
 <div class="space-y-4">
@@ -280,6 +322,14 @@
       bind:preferences
       on:reset={handleReset}
       on:executionComplete={handleExecutionComplete}
+      on:executionStateUpdate={handleExecutionStateUpdate}
+      on:endpointStateUpdate={(event) => {
+        const { endpointId, state } = event.detail;
+        // Force the store to update for better reactivity
+        executionStore.update(store => {
+          return { ...store, [endpointId]: state };
+        });
+      }}
     />
   </div>
   
@@ -295,6 +345,7 @@
           isLastStep={stepIndex === flowData.steps.length - 1}
           {isRunning}
           {executionState}
+          executionStore={$executionStore}
           on:removeStep={handleRemoveStep}
           on:removeEndpoint={handleRemoveEndpoint}
           on:moveStep={handleMoveStep}

@@ -79,6 +79,14 @@
     console.warn("No endpoints provided in flowData. The flow may not execute correctly.");
   }
   
+  // Watch executionState for changes and emit update events
+  $: if (Object.keys(executionState).length > 0) {
+    // Only emit if we're not in initialization
+    if (isRunning) {
+      dispatch('executionStateUpdate', executionState);
+    }
+  }
+  
   // Make progress and current step available in the executionState for external components
   $: executionState.progress = progress;
   $: executionState.currentStep = currentStep;
@@ -303,6 +311,9 @@
         timing: 0
       }
     };
+    
+    // Emit execution state update event to notify parent component
+    dispatch('executionStateUpdate', executionState);
     
     try {
       // Make sure endpoints array exists
@@ -546,21 +557,47 @@
       
       // Update status - create a new object for reactivity
       if (response.ok) {
+        // Create a new copy of the endpoint state to ensure reactivity
+        const updatedEndpointState = {
+          ...executionState[endpointId],
+          status: 'completed'
+        };
+        
+        // Update the global execution state
         executionState = {
           ...executionState,
-          [endpointId]: {
-            ...executionState[endpointId],
-            status: 'completed'
-          }
+          [endpointId]: updatedEndpointState
         };
+        
+        // Emit execution state update event
+        dispatch('executionStateUpdate', executionState);
+        
+        // Also emit a specific endpoint update event for more focused updates
+        dispatch('endpointStateUpdate', { 
+          endpointId, 
+          state: updatedEndpointState 
+        });
       } else {
+        // Create a new copy of the endpoint state to ensure reactivity
+        const updatedEndpointState = {
+          ...executionState[endpointId],
+          status: 'failed'
+        };
+        
+        // Update the global execution state
         executionState = {
           ...executionState,
-          [endpointId]: {
-            ...executionState[endpointId],
-            status: 'failed'
-          }
+          [endpointId]: updatedEndpointState
         };
+        
+        // Emit execution state update event
+        dispatch('executionStateUpdate', executionState);
+        
+        // Also emit a specific endpoint update event for more focused updates
+        dispatch('endpointStateUpdate', { 
+          endpointId, 
+          state: updatedEndpointState 
+        });
         
         // Set error if stopOnError is true
         if (preferences.stopOnError) {
@@ -588,6 +625,9 @@
     executionState = { 
       ...executionState
     };
+    
+    // Emit execution state update event
+    dispatch('executionStateUpdate', executionState);
   }
   
   // Reset execution state

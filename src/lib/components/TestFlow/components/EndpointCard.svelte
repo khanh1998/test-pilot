@@ -19,6 +19,13 @@
   const endpointDisplayId = getEndpointDisplayId(stepEndpoint.endpoint_id, endpointIndex);
 
   // Create reactive derived values to ensure the component updates when executionState changes
+  $: {
+    // Log when executionState changes to help debug reactivity issues
+    if (process.env.NODE_ENV === 'development') {
+      console.debug(`[EndpointCard] executionState updated for ${endpointDisplayId}`, executionState[endpointDisplayId]);
+    }
+  }
+  
   $: currentExecutionState = executionState[endpointDisplayId] || {};
   $: executionStatus = currentExecutionState?.status;
   $: executionResponse = currentExecutionState?.response;
@@ -36,28 +43,33 @@
   // Get the response status code for an endpoint
   $: statusCode = executionResponse?.status || null;
   
-  // Check if an endpoint is currently running
+  // These helper functions simply return our reactive variables for legacy compatibility
   function isEndpointRunning(): boolean {
+    // Use the reactive variable directly 
     return isRunning;
   }
   
   // Check if an endpoint has completed execution
   function isEndpointCompleted(): boolean {
+    // Use the reactive variable directly
     return isCompleted;
   }
   
   // Check if an endpoint has failed
   function isEndpointFailed(): boolean {
+    // Use the reactive variable directly
     return isFailed;
   }
   
   // Get the response status code for an endpoint
   function getEndpointStatusCode(): number | null {
+    // Use the reactive variable directly
     return statusCode;
   }
   
   // Get execution time for an endpoint in ms
   function getExecutionTime(): number | null {
+    // Use the reactive variable directly
     return executionTiming;
   }
 
@@ -85,7 +97,7 @@
   }
 </script>
 
-<div class="bg-gray-50 rounded-md p-3 min-w-[280px] max-w-[300px] flex-shrink-0 relative border {isEndpointRunning() ? 'border-blue-400 shadow-md shadow-blue-100' : 'border-gray-200'} {isEndpointCompleted() ? 'border-green-500' : ''} {isEndpointFailed() ? 'border-red-500' : ''} {getResponseStatusClass()}">
+<div class="bg-gray-50 rounded-md p-3 min-w-[280px] max-w-[300px] flex-shrink-0 relative border {isRunning ? 'border-blue-400 shadow-md shadow-blue-100' : 'border-gray-200'} {isCompleted ? 'border-green-500' : ''} {isFailed ? 'border-red-500' : ''} {getResponseStatusClass()}">
   <div class="flex justify-between items-start mb-2">
     <div class="flex items-center">
       <span class="bg-green-100 text-green-800 text-xs px-1.5 py-0.5 rounded mr-1.5 uppercase font-medium">
@@ -115,15 +127,15 @@
   </div>
   
   <!-- Enhanced Execution Status Indicator -->
-  {#if isEndpointRunning()}
+  {#if isRunning}
     <div class="absolute top-0 right-0 mt-1 mr-1">
       <div class="animate-spin h-5 w-5 border-2 border-blue-500 border-t-transparent rounded-full"></div>
     </div>
     <!-- Visual indicator for the entire card when running -->
     <div class="absolute inset-0 bg-blue-50 opacity-20 rounded-md animate-pulse pointer-events-none"></div>
-  {:else if isEndpointCompleted() || isEndpointFailed()}
-    <div class="absolute top-0 right-0 mt-1 mr-1 rounded-full p-0.5 {isEndpointCompleted() ? 'bg-green-100' : 'bg-red-100'}">
-      {#if isEndpointCompleted()}
+  {:else if isCompleted || isFailed}
+    <div class="absolute top-0 right-0 mt-1 mr-1 rounded-full p-0.5 {isCompleted ? 'bg-green-100' : 'bg-red-100'}">
+      {#if isCompleted}
         <svg class="h-4 w-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
           <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
         </svg>
@@ -156,10 +168,10 @@
       
       <!-- Response Viewer Button -->
       <button 
-        class="text-xs flex-1 px-2 py-1 {executionState[endpointDisplayId]?.response ? 'bg-green-50 hover:bg-green-100 text-green-700 border-green-200' : 'bg-gray-50 hover:bg-gray-100 text-gray-500 border-gray-200'} rounded border transition-colors flex items-center justify-center"
+        class="text-xs flex-1 px-2 py-1 {executionResponse ? 'bg-green-50 hover:bg-green-100 text-green-700 border-green-200' : 'bg-gray-50 hover:bg-gray-100 text-gray-500 border-gray-200'} rounded border transition-colors flex items-center justify-center"
         on:click={openResponseViewer}
-        disabled={!executionState[endpointDisplayId]?.response}
-        title={executionState[endpointDisplayId]?.response ? 'View complete request and response details' : 'Run endpoint to view response'}
+        disabled={!executionResponse}
+        title={executionResponse ? 'View complete request and response details' : 'Run endpoint to view response'}
       >
         <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -179,7 +191,7 @@
         </span>
       {/if}
       
-      {#if isEndpointRunning()}
+      {#if isRunning}
         <span class="inline-flex items-center text-blue-500">
           <svg class="animate-spin h-3 w-3 mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -187,14 +199,14 @@
           </svg>
           Executing...
         </span>
-      {:else if isEndpointCompleted()}
+      {:else if isCompleted}
         <span class="inline-flex items-center text-green-500">
           <svg class="h-3 w-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
             <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
           </svg>
           Completed
         </span>
-      {:else if isEndpointFailed()}
+      {:else if isFailed}
         <span class="inline-flex items-center text-red-500">
           <svg class="h-3 w-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
             <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>

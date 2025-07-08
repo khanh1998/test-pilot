@@ -11,9 +11,20 @@
   export let isLastStep: boolean = false;
   export let isRunning: boolean = false; // Flag from parent to indicate if test flow execution is in progress
   export let executionState: ExecutionState = {}; // Tracks execution status for each endpoint
+  export let executionStore: ExecutionState = {}; // Store from parent for better reactivity
   
   // Emitted events will be handled by the parent component
   const dispatch = createEventDispatcher();
+  
+  // Use the store to update our local execution state for better reactivity
+  import { onMount, onDestroy } from 'svelte';
+  
+  $: {
+    // When executionStore changes, update our local executionState
+    if (Object.keys(executionStore).length > 0) {
+      executionState = { ...executionStore };
+    }
+  }
   
   // Parameter editor state
   let isParamEditorOpen = false;
@@ -51,10 +62,13 @@
       return { status: 'none' };
     }
     
+    // Use either executionStore or executionState (prefer executionStore if available)
+    const currentState = Object.keys(executionStore).length > 0 ? executionStore : executionState;
+    
     // Check if all endpoints have been processed
     const endpointStates = step.endpoints.map((stepEndpoint: StepEndpoint, index: number) => {
       const endpointId = getEndpointDisplayId(stepEndpoint.endpoint_id, index);
-      return executionState[endpointId]?.status || 'none';
+      return currentState[endpointId]?.status || 'none';
     });
     
     // Check if any endpoints are currently running
@@ -301,7 +315,7 @@
               stepEndpoint={stepEndpoint}
               {endpointIndex}
               {stepIndex}
-              {executionState}
+              executionState={executionStore}
               {duplicateCount}
               {instanceIndex}
               on:openParamEditor={openParamEditor}
