@@ -318,42 +318,6 @@
   <div>
     <slot name="endpoint-selector"></slot>
   </div>
-
-  <!-- Endpoint step execution summary if available -->
-  {#if Object.keys(executionState).length > 0 && step.endpoints.some((endpoint: any, index: number) => executionState[`${endpoint.endpoint_id}-${index}`]?.response)}
-    <div class="mt-4 p-3 rounded-md bg-gray-50 border border-gray-200">
-      <h5 class="text-sm font-medium text-gray-700 mb-2">Execution Summary</h5>
-      <div class="space-y-2">
-        {#each step.endpoints as stepEndpoint, endpointIndex}
-          {@const displayId = getEndpointDisplayId(stepEndpoint.endpoint_id, endpointIndex)}
-          {@const endpoint = findEndpoint(stepEndpoint.endpoint_id)}
-          {#if executionState[displayId]?.response && endpoint}
-            <div class="flex items-center justify-between text-xs">
-              <div class="flex items-center">
-                <span class="inline-block w-12 uppercase font-medium {(executionState[displayId]?.response?.status || 0) >= 400 ? 'text-red-600' : 'text-green-600'}">{endpoint.method}</span>
-                <span class="font-mono truncate max-w-[200px]">{endpoint.path}</span>
-              </div>
-              <div class="flex items-center">
-                <span class="px-1.5 py-0.5 rounded {getStatusColor(executionState[displayId]?.response?.status || 0)} text-white">
-                  {executionState[displayId]?.response?.status}
-                </span>
-                <button 
-                  class="ml-2 text-blue-600 hover:text-blue-800"
-                  on:click={() => { const event = new CustomEvent('openResponseViewer', { detail: { endpointIndex } }); openResponseViewer(event); }}
-                  aria-label="View response details"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-          {/if}
-        {/each}
-      </div>
-    </div>
-  {/if}
 </div>
 
 <!-- Parameter Editor Slide-out Panel -->
