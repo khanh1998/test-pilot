@@ -3,7 +3,7 @@
   
   // Props
   export let flowData: any; // The complete test flow data
-  export let apiHost: string = ''; // The API host URL
+  export let apiHost: string = ''; // API host URL
   export let isRunning: boolean = false; // Whether the flow is currently running
   export let executionState: Record<string, any> = {}; // Execution state for each endpoint
   
@@ -45,6 +45,24 @@
   // Emitted events will be handled by the parent component
   const dispatch = createEventDispatcher();
   
+  // Add a log entry to the execution logs
+  function addLog(level: 'info' | 'debug' | 'error' | 'warning', message: string, details?: string) {
+    executionLogs = [
+      ...executionLogs,
+      {
+        timestamp: new Date(),
+        level,
+        message,
+        details
+      }
+    ];
+    
+    // For errors, also console log them
+    if (level === 'error') {
+      console.error(message, details);
+    }
+  }
+  
   // Initialize when component mounts
   $: if (flowData && flowData.steps) {
     totalSteps = flowData.steps.length;
@@ -61,10 +79,98 @@
     console.warn("No endpoints provided in flowData. The flow may not execute correctly.");
   }
   
+  // Make progress and current step available in the executionState for external components
+  $: executionState.progress = progress;
+  $: executionState.currentStep = currentStep;
+  
+  // Add event listener for the global 'runFlow' event
+  import { onMount, onDestroy } from 'svelte';
+  
+  function handleRunFlowEvent() {
+    console.log('Received runFlow event, starting flow execution');
+    runFlow();
+  }
+  
+  function handleStopFlowEvent() {
+    console.log('Received stopFlow event, stopping execution');
+    stopExecution();
+  }
+  
+  onMount(() => {
+    // Add global event listeners
+    window.addEventListener('runFlow', handleRunFlowEvent);
+    window.addEventListener('stopFlow', handleStopFlowEvent);
+  });
+  
+  onDestroy(() => {
+    // Clean up event listeners when the component is destroyed
+    window.removeEventListener('runFlow', handleRunFlowEvent);
+    window.removeEventListener('stopFlow', handleStopFlowEvent);
+  });
+
+  // Execute a single step (exposed as a public method)
+  export async function executeSingleStep(step: any, stepIndex?: number) {
+    if (!step || !step.step_id) {
+      console.error("Invalid step provided for execution");
+      return;
+    }
+
+    // Validate API host
+    if (!apiHost || apiHost.trim() === '') {
+      error = new Error("API Host is not configured. Please set the API host before running the flow.");
+      dispatch('error', { message: "API Host is not configured" });
+      return;
+    }
+
+    // Set a local running flag just for this step execution
+    const localIsRunning = isRunning;
+    isRunning = true;
+    
+    try {
+      // Log that we're executing a single step
+      addLog('info', `Executing step ${step.step_id} individually`, JSON.stringify(step));
+      
+      // Execute the step
+      await executeStep(step);
+      
+      // Notify step execution completed
+      dispatch('stepExecutionComplete', { 
+        stepId: step.step_id,
+        stepIndex: stepIndex,
+        success: true
+      });
+    } catch (err) {
+      console.error(`Error executing step ${step.step_id}:`, err);
+      
+      // Notify step execution failed
+      dispatch('stepExecutionComplete', { 
+        stepId: step.step_id, 
+        stepIndex: stepIndex,
+        success: false,
+        error: err
+      });
+    } finally {
+      // Restore original running state
+      isRunning = localIsRunning;
+    }
+  }
+  
+  // Flag to signal execution should be stopped
+  let shouldStopExecution = false;
+  
+  // Stop the flow execution
+  export function stopExecution() {
+    if (isRunning) {
+      shouldStopExecution = true;
+      addLog('info', 'User requested to stop execution');
+    }
+  }
+  
   // Start the flow execution
-  async function runFlow() {
+  export async function runFlow() {
     // Reset state
     resetExecution();
+    shouldStopExecution = false;
     
     // Validate API host
     if (!apiHost || apiHost.trim() === '') {
@@ -106,6 +212,12 @@
         
         // Check if we should continue after this step
         if (error && preferences.stopOnError) {
+          break;
+        }
+        
+        // Check for external stop signal
+        if (shouldStopExecution) {
+          addLog('info', 'Execution stopped by user');
           break;
         }
       }
@@ -153,6 +265,12 @@
           if (error && preferences.stopOnError) {
             break;
           }
+          
+          // Check for external stop signal
+          if (shouldStopExecution) {
+            addLog('info', 'Execution stopped by user');
+            break;
+          }
         }
       }
     } catch (err) {
@@ -175,12 +293,15 @@
     
     const endpointId = `${endpoint.endpoint_id}-${endpointIndex}`;
     
-    // Set initial status
-    executionState[endpointId] = {
-      status: 'running',
-      request: {},
-      response: null,
-      timing: 0
+    // Set initial status - create a new object to trigger reactivity
+    executionState = {
+      ...executionState,
+      [endpointId]: {
+        status: 'running',
+        request: {},
+        response: null,
+        timing: 0
+      }
     };
     
     try {
@@ -241,14 +362,20 @@
         body = resolveTemplateObject(endpoint.body, storedResponses);
       }
       
-      // Record the request details for debugging
-      executionState[endpointId].request = {
-        url,
-        method: endpointDef.method,
-        headers,
-        body,
-        pathParams: endpoint.pathParams,
-        queryParams: endpoint.queryParams
+      // Record the request details for debugging - create a new object for reactivity
+      executionState = {
+        ...executionState,
+        [endpointId]: {
+          ...executionState[endpointId],
+          request: {
+            url,
+            method: endpointDef.method,
+            headers,
+            body,
+            pathParams: endpoint.pathParams,
+            queryParams: endpoint.queryParams
+          }
+        }
       };
       
       // Start timer
@@ -368,9 +495,16 @@
       // Clear timeout
       clearTimeout(timeoutId);
       
-      // Calculate timing
+      // Calculate timing - create a new object for reactivity
       const endTime = performance.now();
-      executionState[endpointId].timing = Math.round(endTime - startTime);
+      const timing = Math.round(endTime - startTime);
+      executionState = {
+        ...executionState,
+        [endpointId]: {
+          ...executionState[endpointId],
+          timing
+        }
+      };
       
       // Process response
       const responseData = await getResponseData(response);
@@ -391,12 +525,18 @@
         details: JSON.stringify(responseHeaders, null, 2)
       });
       
-      // Store response details
-      executionState[endpointId].response = {
-        status: response.status,
-        statusText: response.statusText,
-        headers: Object.fromEntries([...response.headers.entries()]),
-        body: responseData
+      // Store response details - create a new object for reactivity
+      executionState = {
+        ...executionState,
+        [endpointId]: {
+          ...executionState[endpointId],
+          response: {
+            status: response.status,
+            statusText: response.statusText,
+            headers: Object.fromEntries([...response.headers.entries()]),
+            body: responseData
+          }
+        }
       };
       
       // Store named response for use in later steps if requested
@@ -404,11 +544,23 @@
         storedResponses[endpoint.store_response_as] = responseData;
       }
       
-      // Update status
+      // Update status - create a new object for reactivity
       if (response.ok) {
-        executionState[endpointId].status = 'completed';
+        executionState = {
+          ...executionState,
+          [endpointId]: {
+            ...executionState[endpointId],
+            status: 'completed'
+          }
+        };
       } else {
-        executionState[endpointId].status = 'failed';
+        executionState = {
+          ...executionState,
+          [endpointId]: {
+            ...executionState[endpointId],
+            status: 'failed'
+          }
+        };
         
         // Set error if stopOnError is true
         if (preferences.stopOnError) {
@@ -416,9 +568,16 @@
         }
       }
     } catch (err) {
-      // Handle network errors or timeouts
-      executionState[endpointId].status = 'failed';
-      executionState[endpointId].error = err instanceof Error ? err.message : String(err);
+      // Handle network errors or timeouts - create a new object for reactivity
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      executionState = {
+        ...executionState,
+        [endpointId]: {
+          ...executionState[endpointId],
+          status: 'failed',
+          error: errorMessage
+        }
+      };
       
       if (preferences.stopOnError) {
         error = err;
@@ -432,7 +591,7 @@
   }
   
   // Reset execution state
-  function resetExecution() {
+  export function resetExecution() {
     currentStep = 0;
     progress = 0;
     error = null;
@@ -477,6 +636,14 @@
       }
     }
     
+    // Removed dispatch('reset') to prevent infinite recursion
+  }
+  
+  // Handle reset button click
+  export function handleReset() {
+    // Call resetExecution to clear all execution state
+    resetExecution();
+    // Emit reset event to notify parent components
     dispatch('reset');
   }
   

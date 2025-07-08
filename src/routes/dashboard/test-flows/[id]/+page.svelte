@@ -7,6 +7,7 @@
   import EndpointSelector from '$lib/components/TestFlow/EndpointSelector.svelte';
   import StepEditor from '$lib/components/TestFlow/StepEditor.svelte';
   import FlowRunner from '$lib/components/TestFlow/FlowRunner.svelte';
+  import TestFlowEditor from '$lib/components/TestFlow/TestFlowEditor.svelte';
   
   $: testFlowId = parseInt($page.params.id || '0');
   
@@ -15,8 +16,14 @@
   let selectedEndpoint: any = null;
   let loading = true;
   let error: string | null = null;
-  let currentTab: 'steps' | 'assertions' | 'settings' | 'dry-run' = 'steps';
-  let flowJson: any = { 
+  let currentTab: 'steps' | 'assertions' | 'settings' = 'steps';
+  let flowJson: {
+    settings: { 
+      api_host: string 
+    }, 
+    steps: any[], 
+    assertions: any[] 
+  } = { 
     settings: { 
       api_host: "" 
     }, 
@@ -26,9 +33,7 @@
   let isDirty = false;
   let isSaving = false;
   
-  // Dry run execution state
-  let isRunning = false;
-  let executionState: Record<string, any> = {};
+  // API host for the flow
   let apiHost = '';
   
   // New step related state
@@ -143,14 +148,25 @@
   
   // Reset execution state
   function handleReset() {
-    executionState = {};
-    isRunning = false;
+    console.log('FlowRunner reset event received');
+    // Simply log the event, no need to propagate further
+    // Execution state is managed by TestFlowEditor
   }
   
   // Handle execution completion
   function handleExecutionComplete(event: CustomEvent) {
-    console.log('Execution completed:', event.detail);
-    // Additional handling if needed
+    console.log('Flow execution complete:', event.detail);
+    const { success, error: executionError, storedResponses } = event.detail;
+    
+    if (!success && executionError) {
+      // Show error message to user
+      error = executionError.message || 'An error occurred during flow execution';
+    }
+    
+    // Store responses for potential reuse
+    if (storedResponses) {
+      console.log('Stored responses:', storedResponses);
+    }
   }
   
   function markDirty() {
@@ -488,13 +504,7 @@
             >
               Settings
             </button>
-            <button 
-              class="px-6 py-3 text-gray-700 border-b-2 font-medium text-sm 
-                    {currentTab === 'dry-run' ? 'border-blue-500 text-blue-500' : 'border-transparent hover:border-gray-300'}"
-              on:click={() => currentTab = 'dry-run'}
-            >
-              Dry Run
-            </button>
+
           </nav>
         </div>
         
@@ -502,66 +512,85 @@
           <!-- Steps Tab -->
           {#if currentTab === 'steps'}
             <div class="mb-6">
-              <h2 class="text-xl font-semibold">Test Flow Steps</h2>
-            </div>
-            
-            {#if flowJson.steps.length === 0}
-              <div class="bg-gray-50 rounded-lg p-8 text-center">
-                <h3 class="text-xl font-semibold mb-2">No Steps Yet</h3>
-                <p class="text-gray-600 mb-6">
-                  Add steps to define your test flow sequence.
-                </p>
-                <button
-                  class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition"
-                  on:click={() => showNewStepModal = true}
-                >
-                  Add First Step
-                </button>
-              </div>
-            {:else}
-              <div class="space-y-8">
-                {#each flowJson.steps as step, stepIndex}
-                  <StepEditor 
-                    {step} 
-                    {endpoints} 
-                    {stepIndex}
-                    isFirstStep={stepIndex === 0}
-                    isLastStep={stepIndex === flowJson.steps.length - 1}
-                    isRunning={(currentTab as string) === 'dry-run' ? isRunning : false}
-                    executionState={(currentTab as string) === 'dry-run' ? executionState : {}}
-                    on:removeStep={() => removeStep(stepIndex)}
-                    on:removeEndpoint={(e) => removeEndpointFromStep(stepIndex, e.detail.endpointIndex)}
-                    on:moveStep={(e) => moveStep(stepIndex, e.detail.direction)}
-                    on:change={markDirty}
-                    on:updateParam={(e) => {
-                      // Handle parameter updates when implemented
-                      markDirty();
-                    }}
-                  >
-                    <div slot="endpoint-selector">
-                      <EndpointSelector
-                        {endpoints}
-                        disabled={(currentTab as string) === 'dry-run' ? isRunning : false}
-                        on:select={(e) => addEndpointToStep(stepIndex, e.detail)}
-                      />
-                    </div>
-                  </StepEditor>
-                {/each}
-                
-                <!-- Add Step button moved to the bottom -->
-                <div class="flex justify-center mt-6">
-                  <button 
-                    class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition flex items-center"
+              <h2 class="text-xl font-semibold mb-4">Test Flow Steps</h2>
+              
+              {#if !apiHost || apiHost.trim() === ''}
+                <div class="bg-yellow-100 border border-yellow-300 text-yellow-800 px-4 py-3 rounded mb-4">
+                  <p class="font-medium">API Host is not configured</p>
+                  <p>Please set the API host URL in the Settings tab before running the test flow.</p>
+                </div>
+              {/if}
+              
+              <!-- Use the TestFlowEditor component for a cleaner implementation -->
+              <TestFlowEditor
+                flowData={{...flowJson, endpoints}}
+                {endpoints}
+                apiHost={apiHost || ''}
+                on:change={(event) => {
+                  // Extract and update the flow data from the event
+                  const updatedFlowData = event.detail;
+                  if (updatedFlowData) {
+                    // Update flowJson with the changes, preserving endpoints reference
+                    const updatedSteps = updatedFlowData.steps || [];
+                    
+                    // Create a mapping from old step IDs to new ones
+                    const stepIdMap = new Map();
+                    
+                    // Normalize step IDs to ensure they follow the format "step1", "step2", etc.
+                    const normalizedSteps = updatedSteps.map((step: any, index: number) => {
+                      // If the step ID uses the timestamp format (step-12345), convert it
+                      if (step.step_id && step.step_id.startsWith('step-')) {
+                        const oldId = step.step_id;
+                        const newId = `step${index + 1}`;
+                        stepIdMap.set(oldId, newId);
+                        
+                        return {
+                          ...step,
+                          step_id: newId
+                        };
+                      }
+                      return step;
+                    });
+                    
+                    // Update any assertions that reference the old step IDs
+                    const updatedAssertions = (updatedFlowData.assertions || []).map((assertion: any) => {
+                      if (assertion.step_id && stepIdMap.has(assertion.step_id)) {
+                        return {
+                          ...assertion,
+                          step_id: stepIdMap.get(assertion.step_id)
+                        };
+                      }
+                      return assertion;
+                    });
+                    
+                    flowJson = {
+                      settings: updatedFlowData.settings || flowJson.settings,
+                      steps: normalizedSteps,
+                      assertions: updatedAssertions.length > 0 ? updatedAssertions : (updatedFlowData.assertions || flowJson.assertions)
+                    };
+                  }
+                  markDirty();
+                }}
+                on:reset={handleReset}
+                on:executionComplete={handleExecutionComplete}
+              />
+              
+              <!-- Empty state when there are no steps -->
+              {#if flowJson.steps.length === 0}
+                <div class="bg-gray-50 rounded-lg p-8 text-center mt-4">
+                  <h3 class="text-xl font-semibold mb-2">No Steps Yet</h3>
+                  <p class="text-gray-600 mb-6">
+                    Add steps to define your test flow sequence.
+                  </p>
+                  <button
+                    class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition"
                     on:click={() => showNewStepModal = true}
                   >
-                    <svg class="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
-                    </svg>
-                    Add Step
+                    Add First Step
                   </button>
                 </div>
-              </div>
-            {/if}
+              {/if}
+            </div>
           {/if}
           
           <!-- Assertions Tab -->
@@ -706,59 +735,7 @@
             </div>
           {/if}
           
-          <!-- Dry Run Tab -->
-          {#if currentTab === 'dry-run'}
-            <div class="mb-6">
-              <h2 class="text-xl font-semibold">Dry Run Test Flow</h2>
-              <p class="text-gray-600 mb-4">
-                Execute the test flow without saving changes. Useful for testing and debugging.
-              </p>
-              
-              <!-- Always show the API host input field -->
-              <div class="mb-4">
-                <label for="api-host" class="block text-sm font-medium text-gray-700 mb-1">API Host</label>
-                <div class="flex">
-                  <input 
-                    id="api-host"
-                    type="text" 
-                    bind:value={apiHost}
-                    class="px-3 py-2 border border-gray-300 rounded-l-md flex-1"
-                    placeholder="https://api.example.com"
-                  />
-                  <button 
-                    class="px-4 py-2 bg-blue-600 text-white rounded-r-md hover:bg-blue-700"
-                    on:click={() => {
-                      // Save API host to flow settings
-                      flowJson.settings.api_host = apiHost;
-                      markDirty();
-                    }}
-                  >
-                    Save
-                  </button>
-                </div>
-                <p class="text-sm text-gray-500 mt-1">
-                  This host URL will be used as the base for all API requests during the dry run.
-                </p>
-              </div>
-              
-              {#if !apiHost || apiHost.trim() === ''}
-                <div class="bg-yellow-100 border border-yellow-300 text-yellow-800 px-4 py-3 rounded mb-4">
-                  <p class="font-medium">API Host is not configured</p>
-                  <p>Please enter an API host URL above or set it in the Settings tab before running the test flow.</p>
-                </div>
-              {/if}
-              
-              <!-- Always show the Flow Runner Component -->
-              <FlowRunner 
-                flowData={{...flowJson, endpoints}} 
-                apiHost={apiHost || ''}
-                bind:isRunning
-                bind:executionState
-                on:reset={handleReset}
-                on:executionComplete={handleExecutionComplete}
-              />
-            </div>
-          {/if}
+
         </div>
       </div>
     </div>

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import type { Endpoint, StepEndpoint, ExecutionState } from './components/types';
-  import { getEndpointDisplayId } from './components/utils';
+  import { getEndpointDisplayId, getStatusColor } from './components/utils';
   import { EndpointCard, ParameterEditor, ResponseViewer } from './components';
   
   export let step: any;
@@ -24,6 +24,9 @@
   let isResponseViewerOpen = false;
   let isResponseViewerMounted = false;
   let activeResponseEndpointIndex: number | null = null;
+
+  // Helper to determine step execution state
+  $: stepExecutionState = computeStepExecutionState();
   
   // Helper to find an endpoint by ID
   function findEndpoint(id: string | number): Endpoint | undefined {
@@ -40,6 +43,41 @@
   
   function moveStepDown() {
     dispatch('moveStep', { stepIndex, direction: 'down' });
+  }
+  
+  // Compute the current execution state for the step
+  function computeStepExecutionState() {
+    if (!step || !step.endpoints || step.endpoints.length === 0) {
+      return { status: 'none' };
+    }
+    
+    // Check if all endpoints have been processed
+    const endpointStates = step.endpoints.map((stepEndpoint: StepEndpoint, index: number) => {
+      const endpointId = getEndpointDisplayId(stepEndpoint.endpoint_id, index);
+      return executionState[endpointId]?.status || 'none';
+    });
+    
+    // Check if any endpoints are currently running
+    if (endpointStates.some((state: string) => state === 'running')) {
+      return { status: 'running' };
+    }
+    
+    // Check if all endpoints have completed successfully
+    if (endpointStates.every((state: string) => state === 'completed')) {
+      return { status: 'completed' };
+    }
+    
+    // Check if any endpoints have failed
+    if (endpointStates.some((state: string) => state === 'failed')) {
+      return { status: 'failed' };
+    }
+    
+    // Some endpoints have been executed but not all
+    if (endpointStates.some((state: string) => state === 'completed')) {
+      return { status: 'partial' };
+    }
+    
+    return { status: 'none' };
   }
 
   // Open parameter editor panel for a specific endpoint
@@ -112,23 +150,57 @@
       document.body.classList.remove('overflow-hidden');
     }, 300);
   }
+
+  // No additional execution functions needed
 </script>
 
-<div class="bg-white border rounded-lg shadow-sm p-4">
+<div class="bg-white border rounded-lg shadow-sm p-4 
+  {stepExecutionState.status === 'completed' ? 'border-green-300 border-2' : ''} 
+  {stepExecutionState.status === 'failed' ? 'border-red-300 border-2' : ''}
+  {stepExecutionState.status === 'running' ? 'border-blue-300 border-2' : ''}>">
   <div class="flex justify-between items-center mb-4">
     <h3 class="text-lg font-medium flex items-center">
       <span class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full mr-2">
         {step.step_id}
       </span>
       {step.label}
+      
+      <!-- Step execution status indicator -->
+      {#if stepExecutionState.status === 'running'}
+        <span class="ml-2 inline-flex items-center">
+          <svg class="animate-spin h-4 w-4 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <span class="ml-1 text-xs text-blue-500">Running...</span>
+        </span>
+      {:else if stepExecutionState.status === 'completed'}
+        <span class="ml-2 inline-flex items-center text-green-500 text-xs">
+          <svg class="h-4 w-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+          </svg>
+          Completed
+        </span>
+      {:else if stepExecutionState.status === 'failed'}
+        <span class="ml-2 inline-flex items-center text-red-500 text-xs">
+          <svg class="h-4 w-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+          </svg>
+          Failed
+        </span>
+      {/if}
     </h3>
     <div class="flex items-center space-x-2">
+      
       {#if !isFirstStep}
         <button 
           class="text-gray-600 hover:text-gray-800 p-1"
           on:click={moveStepUp}
           aria-label="Move Step Up"
           title="Move Step Up"
+          disabled={isRunning}
+          class:opacity-50={isRunning}
+          class:cursor-not-allowed={isRunning}
         >
           <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
@@ -142,6 +214,9 @@
           on:click={moveStepDown}
           aria-label="Move Step Down"
           title="Move Step Down"
+          disabled={isRunning}
+          class:opacity-50={isRunning}
+          class:cursor-not-allowed={isRunning}
         >
           <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
@@ -153,6 +228,9 @@
         class="text-red-600 hover:text-red-800 p-1"
         on:click={() => dispatch('removeStep', { stepIndex })}
         aria-label="Remove Step"
+        disabled={isRunning}
+        class:opacity-50={isRunning}
+        class:cursor-not-allowed={isRunning}
       >
         <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
           <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"></path>
@@ -208,6 +286,42 @@
   <div>
     <slot name="endpoint-selector"></slot>
   </div>
+
+  <!-- Endpoint step execution summary if available -->
+  {#if Object.keys(executionState).length > 0 && step.endpoints.some((endpoint: any, index: number) => executionState[`${endpoint.endpoint_id}-${index}`]?.response)}
+    <div class="mt-4 p-3 rounded-md bg-gray-50 border border-gray-200">
+      <h5 class="text-sm font-medium text-gray-700 mb-2">Execution Summary</h5>
+      <div class="space-y-2">
+        {#each step.endpoints as stepEndpoint, endpointIndex}
+          {@const displayId = getEndpointDisplayId(stepEndpoint.endpoint_id, endpointIndex)}
+          {@const endpoint = findEndpoint(stepEndpoint.endpoint_id)}
+          {#if executionState[displayId]?.response && endpoint}
+            <div class="flex items-center justify-between text-xs">
+              <div class="flex items-center">
+                <span class="inline-block w-12 uppercase font-medium {(executionState[displayId]?.response?.status || 0) >= 400 ? 'text-red-600' : 'text-green-600'}">{endpoint.method}</span>
+                <span class="font-mono truncate max-w-[200px]">{endpoint.path}</span>
+              </div>
+              <div class="flex items-center">
+                <span class="px-1.5 py-0.5 rounded {getStatusColor(executionState[displayId]?.response?.status || 0)} text-white">
+                  {executionState[displayId]?.response?.status}
+                </span>
+                <button 
+                  class="ml-2 text-blue-600 hover:text-blue-800"
+                  on:click={() => { const event = new CustomEvent('openResponseViewer', { detail: { endpointIndex } }); openResponseViewer(event); }}
+                  aria-label="View response details"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          {/if}
+        {/each}
+      </div>
+    </div>
+  {/if}
 </div>
 
 <!-- Parameter Editor Slide-out Panel -->
