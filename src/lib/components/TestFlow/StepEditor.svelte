@@ -163,7 +163,39 @@
       <span class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full mr-2">
         {step.step_id}
       </span>
-      {step.label}
+      
+      <!-- Editable step label -->
+      <span class="relative group">
+        <input 
+          type="text" 
+          bind:value={step.label}
+          class="text-lg font-medium bg-transparent border-b border-transparent group-hover:border-gray-300 focus:border-blue-500 focus:outline-none py-0 px-1 pr-6"
+          title="Click to edit step name"
+          placeholder={`Step ${stepIndex + 1}`}
+          class:text-gray-400={!step.label || step.label.trim() === ''}
+          on:focus={(e) => {
+            if (e.target && e.target instanceof HTMLInputElement) {
+              e.target.select();
+            }
+          }}
+          on:blur={() => {
+            if (step.label.trim() === '') {
+              step.label = `Step ${stepIndex + 1}`;
+            }
+            dispatch('change');
+          }}
+          on:keydown={(e) => {
+            if (e.key === 'Enter' && e.target instanceof HTMLInputElement) {
+              e.target.blur();
+            }
+          }}
+        />
+        <span class="absolute right-0 top-1/2 transform -translate-y-1/2 opacity-0 group-hover:opacity-100 text-gray-400 transition-opacity">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+          </svg>
+        </span>
+      </span>
       
       <!-- Step execution status indicator -->
       {#if stepExecutionState.status === 'running'}
