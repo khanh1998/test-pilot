@@ -47,6 +47,7 @@
     if (flowJson?.settings?.api_host && flowJson.settings.api_host.trim() !== '') {
       console.log('Setting initial API host from settings:', flowJson.settings.api_host);
       apiHost = flowJson.settings.api_host;
+      // TODO: each API will have their own Host, need new approach here.
     }
     
     // Then fetch the API host from the API (will use settings value if it exists)

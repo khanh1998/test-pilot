@@ -21,7 +21,7 @@
   let selectedApiIds: number[] = [];
   
   // Available APIs
-  let availableApis: { id: number; name: string; selected?: boolean }[] = [];
+  let availableApis: { id: number; name: string; host: string; selected?: boolean }[] = [];
   
   onMount(async () => {
     await fetchTestFlows();
@@ -300,6 +300,8 @@
                 />
                 <label for="api-{api.id}" class="cursor-pointer flex-grow">{api.name}</label>
               </div>
+              <!-- TODO: request user to optionally input API Host. Default API Host value will be taken from column `host` in table `apis` -->
+               <!-- that mean, test flow setting now will have Host address for each API -->
             {/each}
           </div>
         {/if}
