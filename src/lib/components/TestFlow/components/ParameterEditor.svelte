@@ -2,6 +2,8 @@
 	import { createEventDispatcher } from 'svelte';
 	import type { Endpoint, StepEndpoint } from './types';
 	import { generateSampleBody } from './utils';
+	import { JSONEditor } from 'svelte-jsoneditor';
+	import type { Content, JSONContent, TextContent } from 'svelte-jsoneditor';
 
 	export let isOpen = false;
 	export let isMounted = false;
@@ -17,7 +19,13 @@
 	// Parameter editor state
 	let activeTab: 'path' | 'query' | 'body' | 'headers' = 'path';
 	let jsonBodyContent = '{}';
+	let jsonEditorContent: Content = { json: {} };
 	let headers: { name: string; value: string; enabled: boolean }[] = [];
+
+	// Handle changes from the JSON editor
+	function handleJsonEditorChange(updatedContent: Content) {
+		jsonEditorContent = updatedContent;
+	}
 
 	// Initialize state when component mounts
 	$: if (isMounted && endpoint) {
@@ -39,19 +47,24 @@
 		// Initialize JSON body if needed
 		if (endpoint?.requestSchema) {
 			try {
+				let jsonData = {};
 				if (stepEndpoint.body) {
 					// Use existing body if available
+					jsonData = stepEndpoint.body;
 					jsonBodyContent = JSON.stringify(stepEndpoint.body, null, 2);
 				} else {
 					// Generate sample body from schema
-					const sampleBody = generateSampleBody(endpoint.requestSchema);
-					jsonBodyContent = JSON.stringify(sampleBody, null, 2);
+					jsonData = generateSampleBody(endpoint.requestSchema);
+					jsonBodyContent = JSON.stringify(jsonData, null, 2);
 				}
+				jsonEditorContent = { json: jsonData };
 			} catch (e) {
 				jsonBodyContent = '{}';
+				jsonEditorContent = { json: {} };
 			}
 		} else {
 			jsonBodyContent = '{}';
+			jsonEditorContent = { json: {} };
 		}
 
 		// Set the active tab to the first one that has content
@@ -71,8 +84,16 @@
 		try {
 			// Parse and save JSON body
 			if (activeTab === 'body') {
-				const parsedJson = JSON.parse(jsonBodyContent);
-				stepEndpoint.body = parsedJson;
+				// Check if we have JSONContent
+				if ('json' in jsonEditorContent) {
+					stepEndpoint.body = (jsonEditorContent as JSONContent).json;
+				} 
+				// Check if we have TextContent
+				else if ('text' in jsonEditorContent) {
+					// If we have text content instead of JSON content, try to parse it
+					const parsedJson = JSON.parse((jsonEditorContent as TextContent).text);
+					stepEndpoint.body = parsedJson;
+				}
 			}
 
 			// Save headers
@@ -314,7 +335,7 @@
 		<div class="p-4">
 			<!-- Path Parameters Tab -->
 			{#if activeTab === 'path' && endpoint?.parameters?.some((p) => p.in === 'path')}
-				<div class="space-y-4">
+				<div class="space-y-4 h-[calc(100vh-220px)] overflow-y-auto">
 					<h4 class="mb-2 text-sm font-medium text-gray-700">Path Parameters</h4>
 					{#each endpoint.parameters.filter((p) => p.in === 'path') as param, paramIndex}
 						<div class="mb-4 flex flex-col">
@@ -346,7 +367,7 @@
 
 			<!-- Query Parameters Tab -->
 			{#if activeTab === 'query' && endpoint?.parameters?.some((p) => p.in === 'query')}
-				<div class="space-y-4">
+				<div class="space-y-4 h-[calc(100vh-220px)] overflow-y-auto">
 					<h4 class="mb-2 text-sm font-medium text-gray-700">Query Parameters</h4>
 					{#each endpoint.parameters.filter((p) => p.in === 'query') as param, paramIndex}
 						<div class="mb-4 flex flex-col">
@@ -395,40 +416,17 @@
 
 			<!-- Body Parameters Tab -->
 			{#if activeTab === 'body' && endpoint?.requestSchema}
-				<div class="space-y-4">
+				<div class="space-y-4 flex flex-col h-[calc(100vh-220px)]">
 					<h4 class="mb-2 text-sm font-medium text-gray-700">Request Body (JSON)</h4>
-					<div class="overflow-hidden rounded-md border shadow-sm">
-						<div class="flex justify-between border-b bg-gray-50 px-3 py-2">
-							<div class="flex items-center text-xs text-gray-700">
-								<span class="font-medium">JSON</span>
-							</div>
-							<div class="flex items-center space-x-2">
-								<button
-									class="rounded px-1.5 py-0.5 text-xs text-blue-600 transition-colors hover:bg-blue-50 hover:text-blue-800"
-									on:click={() => {
-										try {
-											const parsed = JSON.parse(jsonBodyContent);
-											const formatted = JSON.stringify(parsed, null, 2);
-											if (formatted != null) {
-												jsonBodyContent = formatted;
-											}
-										} catch (e) {
-											console.error('Failed to format JSON:', e);
-										}
-									}}
-								>
-									Format
-								</button>
-							</div>
-						</div>
-						<div class="relative">
-							<textarea
-								class="h-80 w-full bg-gray-50 p-3 font-mono text-sm transition-colors focus:bg-white"
-								bind:value={jsonBodyContent}
-								placeholder="Enter JSON body here"
-								spellcheck="false"
-							></textarea>
-							<div class="absolute right-2 bottom-2 text-xs text-gray-400">JSON</div>
+					<div class="overflow-hidden rounded-md border shadow-sm flex-grow">
+						<div class="h-full w-full">
+							<JSONEditor 
+								bind:content={jsonEditorContent} 
+								onChange={handleJsonEditorChange}
+								mainMenuBar={false}
+								navigationBar={false}
+								statusBar={false}
+							/>
 						</div>
 					</div>
 				</div>
@@ -436,7 +434,7 @@
 
 			<!-- Headers Tab -->
 			{#if activeTab === 'headers'}
-				<div class="space-y-4">
+				<div class="space-y-4 h-[calc(100vh-220px)] overflow-y-auto">
 					<div class="mb-2 flex items-center justify-between">
 						<h4 class="text-sm font-medium text-gray-700">Headers</h4>
 						<button
@@ -503,3 +501,28 @@
 		</div>
 	</div>
 </div>
+
+<style>
+	/* Set height for the JSON editor */
+	:global(.svelte-jsoneditor) {
+		--jse-theme-color: #3b82f6;
+		--jse-theme-color-highlight: #2563eb;
+		--jse-background-color: #f9fafb;
+		--jse-main-border: 1px solid #e5e7eb;
+		height: 100%;
+		width: 100%;
+	}
+	
+	:global(.svelte-jsoneditor-outer) {
+		height: 100% !important;
+	}
+	
+	:global(.svelte-jsoneditor-content) {
+		height: 100% !important;
+	}
+	
+	:global(.jse-tree) {
+		height: 100% !important;
+		overflow-y: auto;
+	}
+</style>
