@@ -14,6 +14,7 @@ The application uses a token-based authentication system with the following comp
 ## Authentication Flow
 
 ### Sign In
+
 1. User enters credentials on the login page
 2. Frontend sends credentials to `/api/auth/sign-in` endpoint
 3. Backend validates credentials with Supabase Auth
@@ -22,12 +23,14 @@ The application uses a token-based authentication system with the following comp
 6. User is redirected to the dashboard
 
 ### API Requests
+
 1. All API requests include the token in the Authorization header
 2. Backend validates the token by calling Supabase Auth
 3. If valid, the request is processed and data is returned
 4. If invalid, a 401 error is returned and the user is logged out
 
 ### Sign Out
+
 1. User clicks sign out button
 2. Frontend removes token from localStorage and updates auth state
 3. User is redirected to the login page
@@ -35,13 +38,15 @@ The application uses a token-based authentication system with the following comp
 ## Implementation Details
 
 ### Frontend
-- `src/lib/stores/auth.ts`: Authentication store with sign in/out methods
-- `src/lib/api.ts`: Utility for making authenticated API requests
+
+- `src/lib/features/auth/stores/auth.ts`: Authentication store with sign in/out methods
+- `src/lib/features/apis/api.ts`: Utility for making authenticated API requests
 - `src/routes/+layout.ts`: Handles authentication redirects
 - `src/routes/+page.svelte`: Login/signup form using auth store
 - `src/routes/dashboard/+page.svelte`: Dashboard that uses authenticated API requests
 
 ### Backend
-- `src/lib/server/auth.ts`: Authentication middleware for API endpoints
+
+- `src/lib/features/auth/server/auth.ts`: Authentication middleware for API endpoints
 - `src/routes/api/auth/sign-in/+server.ts`: Sign in endpoint
 - `src/routes/api/auth/sign-up/+server.ts`: Sign up endpoint

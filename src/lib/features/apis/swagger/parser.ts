@@ -9,18 +9,27 @@ type SwaggerDocument = OpenAPIV2.Document | OpenAPIV3.Document;
  * @param content - The content of the OpenAPI/Swagger specification
  * @param format - The format of the content ('yaml' or 'json')
  */
-export async function parseSwaggerSpec(content: string, format: 'yaml' | 'json'): Promise<SwaggerDocument> {
+export async function parseSwaggerSpec(
+  content: string,
+  format: 'yaml' | 'json'
+): Promise<SwaggerDocument> {
   try {
     // Convert the content to JSON if it's in YAML format
     const jsonContent = format === 'yaml' ? yaml.load(content) : JSON.parse(content);
     // Validate and dereference the OpenAPI/Swagger spec
     // Use type assertion to tell TypeScript that this method exists
-    const api = await (SwaggerParser as any).dereference(jsonContent as SwaggerDocument);
-    
+    const api = await (
+      SwaggerParser as unknown as {
+        dereference: (doc: SwaggerDocument) => Promise<SwaggerDocument>;
+      }
+    ).dereference(jsonContent as SwaggerDocument);
+
     return api;
   } catch (error) {
     console.error('Error parsing OpenAPI/Swagger specification:', error);
-    throw new Error(`Failed to parse OpenAPI/Swagger specification: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(
+      `Failed to parse OpenAPI/Swagger specification: ${error instanceof Error ? error.message : String(error)}`
+    );
   }
 }
 
@@ -30,18 +39,18 @@ export async function parseSwaggerSpec(content: string, format: 'yaml' | 'json')
  */
 export function extractEndpoints(api: SwaggerDocument) {
   const endpoints = [];
-  
+
   // Handle OpenAPI 3.x
   if ('openapi' in api && api.openapi.startsWith('3.')) {
     const paths = api.paths || {};
-    
+
     for (const path in paths) {
-      const pathItem = paths[path] as any;
-      
+      const pathItem: OpenAPIV3.PathItemObject = paths[path];
+
       for (const method of ['get', 'post', 'put', 'delete', 'patch', 'options', 'head']) {
         if (pathItem[method]) {
-          const operation = pathItem[method];
-          
+          const operation: OpenAPIV3.OperationObject = pathItem[method];
+
           endpoints.push({
             path,
             method: method.toUpperCase(),
@@ -51,23 +60,23 @@ export function extractEndpoints(api: SwaggerDocument) {
             requestSchema: extractRequestSchema(operation),
             responseSchema: extractResponseSchema(operation),
             parameters: extractParameters(operation, pathItem),
-            tags: operation.tags || [],
+            tags: operation.tags || []
           });
         }
       }
     }
-  } 
+  }
   // Handle Swagger 2.0
   else if ('swagger' in api && api.swagger === '2.0') {
     const paths = api.paths || {};
-    
+
     for (const path in paths) {
-      const pathItem = paths[path] as any;
-      
+      const pathItem: OpenAPIV2.PathItemObject = paths[path];
+
       for (const method of ['get', 'post', 'put', 'delete', 'patch', 'options', 'head']) {
         if (pathItem[method]) {
-          const operation = pathItem[method];
-          
+          const operation: OpenAPIV2.OperationObject = pathItem[method];
+
           endpoints.push({
             path,
             method: method.toUpperCase(),
@@ -77,13 +86,13 @@ export function extractEndpoints(api: SwaggerDocument) {
             requestSchema: extractSwagger2RequestSchema(operation),
             responseSchema: extractSwagger2ResponseSchema(operation),
             parameters: extractSwagger2Parameters(operation, pathItem),
-            tags: operation.tags || [],
+            tags: operation.tags || []
           });
         }
       }
     }
   }
-  
+
   return endpoints;
 }
 
@@ -102,14 +111,14 @@ export function extractHost(api: SwaggerDocument): string | null {
         // Extract host from server URL
         const url = new URL(serverUrl);
         return url.host;
-      } catch (error) {
+      } catch {
         // If not a valid URL, just return the server URL as is
         // It might be a relative URL or a templated URL
         return serverUrl;
       }
     }
     return null;
-  } 
+  }
   // For Swagger 2.0
   else if ('swagger' in api && api.swagger === '2.0') {
     // In Swagger 2.0, host is directly specified
@@ -118,83 +127,89 @@ export function extractHost(api: SwaggerDocument): string | null {
     }
     return null;
   }
-  
+
   return null;
 }
 
 // Helper functions for OpenAPI 3.x
-function extractRequestSchema(operation: any) {
+function extractRequestSchema(operation: OpenAPIV3.OperationObject) {
   if (!operation.requestBody) return null;
-  
+
   const content = operation.requestBody.content || {};
   const contentType = Object.keys(content)[0]; // Get the first content type (usually application/json)
-  
+
   if (contentType && content[contentType].schema) {
     return content[contentType].schema;
   }
-  
+
   return null;
 }
 
-function extractResponseSchema(operation: any) {
+function extractResponseSchema(operation: OpenAPIV3.OperationObject) {
   if (!operation.responses) return null;
-  
+
   // Look for 200 or 201 response first
   const successResponse = operation.responses['200'] || operation.responses['201'];
-  
+
   if (successResponse && successResponse.content) {
     const contentType = Object.keys(successResponse.content)[0];
     if (contentType && successResponse.content[contentType].schema) {
       return successResponse.content[contentType].schema;
     }
   }
-  
+
   return null;
 }
 
-function extractParameters(operation: any, pathItem: any) {
-  const parameters = [];
-  
+function extractParameters(
+  operation: OpenAPIV3.OperationObject,
+  pathItem: OpenAPIV3.PathItemObject
+) {
   // Path parameters can be defined at the path level or operation level
   const pathParams = pathItem.parameters || [];
   const operationParams = operation.parameters || [];
-  
+
   // Combine parameters, with operation parameters taking precedence
   return [...pathParams, ...operationParams];
 }
 
 // Helper functions for Swagger 2.0
-function extractSwagger2RequestSchema(operation: any) {
+function extractSwagger2RequestSchema(operation: OpenAPIV2.OperationObject) {
   if (!operation.parameters) return null;
-  
+
   // Find body parameter
-  const bodyParam = operation.parameters.find((param: any) => param.in === 'body');
-  
+  const bodyParam = operation.parameters.find(
+    (param: OpenAPIV2.ParameterObject) => param.in === 'body'
+  );
+
   if (bodyParam && bodyParam.schema) {
     return bodyParam.schema;
   }
-  
+
   return null;
 }
 
-function extractSwagger2ResponseSchema(operation: any) {
+function extractSwagger2ResponseSchema(operation: OpenAPIV2.OperationObject) {
   if (!operation.responses) return null;
-  
+
   // Look for 200 or 201 response first
   const successResponse = operation.responses['200'] || operation.responses['201'];
-  
+
   if (successResponse && successResponse.schema) {
     return successResponse.schema;
   }
-  
+
   return null;
 }
 
-function extractSwagger2Parameters(operation: any, pathItem: any) {
+function extractSwagger2Parameters(
+  operation: OpenAPIV2.OperationObject,
+  pathItem: OpenAPIV2.PathItemObject
+) {
   // Path parameters can be defined at the path level or operation level
   const pathParams = pathItem.parameters || [];
   const operationParams = operation.parameters || [];
-  
+
   // Combine parameters, with operation parameters taking precedence
   return [...pathParams, ...operationParams];
 }

@@ -15,16 +15,18 @@ export async function GET({ locals }: RequestEvent) {
     }
 
     // Get all APIs for the current user
-    const userApis = await db.select().from(apis)
+    const userApis = await db
+      .select()
+      .from(apis)
       .where(eq(apis.userId, locals.user.userId))
       .orderBy(apis.createdAt);
 
     // Get counts using a separate query with a join to count endpoints
     const countByApiId: Record<number, number> = {};
-    
+
     if (userApis.length > 0) {
       // Use Drizzle's inArray operator for proper parameter binding
-      const apiIds = userApis.map(api => api.id);
+      const apiIds = userApis.map((api) => api.id);
       const endpointCounts = await db
         .select({
           apiId: apiEndpoints.apiId,
@@ -33,15 +35,15 @@ export async function GET({ locals }: RequestEvent) {
         .from(apiEndpoints)
         .where(inArray(apiEndpoints.apiId, apiIds))
         .groupBy(apiEndpoints.apiId);
-      
+
       // Create a map of API ID to endpoint count
-      endpointCounts.forEach(count => {
+      endpointCounts.forEach((count) => {
         countByApiId[count.apiId] = count.count;
       });
     }
 
     // Format the response
-    const formattedApis = userApis.map(api => ({
+    const formattedApis = userApis.map((api) => ({
       id: api.id,
       name: api.name,
       description: api.description,
@@ -79,7 +81,7 @@ export async function DELETE({ request, locals }: RequestEvent) {
 
     // Get the API ID from the request body
     const { id } = await request.json();
-    
+
     if (!id) {
       return new Response(JSON.stringify({ error: 'API ID is required' }), {
         status: 400,
@@ -88,11 +90,8 @@ export async function DELETE({ request, locals }: RequestEvent) {
     }
 
     // Verify that the API belongs to the current user
-    const apiToDelete = await db.select()
-      .from(apis)
-      .where(eq(apis.id, id))
-      .limit(1);
-    
+    const apiToDelete = await db.select().from(apis).where(eq(apis.id, id)).limit(1);
+
     if (apiToDelete.length === 0) {
       return new Response(JSON.stringify({ error: 'API not found' }), {
         status: 404,
@@ -109,7 +108,7 @@ export async function DELETE({ request, locals }: RequestEvent) {
 
     // Delete related endpoints first
     await db.delete(apiEndpoints).where(eq(apiEndpoints.apiId, id));
-    
+
     // Then delete the API itself
     await db.delete(apis).where(eq(apis.id, id));
 

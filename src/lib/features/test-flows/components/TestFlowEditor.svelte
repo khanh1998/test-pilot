@@ -3,26 +3,29 @@
   import EndpointSelector from './EndpointSelector.svelte';
   import FlowRunner from './FlowRunner.svelte';
   import { fade } from 'svelte/transition';
-  import type { TestFlowData, Endpoint } from './components/types';
-  
+  import type { TestFlowData, Endpoint, ExecutionState, EndpointExecutionState } from './components/types';
+
+  import { writable } from 'svelte/store';
+  import { onMount, onDestroy } from 'svelte';
+  import { createEventDispatcher } from 'svelte';
+
   export let flowData: TestFlowData;
   export let endpoints: Endpoint[] = [];
   export let apiHost: string = '';
-  
+
   let isRunning = false;
-  let executionState: Record<string, any> = {};
+  let executionState: ExecutionState = {};
   let flowRunner: FlowRunner;
-  
+
   // Create a store to track execution state changes
-  import { writable } from 'svelte/store';
-  const executionStore = writable<Record<string, any>>({});
-  
+  const executionStore = writable<ExecutionState>({});
+
   // Execution options panel
   let showExecutionOptions = false;
-  
+
   // Variables panel control
   let showVariablesPanel = false;
-  
+
   // Execution preferences - default values
   let preferences = {
     parallelExecution: true,
@@ -31,77 +34,76 @@
     retryCount: 0,
     timeout: 30000
   };
-  
+
   // Function to handle endpoint selection for a specific step
-  function handleEndpointSelected(event: CustomEvent, stepIndex: number) {
+  function handleEndpointSelected(event: CustomEvent<Endpoint>, stepIndex: number) {
     const selectedEndpoint = event.detail;
-    
+
     // Add endpoint to the step
     flowData.steps[stepIndex].endpoints.push({
       endpoint_id: selectedEndpoint.id,
       store_response_as: '',
       pathParams: {},
-      queryParams: {},
+      queryParams: {}
     });
-    
+
     // Trigger change event to save
     handleChange();
   }
-  
-  import { createEventDispatcher } from 'svelte';
+
   const dispatch = createEventDispatcher();
 
   // Create event handlers for external triggers
-  function handleShowVariablesPanel(event: CustomEvent) {
+  function handleShowVariablesPanel() {
     showVariablesPanel = true;
   }
-  
+
   // Add event listener on mount
   onMount(() => {
     // Listen for custom events on the component's node
     const node = document.querySelector('svelte-component[this="TestFlowEditor"]');
     if (node) {
       node.addEventListener('showVariablesPanel', handleShowVariablesPanel as EventListener);
-      
+
       return () => {
         node.removeEventListener('showVariablesPanel', handleShowVariablesPanel as EventListener);
       };
     }
   });
-  
-  function handleChange(event?: any) {
+
+  function handleChange(event?: CustomEvent<{ flowData: TestFlowData }>) {
     // If event has flowData in detail, use it
     if (event && event.detail && event.detail.flowData) {
-      console.log("Received flowData change:", event.detail.flowData);
+      console.log('Received flowData change:', event.detail.flowData);
       flowData = { ...event.detail.flowData };
     } else {
-      // Otherwise update the local variable 
-      console.log("Regular change in TestFlowEditor");
+      // Otherwise update the local variable
+      console.log('Regular change in TestFlowEditor');
       flowData = { ...flowData };
     }
-    
+
     // Dispatch an event to notify the parent component
     dispatch('change', flowData);
   }
-  
+
   // Handle removing a step from the flow
   function handleRemoveStep(event: CustomEvent) {
     const { stepIndex } = event.detail;
     flowData.steps.splice(stepIndex, 1);
     handleChange();
   }
-  
+
   // Handle removing an endpoint from a step
   function handleRemoveEndpoint(event: CustomEvent) {
     const { stepIndex, endpointIndex } = event.detail;
     flowData.steps[stepIndex].endpoints.splice(endpointIndex, 1);
     handleChange();
   }
-  
+
   // Handle moving a step up or down
   function handleMoveStep(event: CustomEvent) {
     const { stepIndex, direction } = event.detail;
-    
+
     if (direction === 'up' && stepIndex > 0) {
       const temp = flowData.steps[stepIndex - 1];
       flowData.steps[stepIndex - 1] = flowData.steps[stepIndex];
@@ -111,49 +113,49 @@
       flowData.steps[stepIndex + 1] = flowData.steps[stepIndex];
       flowData.steps[stepIndex] = temp;
     }
-    
+
     handleChange();
   }
-  
+
   // Add a new step to the flow
   function addNewStep() {
     // Use consistent step ID format matching the parent component
     // This step_id is important as it's used to create the endpointId (${stepId}-${endpointIndex})
     // which is used for referencing responses in templates
     const newStepId = `step${flowData.steps.length + 1}`;
-    
+
     flowData.steps.push({
       step_id: newStepId,
       label: `Step ${flowData.steps.length + 1}`,
       endpoints: []
     });
-    
+
     handleChange();
   }
-  
+
   // Handle execution state reset
   function handleReset() {
     // Reset the execution state store
     executionStore.set({});
     executionState = {};
     isRunning = false;
-    
+
     // Dispatch reset event to parent
     dispatch('reset');
   }
-  
+
   // Handle execution completion
   function handleExecutionComplete(event: CustomEvent) {
     console.log('Execution completed:', event.detail);
     isRunning = false;
     // Force an update of all components that depend on the execution state
     // This maintains the updated endpoint ID format (stepId-endpointIndex)
-    executionStore.update(state => ({ ...state }));
-    
+    executionStore.update((state) => ({ ...state }));
+
     // Dispatch event to parent
     dispatch('executionComplete', event.detail);
   }
-  
+
   // Handle execution state update from FlowRunner
   function handleExecutionStateUpdate(event: CustomEvent) {
     // Update the execution state with the new state from FlowRunner
@@ -162,37 +164,37 @@
     // Update the store to trigger reactivity across all components
     executionStore.set(executionState);
   }
-  
+
   // Run the entire flow
   function runFlow() {
     if (flowRunner) {
       // Reset the execution state before starting a new run
       executionState = {};
       executionStore.set({});
-      
-      flowRunner.runFlow().catch(err => {
+
+      flowRunner.runFlow().catch((err: unknown) => {
         console.error('Error running flow:', err);
         isRunning = false;
       });
     }
   }
-  
+
   // Execute a single step from the UI
   function executeStep(event: CustomEvent) {
     const { stepIndex } = event.detail;
     const step = flowData.steps[stepIndex];
-    
+
     if (flowRunner && step) {
       // We're not resetting the execution state so that previous results remain visible
       isRunning = true;
-      
-      flowRunner.executeSingleStep(step, stepIndex).catch(err => {
+
+      flowRunner.executeSingleStep(step, stepIndex).catch((err: unknown) => {
         console.error(`Error executing step ${step.step_id}:`, err);
         isRunning = false;
       });
     }
   }
-  
+
   // Stop the flow execution
   function handleStop() {
     if (flowRunner) {
@@ -200,19 +202,16 @@
     }
     isRunning = false;
   }
-  
-  // Subscribe to execution state changes for debugging
-  import { onMount, onDestroy } from 'svelte';
-  
+
   let unsubscribe: () => void;
-  
+
   onMount(() => {
-    unsubscribe = executionStore.subscribe(state => {
+    unsubscribe = executionStore.subscribe((state) => {
       // Create a new reference to ensure reactive updates
       executionState = { ...state };
     });
   });
-  
+
   onDestroy(() => {
     if (unsubscribe) unsubscribe();
   });
@@ -220,89 +219,135 @@
 
 <div class="space-y-4">
   <!-- Top Control Bar with Run Button -->
-  <div class="bg-white border rounded-lg shadow-sm p-4">
+  <div class="rounded-lg border bg-white p-4 shadow-sm">
     <div class="flex flex-wrap items-center justify-between gap-2">
       <div class="flex items-center">
         <h3 class="text-lg font-medium">Test Flow Execution</h3>
       </div>
-      
+
       <div class="flex items-center space-x-3">
         <!-- Run Options Button -->
         <button
-          class="inline-flex items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
-          on:click={() => showExecutionOptions = !showExecutionOptions}
+          class="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          on:click={() => (showExecutionOptions = !showExecutionOptions)}
           disabled={isRunning}
         >
-          <svg class="h-4 w-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+          <svg class="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"
+            />
           </svg>
           Options
         </button>
-        
+
         <!-- Reset Button -->
         <button
-          class="inline-flex items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+          class="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
           on:click={() => {
             if (flowRunner) {
-              flowRunner.handleReset();  // Use handleReset in FlowRunner directly
+              flowRunner.handleReset(); // Use handleReset in FlowRunner directly
             } else {
               handleReset(); // Fallback to local reset
             }
           }}
           disabled={isRunning || Object.keys(executionState).length === 0}
         >
-          <svg class="h-4 w-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          <svg class="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+            />
           </svg>
           Reset
         </button>
-        
+
         <!-- Variables Button -->
         <button
-          class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 mr-2"
+          class="mr-2 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
           on:click={() => {
             // Toggle variables panel using the local state
             showVariablesPanel = !showVariablesPanel;
           }}
           disabled={isRunning}
         >
-          <svg class="h-4 w-4 mr-1.5" viewBox="0 0 20 20" fill="currentColor">
-            <path fill-rule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd" />
+          <svg class="mr-1.5 h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+            <path
+              fill-rule="evenodd"
+              d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"
+              clip-rule="evenodd"
+            />
           </svg>
           Variables
         </button>
-          
+
         <!-- Run Flow Button -->
         <button
-          class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white {isRunning ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'}"
+          class="inline-flex items-center rounded-md border border-transparent px-4 py-2 text-sm font-medium text-white shadow-sm {isRunning
+            ? 'bg-red-600 hover:bg-red-700'
+            : 'bg-blue-600 hover:bg-blue-700'}"
           on:click={isRunning ? handleStop : runFlow}
           disabled={!apiHost || flowData.steps.length === 0}
         >
           {#if isRunning}
-            <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            <svg
+              class="mr-2 -ml-1 h-4 w-4 animate-spin text-white"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle
+                class="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                stroke-width="4"
+              ></circle>
+              <path
+                class="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+              ></path>
             </svg>
             Stop
           {:else}
-            <svg class="h-4 w-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            <svg class="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
+              />
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
             </svg>
             Run Flow
           {/if}
         </button>
       </div>
     </div>
-    
+
     <!-- Progress Bar (only visible when running) -->
     {#if isRunning}
       <div class="mt-4">
-        <div class="w-full bg-gray-200 rounded-full h-2">
-          <div class="bg-blue-600 h-2 rounded-full" style="width: {flowRunner?.progress || 0}%"></div>
+        <div class="h-2 w-full rounded-full bg-gray-200">
+          <div
+            class="h-2 rounded-full bg-blue-600"
+            style="width: {flowRunner?.progress || 0}%"
+          ></div>
         </div>
-        <div class="mt-1 text-xs text-gray-500 text-right">
-          Step {flowRunner?.currentStep !== undefined ? flowRunner.currentStep + 1 : 0} of {flowData.steps.length}
+        <div class="mt-1 text-right text-xs text-gray-500">
+          Step {flowRunner?.currentStep !== undefined ? flowRunner.currentStep + 1 : 0} of {flowData
+            .steps.length}
         </div>
       </div>
     {/if}
@@ -310,63 +355,70 @@
 
   <!-- Execution Options Panel (Sliding) -->
   {#if showExecutionOptions}
-    <div class="bg-white border rounded-lg shadow-sm p-4" transition:fade={{ duration: 150 }}>
-      <h4 class="text-sm font-medium text-gray-700 mb-3">Execution Options</h4>
-      
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div class="rounded-lg border bg-white p-4 shadow-sm" transition:fade={{ duration: 150 }}>
+      <h4 class="mb-3 text-sm font-medium text-gray-700">Execution Options</h4>
+
+      <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div class="space-y-2">
           <div class="flex items-center">
-            <input 
-              type="checkbox" 
-              id="parallelExecution" 
-              class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+            <input
+              type="checkbox"
+              id="parallelExecution"
+              class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
               bind:checked={preferences.parallelExecution}
             />
-            <label for="parallelExecution" class="ml-2 block text-sm text-gray-700">Parallel Execution</label>
+            <label for="parallelExecution" class="ml-2 block text-sm text-gray-700"
+              >Parallel Execution</label
+            >
           </div>
-          
+
           <div class="flex items-center">
-            <input 
-              type="checkbox" 
-              id="stopOnError" 
-              class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+            <input
+              type="checkbox"
+              id="stopOnError"
+              class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
               bind:checked={preferences.stopOnError}
             />
             <label for="stopOnError" class="ml-2 block text-sm text-gray-700">Stop On Error</label>
           </div>
-          
+
           <div class="flex items-center">
-            <input 
-              type="checkbox" 
-              id="serverCookieHandling" 
-              class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+            <input
+              type="checkbox"
+              id="serverCookieHandling"
+              class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
               bind:checked={preferences.serverCookieHandling}
             />
-            <label for="serverCookieHandling" class="ml-2 block text-sm text-gray-700">Handle Cookies</label>
+            <label for="serverCookieHandling" class="ml-2 block text-sm text-gray-700"
+              >Handle Cookies</label
+            >
           </div>
         </div>
-        
+
         <div class="space-y-4">
           <div>
-            <label for="retryCount" class="block text-sm font-medium text-gray-700">Retry Count</label>
-            <input 
-              type="number" 
-              id="retryCount" 
+            <label for="retryCount" class="block text-sm font-medium text-gray-700"
+              >Retry Count</label
+            >
+            <input
+              type="number"
+              id="retryCount"
               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-              min="0" 
+              min="0"
               max="5"
               bind:value={preferences.retryCount}
             />
           </div>
-          
+
           <div>
-            <label for="timeout" class="block text-sm font-medium text-gray-700">Timeout (ms)</label>
-            <input 
-              type="number" 
-              id="timeout" 
+            <label for="timeout" class="block text-sm font-medium text-gray-700">Timeout (ms)</label
+            >
+            <input
+              type="number"
+              id="timeout"
               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-              min="1000" 
-              max="60000" 
+              min="1000"
+              max="60000"
               step="1000"
               bind:value={preferences.timeout}
             />
@@ -375,56 +427,55 @@
       </div>
     </div>
   {/if}
-  
+
   <!-- Hidden Flow Runner Component (bind to access its methods) -->
   <div>
-    <FlowRunner 
+    <FlowRunner
       bind:this={flowRunner}
       {flowData}
       {apiHost}
       bind:isRunning
       bind:executionState
       bind:preferences
-      bind:showVariablesPanel={showVariablesPanel}
+      bind:showVariablesPanel
       showButtons={false}
       on:reset={handleReset}
-      on:change={(event) => {
-        console.log("Change event from FlowRunner:", event.detail);
+      on:change={(event: CustomEvent<{ flowData: TestFlowData }>) => {
+        console.log('Change event from FlowRunner:', event.detail);
         if (event.detail && event.detail.flowData) {
           // Handle case when variables are updated
           if (event.detail.flowData.variables) {
-            console.log("Variables updated in FlowRunner:", event.detail.flowData.variables);
+            console.log('Variables updated in FlowRunner:', event.detail.flowData.variables);
           }
-          
+
           flowData = { ...event.detail.flowData };
           handleChange();
         }
       }}
       on:executionComplete={handleExecutionComplete}
       on:executionStateUpdate={handleExecutionStateUpdate}
-      on:endpointStateUpdate={(event) => {
+      on:endpointStateUpdate={(event: CustomEvent<{ endpointId: string; state: EndpointExecutionState }>) => {
         const { endpointId, state } = event.detail;
         // Force the store to update for better reactivity
         // endpointId is now using the format `${stepId}-${endpointIndex}` for better user reference
-        executionStore.update(store => {
+        executionStore.update((store) => {
           return { ...store, [endpointId]: state };
         });
       }}
     />
   </div>
-  
+
   <!-- Existing Steps -->
   {#if flowData && flowData.steps && flowData.steps.length > 0}
-    {#each flowData.steps as step, stepIndex}
+    {#each flowData.steps as step, stepIndex (step.step_id)}
       <div class="mb-4">
-        <StepEditor 
+        <StepEditor
           {step}
           {endpoints}
           {stepIndex}
           isFirstStep={stepIndex === 0}
           isLastStep={stepIndex === flowData.steps.length - 1}
           {isRunning}
-          {executionState}
           executionStore={$executionStore}
           on:removeStep={handleRemoveStep}
           on:removeEndpoint={handleRemoveEndpoint}
@@ -433,9 +484,9 @@
           on:runStep={executeStep}
         >
           <div slot="endpoint-selector">
-            <EndpointSelector 
-              {endpoints} 
-              on:select={(e) => handleEndpointSelected(e, stepIndex)} 
+            <EndpointSelector
+              {endpoints}
+              on:select={(e) => handleEndpointSelected(e, stepIndex)}
               disabled={isRunning}
             />
           </div>
@@ -443,20 +494,25 @@
       </div>
     {/each}
   {:else}
-    <div class="bg-yellow-50 border border-yellow-100 rounded-lg p-4 mb-4 text-center">
+    <div class="mb-4 rounded-lg border border-yellow-100 bg-yellow-50 p-4 text-center">
       <p class="text-yellow-700">No steps in this flow yet. Add a step to get started.</p>
     </div>
   {/if}
-  
+
   <!-- Add Step Button -->
   <div class="mt-6">
-    <button 
-      class="flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+    <button
+      class="flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:outline-none"
       on:click={addNewStep}
       disabled={isRunning}
     >
-      <svg class="h-5 w-5 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+      <svg class="mr-2 h-5 w-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+        />
       </svg>
       Add New Step
     </button>

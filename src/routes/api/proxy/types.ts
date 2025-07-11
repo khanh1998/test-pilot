@@ -29,6 +29,6 @@ export interface ProxyResponse {
   status: number;
   statusText: string;
   headers: Record<string, string>;
-  body: any;
+  body: unknown;
   cookies: Cookie[]; // Cookies extracted from Set-Cookie headers
 }

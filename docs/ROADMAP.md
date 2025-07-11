@@ -2,83 +2,77 @@
 
 ### 🔰 Phase 1: Foundation (Week 1–2)
 
-> *Goal: Set up the core skeleton — import OpenAPI, extract data, and prepare the DB.*
+> _Goal: Set up the core skeleton — import OpenAPI, extract data, and prepare the DB._
 
-* [x] ✅ **Set up project structure** (Node.js, Express or CLI-based, with TypeScript preferred)
-* [x] ✅ **Parse OpenAPI YAML**
+- [x] ✅ **Set up project structure** (Node.js, Express or CLI-based, with TypeScript preferred)
+- [x] ✅ **Parse OpenAPI YAML**
+  - Use `swagger-parser` + `yaml` to load and dereference spec
 
-  * Use `swagger-parser` + `yaml` to load and dereference spec
-* [x] ✅ **Extract key elements**
+- [x] ✅ **Extract key elements**
+  - Paths, HTTP methods
+  - Parameters (query, path, body)
+  - Request/response schemas
+  - Security requirements
 
-  * Paths, HTTP methods
-  * Parameters (query, path, body)
-  * Request/response schemas
-  * Security requirements
-* [ ] ✅ **Store to local database** (SQLite or PostgreSQL)
-
-  * Tables: `endpoints`, `parameters`, `schemas`, `flows` (optional at this stage)
+- [x] ✅ **Store to local database** (SQLite or PostgreSQL)
+  - Tables: `endpoints`, `parameters`, `schemas`, `flows` (optional at this stage)
 
 ---
 
 ### 🚀 Phase 2: Test Flow Generator (Week 3–4)
 
-> *Goal: Generate meaningful test plans automatically from imported OpenAPI.*
+> _Goal: Generate meaningful test plans automatically from imported OpenAPI._
 
-* [ ] ✅ **Build API dependency resolver**
+- [ ] ✅ **Build API dependency resolver**
+  - Identify relationships via `path`, `requestBody`, `response` (e.g., create → get by id)
 
-  * Identify relationships via `path`, `requestBody`, `response` (e.g., create → get by id)
-* [ ] ✅ **Generate test flows**
+- [ ] ✅ **Generate test flows**
+  - Detect common flows (e.g., auth → create → get)
+  - Allow one flow per resource (`POST` → `GET`, `PUT`, `DELETE`)
 
-  * Detect common flows (e.g., auth → create → get)
-  * Allow one flow per resource (`POST` → `GET`, `PUT`, `DELETE`)
-* [ ] ✅ **Integrate LLM to help:**
+- [ ] ✅ **Integrate LLM to help:**
+  - Generate sample input payloads (based on schema and field names)
+  - Suggest basic assertion checks (e.g., `status === 200`, `id != null`)
 
-  * Generate sample input payloads (based on schema and field names)
-  * Suggest basic assertion checks (e.g., `status === 200`, `id != null`)
-* [ ] ✅ **Create internal format to represent a test plan**
-
-  * JSON-based structure for flow steps, data mappings
+- [ ] ✅ **Create internal format to represent a test plan**
+  - JSON-based structure for flow steps, data mappings
 
 ---
 
 ### 🧪 Phase 3: Test Runner (Week 5)
 
-> *Goal: Run the generated flows and report success/failure.*
+> _Goal: Run the generated flows and report success/failure._
 
-* [ ] ✅ **Simple local test executor**
+- [ ] ✅ **Simple local test executor**
+  - Use `axios` or `fetch` to make HTTP requests
+  - Support headers, path replacement, and auth tokens
 
-  * Use `axios` or `fetch` to make HTTP requests
-  * Support headers, path replacement, and auth tokens
-* [ ] ✅ **Report test result**
-
-  * Basic success/failure with logs
-  * Highlight failed steps and reasons
+- [ ] ✅ **Report test result**
+  - Basic success/failure with logs
+  - Highlight failed steps and reasons
 
 ---
 
 ### 🖥️ Phase 4: Developer UX (Week 6)
 
-> *Goal: Let engineers interact with the app in a smooth and minimal way.*
+> _Goal: Let engineers interact with the app in a smooth and minimal way._
 
-* [ ] ✅ **Simple UI or CLI**
+- [ ] ✅ **Simple UI or CLI**
+  - CLI: commands like `import`, `generate`, `run`
+  - Optional: Web UI with dashboard to see endpoints and flows
 
-  * CLI: commands like `import`, `generate`, `run`
-  * Optional: Web UI with dashboard to see endpoints and flows
-* [ ] ✅ **Flow selection**
+- [ ] ✅ **Flow selection**
+  - Let users choose specific endpoints or flows to test
 
-  * Let users choose specific endpoints or flows to test
-* [ ] ✅ **Minimal config support**
-
-  * Server URL
-  * Auth credentials (e.g., login username/password)
+- [ ] ✅ **Minimal config support**
+  - Server URL
+  - Auth credentials (e.g., login username/password)
 
 ---
-
 
 ### 🧩 📡 Phase 5: MCP Server – AI Agent Integration Layer (Week 7+)
 
 > **Goal:** Enable communication between your testing app and an external AI agent (e.g., LLM, VSCode plugin, ChatGPT plugin, etc.) to issue instructions and receive structured responses.
-
 
 #### 🛠️ Key Features
 
@@ -94,19 +88,19 @@
 
 ## 🏁 Stretch Goals (Post-MVP)
 
-> *Start thinking beyond MVP only after validation*
+> _Start thinking beyond MVP only after validation_
 
-* [ ] 🔄 **CI integration** (`run-testplan` before `git push`)
-* [ ] 🌐 **VSCode Extension** to run plans directly
-* [ ] 🧪 **Advanced assertions** using LLM
-* [ ] 🔍 **Flow diff detection** (compare new OpenAPI version with old)
+- [ ] 🔄 **CI integration** (`run-testplan` before `git push`)
+- [ ] 🌐 **VSCode Extension** to run plans directly
+- [ ] 🧪 **Advanced assertions** using LLM
+- [ ] 🔍 **Flow diff detection** (compare new OpenAPI version with old)
 
 ---
 
 ## 🎯 Summary
 
-| Milestone | Outcome                          |
-| --------- | -------------------------------- |
+| Milestone  | Outcome                          |
+| ---------- | -------------------------------- |
 | ✅ Phase 1 | OpenAPI parser + DB              |
 | ✅ Phase 2 | Auto-generated test flows        |
 | ✅ Phase 3 | Executable test plans            |

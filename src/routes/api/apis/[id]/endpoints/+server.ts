@@ -7,7 +7,7 @@ import type { RequestEvent } from '@sveltejs/kit';
 export async function GET({ params, locals }: RequestEvent) {
   try {
     const apiId = parseInt(params.id || '');
-    
+
     if (isNaN(apiId)) {
       return new Response(JSON.stringify({ error: 'Invalid API ID' }), {
         status: 400,
@@ -24,14 +24,12 @@ export async function GET({ params, locals }: RequestEvent) {
     }
 
     // Get the API and check if it belongs to the user
-    const api = await db.select()
+    const api = await db
+      .select()
       .from(apis)
-      .where(and(
-        eq(apis.id, apiId),
-        eq(apis.userId, locals.user.userId)
-      ))
+      .where(and(eq(apis.id, apiId), eq(apis.userId, locals.user.userId)))
       .limit(1)
-      .then(results => results[0] || null);
+      .then((results) => results[0] || null);
 
     if (!api) {
       return new Response(JSON.stringify({ error: 'API not found or access denied' }), {
@@ -41,7 +39,9 @@ export async function GET({ params, locals }: RequestEvent) {
     }
 
     // Get all endpoints for the API
-    const endpoints = await db.select().from(apiEndpoints)
+    const endpoints = await db
+      .select()
+      .from(apiEndpoints)
       .where(eq(apiEndpoints.apiId, apiId))
       .orderBy(apiEndpoints.path, apiEndpoints.method);
 

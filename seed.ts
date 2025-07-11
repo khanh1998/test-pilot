@@ -1,7 +1,6 @@
 import 'dotenv/config';
 import { db } from './src/lib/server/drizzle';
 import { users } from './src/db/schema';
-import fs from 'fs';
 
 // Check if .env file exists and has DATABASE_URL
 if (!process.env.DATABASE_URL) {
@@ -22,7 +21,7 @@ async function seed() {
     const usersData = [
       { name: 'Alice Johnson', email: 'alice@example.com' },
       { name: 'Bob Smith', email: 'bob@example.com' },
-      { name: 'Carol Williams', email: 'carol@example.com' },
+      { name: 'Carol Williams', email: 'carol@example.com' }
     ];
 
     const createdUsers = await Promise.all(

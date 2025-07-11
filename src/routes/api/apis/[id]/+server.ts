@@ -24,9 +24,7 @@ export async function GET({ params, locals }: RequestEvent) {
     }
 
     // Get the API by ID
-    const apiData = await db.select().from(apis)
-      .where(eq(apis.id, apiId))
-      .limit(1);
+    const apiData = await db.select().from(apis).where(eq(apis.id, apiId)).limit(1);
 
     if (apiData.length === 0) {
       return new Response(JSON.stringify({ error: 'API not found' }), {

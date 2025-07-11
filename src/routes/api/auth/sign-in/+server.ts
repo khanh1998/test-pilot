@@ -4,7 +4,7 @@ import { users } from '../../../../db/schema';
 import { createClient } from '@supabase/supabase-js';
 import { eq } from 'drizzle-orm';
 import type { RequestEvent } from '@sveltejs/kit';
-import { generateToken } from '$lib/server/auth';
+import { generateToken } from '$lib/features/auth/server/auth';
 
 // Create a Supabase admin client for server-side operations
 const supabaseAdmin = createClient(
@@ -22,7 +22,7 @@ export async function POST({ request }: RequestEvent) {
   try {
     // Get user data from request body
     const { email, password } = await request.json();
-    
+
     if (!email || !password) {
       throw error(400, 'Email and password are required');
     }
@@ -40,16 +40,19 @@ export async function POST({ request }: RequestEvent) {
 
     // 2. Retrieve user from our database
     const userRecord = await db.select().from(users).where(eq(users.email, email)).limit(1);
-    
+
     if (!userRecord || userRecord.length === 0) {
       // This is unusual - the user exists in Supabase but not in our DB
       // Let's create the user in our database
-      const newUser = await db.insert(users).values({
-        name: email.split('@')[0], // Use part of email as a default name
-        email,
-        supabaseAuthId: authData.user.id
-      }).returning();
-      
+      const newUser = await db
+        .insert(users)
+        .values({
+          name: email.split('@')[0], // Use part of email as a default name
+          email,
+          supabaseAuthId: authData.user.id
+        })
+        .returning();
+
       // Create a custom JWT token
       const userData = {
         id: newUser[0].id,
@@ -81,16 +84,15 @@ export async function POST({ request }: RequestEvent) {
       token,
       user: userData
     });
-    
   } catch (err: unknown) {
     console.error('Error during sign in:', err);
-    
+
     // Handle known errors
     if (err && typeof err === 'object' && 'status' in err && 'body' in err) {
       const knownErr = err as { status: number; body: { message: string } };
       throw error(knownErr.status, knownErr.body.message);
     }
-    
+
     throw error(500, 'An error occurred during sign in');
   }
 }

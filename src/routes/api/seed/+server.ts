@@ -15,11 +15,12 @@ export async function POST() {
     const createdUsers = [];
     for (const userData of usersData) {
       try {
-        const [createdUser] = await db.insert(users)
+        const [createdUser] = await db
+          .insert(users)
           .values(userData)
           .returning()
           .onConflictDoNothing({ target: users.email });
-        
+
         if (createdUser) {
           createdUsers.push(createdUser);
         }
@@ -35,9 +36,12 @@ export async function POST() {
     });
   } catch (err) {
     console.error('Error seeding data:', err);
-    return json({ 
-      success: false, 
-      error: 'Failed to create sample data' 
-    }, { status: 500 });
+    return json(
+      {
+        success: false,
+        error: 'Failed to create sample data'
+      },
+      { status: 500 }
+    );
   }
 }

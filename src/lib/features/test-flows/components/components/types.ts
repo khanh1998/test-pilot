@@ -17,8 +17,8 @@ export type Endpoint = {
   description?: string;
   tags?: string[];
   parameters?: Parameter[];
-  requestSchema?: any;
-  responseSchema?: any;
+  requestSchema?: unknown;
+  responseSchema?: unknown;
 };
 
 export type StepEndpoint = {
@@ -26,8 +26,8 @@ export type StepEndpoint = {
   store_response_as?: string;
   pathParams?: Record<string, string>;
   queryParams?: Record<string, string>;
-  body?: any;
-  headers?: {name: string; value: string; enabled: boolean}[];
+  body?: unknown;
+  headers?: { name: string; value: string; enabled: boolean }[];
 };
 
 export type EndpointExecutionState = {
@@ -35,7 +35,7 @@ export type EndpointExecutionState = {
   request?: {
     url?: string;
     method?: string;
-    body?: any;
+    body?: unknown;
     headers?: Record<string, string>;
     pathParams?: Record<string, string>;
     queryParams?: Record<string, string>;
@@ -43,7 +43,7 @@ export type EndpointExecutionState = {
   response?: {
     status?: number;
     statusText?: string;
-    body?: any;
+    body?: unknown;
     headers?: Record<string, string>;
   } | null;
   error?: string;
@@ -58,8 +58,8 @@ export type ExecutionState = Record<string, EndpointExecutionState> & {
 export type FlowVariable = {
   name: string;
   type: 'string' | 'number' | 'boolean' | 'object' | 'array' | 'null';
-  value?: any;
-  defaultValue?: any;
+  value?: unknown;
+  defaultValue?: unknown;
   description?: string;
   required: boolean;
 };
@@ -78,7 +78,7 @@ export type FlowAssertion = {
   endpoint_index?: number;
   target: string;
   condition: string;
-  expected_value: any;
+  expected_value: unknown;
   // Other assertion properties
 };
 
@@ -90,5 +90,5 @@ export type TestFlowData = {
   variables: FlowVariable[];
   steps: FlowStep[];
   assertions: FlowAssertion[];
-  endpoints?: any[]; // Reference to available endpoints
+  endpoints?: Endpoint[]; // Reference to available endpoints
 };

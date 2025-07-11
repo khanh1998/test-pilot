@@ -1,9 +1,9 @@
 /**
  * WARNING: This file should ONLY be imported in server-side code.
- * 
+ *
  * For security and to avoid "Buffer is not defined" errors,
  * never import this file or any Node.js modules in client components.
- * 
+ *
  * Always use API endpoints for database operations.
  */
 

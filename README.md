@@ -31,6 +31,7 @@ cp .env.example .env
 ```
 
 You'll need:
+
 - Supabase URL and anon key (for client-side)
 - Supabase service key (for server-side, keep this secret!)
 - Your database connection string
@@ -74,16 +75,18 @@ This project includes Supabase integration for authentication, database, and sto
 ### 2. Configure Environment Variables
 
 1. Copy the `.env` file to `.env.local`:
+
    ```bash
    cp .env .env.local
    ```
 
 2. Update the `.env.local` file with your Supabase credentials:
+
    ```
    VITE_SUPABASE_URL=your_supabase_url
    VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
    ```
-   
+
    You can find these values in your Supabase project dashboard under Settings > API.
 
 ### 3. Set Up Database Types (Optional)
@@ -126,6 +129,7 @@ This project includes [Drizzle ORM](https://orm.drizzle.team/) for database sche
 ### 1. Configuration
 
 The database connection is configured in two places:
+
 - Server-side: `/src/lib/server/drizzle.ts`
 - Client-side (use with caution): `/src/db/index.ts`
 

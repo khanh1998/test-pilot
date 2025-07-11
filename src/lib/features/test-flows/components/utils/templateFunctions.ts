@@ -33,9 +33,9 @@ export function timestamp(): number {
 export function formatDate(
   date: Date | number | null | undefined = new Date(),
   locale: string = 'en-US',
-  options: Intl.DateTimeFormatOptions = { 
-    year: 'numeric', 
-    month: '2-digit', 
+  options: Intl.DateTimeFormatOptions = {
+    year: 'numeric',
+    month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
@@ -43,8 +43,7 @@ export function formatDate(
   }
 ): string {
   // If date is null or undefined, use current date
-  const dateObj = date == null ? new Date() : 
-                 typeof date === 'number' ? new Date(date) : date;
+  const dateObj = date == null ? new Date() : typeof date === 'number' ? new Date(date) : date;
   return new Intl.DateTimeFormat(locale, options).format(dateObj);
 }
 
@@ -67,7 +66,7 @@ export function formatDate(
  * - s: Seconds without leading zero (0-59)
  * - SSS: Milliseconds (000-999)
  * - a: AM/PM marker
- * 
+ *
  * @param pattern Format pattern like "yyyy-MM-dd HH:mm:ss"
  * @param date Date to format (defaults to now)
  * @returns Formatted date string
@@ -77,38 +76,37 @@ export function formatDatePattern(
   date: Date | number | null | undefined = new Date()
 ): string {
   // If date is null or undefined, use current date
-  const dateObj = date == null ? new Date() : 
-                 typeof date === 'number' ? new Date(date) : date;
-  
+  const dateObj = date == null ? new Date() : typeof date === 'number' ? new Date(date) : date;
+
   const tokens: Record<string, () => string> = {
-    'yyyy': () => dateObj.getFullYear().toString(),
-    'yy': () => dateObj.getFullYear().toString().slice(2),
-    'MM': () => (dateObj.getMonth() + 1).toString().padStart(2, '0'),
-    'M': () => (dateObj.getMonth() + 1).toString(),
-    'dd': () => dateObj.getDate().toString().padStart(2, '0'),
-    'd': () => dateObj.getDate().toString(),
-    'HH': () => dateObj.getHours().toString().padStart(2, '0'),
-    'H': () => dateObj.getHours().toString(),
-    'hh': () => (dateObj.getHours() % 12 || 12).toString().padStart(2, '0'),
-    'h': () => (dateObj.getHours() % 12 || 12).toString(),
-    'mm': () => dateObj.getMinutes().toString().padStart(2, '0'),
-    'm': () => dateObj.getMinutes().toString(),
-    'ss': () => dateObj.getSeconds().toString().padStart(2, '0'),
-    's': () => dateObj.getSeconds().toString(),
-    'SSS': () => dateObj.getMilliseconds().toString().padStart(3, '0'),
-    'a': () => dateObj.getHours() < 12 ? 'AM' : 'PM'
+    yyyy: () => dateObj.getFullYear().toString(),
+    yy: () => dateObj.getFullYear().toString().slice(2),
+    MM: () => (dateObj.getMonth() + 1).toString().padStart(2, '0'),
+    M: () => (dateObj.getMonth() + 1).toString(),
+    dd: () => dateObj.getDate().toString().padStart(2, '0'),
+    d: () => dateObj.getDate().toString(),
+    HH: () => dateObj.getHours().toString().padStart(2, '0'),
+    H: () => dateObj.getHours().toString(),
+    hh: () => (dateObj.getHours() % 12 || 12).toString().padStart(2, '0'),
+    h: () => (dateObj.getHours() % 12 || 12).toString(),
+    mm: () => dateObj.getMinutes().toString().padStart(2, '0'),
+    m: () => dateObj.getMinutes().toString(),
+    ss: () => dateObj.getSeconds().toString().padStart(2, '0'),
+    s: () => dateObj.getSeconds().toString(),
+    SSS: () => dateObj.getMilliseconds().toString().padStart(3, '0'),
+    a: () => (dateObj.getHours() < 12 ? 'AM' : 'PM')
   };
-  
+
   // Sort tokens by length (longest first) to avoid partial matches
   // e.g., 'MM' should be replaced before 'M'
   const sortedTokens = Object.keys(tokens).sort((a, b) => b.length - a.length);
-  
+
   // Replace each token with its value
   let result = pattern;
   for (const token of sortedTokens) {
     result = result.replace(new RegExp(token, 'g'), tokens[token]());
   }
-  
+
   return result;
 }
 
@@ -154,14 +152,14 @@ export function isoDate(): string {
  * @returns ISO date string
  */
 export function relativeDate(
-  amount: number, 
+  amount: number,
   unit: 'days' | 'hours' | 'minutes' | 'seconds',
   baseDate: Date | number | null | undefined = new Date()
 ): string {
   // If baseDate is null or undefined, use current date
-  const date = baseDate == null ? new Date() : 
-              typeof baseDate === 'number' ? new Date(baseDate) : baseDate;
-  
+  const date =
+    baseDate == null ? new Date() : typeof baseDate === 'number' ? new Date(baseDate) : baseDate;
+
   switch (unit) {
     case 'days':
       date.setDate(date.getDate() + amount);
@@ -176,7 +174,7 @@ export function relativeDate(
       date.setSeconds(date.getSeconds() + amount);
       break;
   }
-  
+
   return date.toISOString();
 }
 
@@ -192,12 +190,12 @@ export function jsonPath(obj: any, path: string): any {
   if (!path || path === '$') {
     return obj;
   }
-  
+
   // Basic handling for $.prop.subprop notation
   if (path.startsWith('$.')) {
     const segments = path.substring(2).split('.');
     let result = obj;
-    
+
     for (const segment of segments) {
       // Handle array indices in the form [0]
       if (segment.match(/^\[\d+\]$/)) {
@@ -210,15 +208,15 @@ export function jsonPath(obj: any, path: string): any {
       } else {
         result = result?.[segment];
       }
-      
+
       if (result === undefined) {
         return undefined;
       }
     }
-    
+
     return result;
   }
-  
+
   // Simplified handling for direct property access
   return obj?.[path];
 }

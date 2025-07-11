@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { db } from '$lib/server/drizzle';
 import { apis, apiEndpoints } from '../../../../db/schema';
-import { parseSwaggerSpec, extractEndpoints, extractHost } from '$lib/swagger/parser';
+import { parseSwaggerSpec, extractEndpoints, extractHost } from '$lib/features/apis/swagger/parser';
 import type { RequestEvent } from '@sveltejs/kit';
 
 export async function POST({ request, locals }: RequestEvent) {
@@ -38,15 +38,15 @@ export async function POST({ request, locals }: RequestEvent) {
 
     // Parse the Swagger/OpenAPI spec
     const api = await parseSwaggerSpec(content, format);
-    
+
     // Extract host information from the spec
     let hostValue = extractHost(api);
-    
+
     // If no host in spec but user provided one, use that
     if (!hostValue && userProvidedHost) {
       hostValue = userProvidedHost;
     }
-    
+
     // Insert the API into the database
     const [createdApi] = await db
       .insert(apis)

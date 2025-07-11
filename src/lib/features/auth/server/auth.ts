@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import type { RequestEvent } from '@sveltejs/kit';
 import { error } from '@sveltejs/kit';
 import { db } from '$lib/server/drizzle';
-import { users } from '../../db/schema';
+import { users } from '../../../../db/schema';
 import { eq } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 import { env } from '$env/dynamic/private';
@@ -26,14 +26,14 @@ const supabaseAdmin = createClient(
 /**
  * Generate a JWT token for a user
  */
-export function generateToken(userData: { id: number, email: string, name?: string }): string {
+export function generateToken(userData: { id: number; email: string; name?: string }): string {
   const payload: JWTPayload = {
     userId: userData.id,
     email: userData.email,
     name: userData.name || ''
   };
-  
-  // @ts-ignore - Working around type issues
+
+  // @ts-expect-error - Working around type issues
   return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRY });
 }
 
@@ -53,13 +53,12 @@ export interface JWTPayload {
  */
 export function verifyToken(token: string): JWTPayload | null {
   try {
-    // @ts-ignore - Working around type issues
     const decoded = jwt.verify(token, JWT_SECRET);
     if (typeof decoded === 'object' && 'userId' in decoded) {
       return decoded as JWTPayload;
     }
     return null;
-  } catch (err) {
+  } catch (err: unknown) {
     return null;
   }
 }
@@ -70,14 +69,14 @@ export function verifyToken(token: string): JWTPayload | null {
 export async function authenticateRequest(event: RequestEvent) {
   // Get the Authorization header
   const authHeader = event.request.headers.get('Authorization');
-  
+
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     throw error(401, 'Unauthorized: Missing or invalid token');
   }
-  
+
   // Extract the token from the header
   const token = authHeader.split('Bearer ')[1];
-  
+
   try {
     // First verify our custom JWT
     const decoded = verifyToken(token);
@@ -85,26 +84,26 @@ export async function authenticateRequest(event: RequestEvent) {
       // If our JWT fails, try Supabase token as fallback
       return authenticateWithSupabase(token);
     }
-    
+
     // Get user from our database
     const userRecord = await db.select().from(users).where(eq(users.id, decoded.userId)).limit(1);
-    
+
     if (!userRecord || userRecord.length === 0) {
       throw error(404, 'User not found in database');
     }
-    
+
     // Return the authenticated user
     return {
       user: userRecord[0],
       token
     };
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Authentication error:', err);
-    
-    if (err.status && err.body) {
+
+    if (err instanceof Error && 'status' in err && 'body' in err) {
       throw err; // Re-throw SvelteKit error
     }
-    
+
     throw error(500, 'Authentication error');
   }
 }
@@ -114,19 +113,26 @@ export async function authenticateRequest(event: RequestEvent) {
  */
 async function authenticateWithSupabase(token: string) {
   // Verify the token with Supabase
-  const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
-  
+  const {
+    data: { user },
+    error: authError
+  } = await supabaseAdmin.auth.getUser(token);
+
   if (authError || !user) {
     throw error(401, 'Unauthorized: Invalid token');
   }
-  
+
   // Get user from our database
-  const userRecord = await db.select().from(users).where(eq(users.supabaseAuthId, user.id)).limit(1);
-  
+  const userRecord = await db
+    .select()
+    .from(users)
+    .where(eq(users.supabaseAuthId, user.id))
+    .limit(1);
+
   if (!userRecord || userRecord.length === 0) {
     throw error(404, 'User not found in database');
   }
-  
+
   // Return the authenticated user
   return {
     user: userRecord[0],
