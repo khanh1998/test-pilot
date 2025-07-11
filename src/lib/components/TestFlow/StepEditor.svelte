@@ -236,6 +236,19 @@
           </svg>
           Failed
         </span>
+      {:else}
+        <!-- Run step button when not running -->
+        <button 
+          class="ml-2 inline-flex items-center bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded-md text-xs transition-colors"
+          on:click={() => dispatch('runStep', { stepIndex })}
+          disabled={stepExecutionState.status === 'running'}
+          title="Run this step"
+        >
+          <svg class="h-3 w-3 mr-1" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
+          </svg>
+          Run Step
+        </button>
       {/if}
     </h3>
     <div class="flex items-center space-x-2">

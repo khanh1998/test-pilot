@@ -2,6 +2,7 @@
   import { page } from '$app/stores';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
+  import type { TestFlowData, FlowVariable, FlowStep, FlowAssertion } from '$lib/components/TestFlow/components/types';
   
   // Import the components we created
   import EndpointSelector from '$lib/components/TestFlow/EndpointSelector.svelte';
@@ -17,18 +18,11 @@
   let loading = true;
   let error: string | null = null;
   let currentTab: 'steps' | 'assertions' | 'settings' = 'steps';
-  let flowJson: {
-    settings: { 
-      api_host: string 
-    }, 
-    steps: any[], 
-    assertions: any[] 
-  } = { 
-    settings: { 
-      api_host: "" 
-    }, 
+  let flowJson: TestFlowData = { 
+    settings: { api_host: "" }, 
     steps: [], 
-    assertions: [] 
+    assertions: [],
+    variables: []
   };
   let isDirty = false;
   let isSaving = false;
@@ -80,7 +74,8 @@
           api_host: ""
         }, 
         steps: [], 
-        assertions: [] 
+        assertions: [],
+        variables: []
       };
       
       // Make sure settings object has all required properties
@@ -95,6 +90,14 @@
           apiHost = flowJson.settings.api_host;
           console.log('Setting apiHost from loaded flowJson:', apiHost);
         }
+      }
+      
+      // Ensure variables array exists
+      if (!flowJson.variables) {
+        console.log('Initializing empty variables array');
+        flowJson.variables = [];
+      } else {
+        console.log('Loaded flow variables:', flowJson.variables);
       }
       
       isDirty = false;
@@ -229,64 +232,9 @@
     markDirty();
   }
   
-  function removeStep(stepIndex: number) {
-    if (confirm('Are you sure you want to remove this step?')) {
-      flowJson.steps = flowJson.steps.filter((_: any, i: number) => i !== stepIndex);
-      markDirty();
-    }
-  }
-  
-  function addEndpointToStep(stepIndex: number, endpoint: any) {
-    if (!endpoint) return;
-    
-    const step = flowJson.steps[stepIndex];
-    if (!step) return;
-    
-    // Get count of same endpoints already in this step for variable naming
-    const sameEndpoints = step.endpoints.filter((e: any) => e.endpoint_id === endpoint.id).length;
-    const instanceSuffix = sameEndpoints > 0 ? `_${sameEndpoints + 1}` : '';
-    
-    // Add endpoint to the step
-    step.endpoints = [
-      ...step.endpoints,
-      {
-        endpoint_id: endpoint.id,
-        input_params: [],
-        path_params: [],
-        headers: [],
-        store_response_as: `${endpoint.operationId || endpoint.path.replace(/\//g, '_')}${instanceSuffix}_response`
-      }
-    ];
-    
-    flowJson.steps = [...flowJson.steps];
-    markDirty();
-  }
-  
-  function removeEndpointFromStep(stepIndex: number, endpointIndex: number) {
-    if (!confirm('Are you sure you want to remove this endpoint from the step?')) return;
-    
-    const step = flowJson.steps[stepIndex];
-    if (!step) return;
-    
-    step.endpoints = step.endpoints.filter((_: any, i: number) => i !== endpointIndex);
-    flowJson.steps = [...flowJson.steps];
-    markDirty();
-  }
-  
   function addAssertion() {
-    flowJson.assertions = [
-      ...flowJson.assertions,
-      {
-        step_id: flowJson.steps.length > 0 ? flowJson.steps[flowJson.steps.length - 1].step_id : '',
-        endpoint_id: '',
-        target_path: '$.response',
-        condition: 'equals',
-        expected_value: {
-          source: 'fixed',
-          value: ''
-        }
-      }
-    ];
+    // TODO: will do it later
+    flowJson.assertions = [];
     
     markDirty();
   }
@@ -296,143 +244,6 @@
       flowJson.assertions = flowJson.assertions.filter((_: any, i: number) => i !== assertionIndex);
       markDirty();
     }
-  }
-  
-  // Helper to find an endpoint by ID
-  function findEndpoint(id: string | number) {
-    return endpoints.find(e => e.id === id);
-  }
-  
-  function getStepById(stepId: string) {
-    return flowJson.steps.find((step: any) => step.step_id === stepId);
-  }
-  
-  // Helper to get possible input sources for parameters
-  function getPossibleSources(currentStepIndex: number) {
-    const sources = [
-      { id: 'fixed', name: 'Fixed Value' },
-      { id: 'function', name: 'Function' },
-      { id: 'ai', name: 'AI Generated' }
-    ];
-    
-    // Add previous responses as sources
-    for (let i = 0; i < currentStepIndex; i++) {
-      const step = flowJson.steps[i];
-      if (!step) continue;
-      
-      for (const endpoint of step.endpoints) {
-        if (!endpoint.store_response_as) continue;
-        
-        sources.push({
-          id: `response:${step.step_id}:${endpoint.endpoint_id}`,
-          name: `${step.label} > ${findEndpoint(endpoint.endpoint_id)?.operationId || 'Response'}`
-        });
-      }
-    }
-    
-    return sources;
-  }
-  
-  // Move a step up or down
-  function moveStep(stepIndex: number, direction: 'up' | 'down') {
-    const originalStepIds = flowJson.steps.map((s: any) => s.step_id);
-    
-    if (direction === 'up' && stepIndex > 0) {
-      // Swap with previous step
-      const temp = flowJson.steps[stepIndex - 1];
-      flowJson.steps[stepIndex - 1] = flowJson.steps[stepIndex];
-      flowJson.steps[stepIndex] = temp;
-    } else if (direction === 'down' && stepIndex < flowJson.steps.length - 1) {
-      // Swap with next step
-      const temp = flowJson.steps[stepIndex + 1];
-      flowJson.steps[stepIndex + 1] = flowJson.steps[stepIndex];
-      flowJson.steps[stepIndex] = temp;
-    }
-    
-    // Create a mapping from old step_id to new step_id
-    const oldToNewStepIdMap = new Map();
-    
-    // Update step_id to keep them in order
-    flowJson.steps = flowJson.steps.map((step: any, index: number) => {
-      const oldId = step.step_id;
-      const newId = `step${index + 1}`;
-      
-      oldToNewStepIdMap.set(oldId, newId);
-      
-      return {
-        ...step,
-        step_id: newId
-      };
-    });
-    
-    // Update assertion references to steps
-    if (flowJson.assertions && flowJson.assertions.length > 0) {
-      flowJson.assertions = flowJson.assertions.map((assertion: any) => {
-        if (assertion.step_id && oldToNewStepIdMap.has(assertion.step_id)) {
-          return {
-            ...assertion,
-            step_id: oldToNewStepIdMap.get(assertion.step_id)
-          };
-        }
-        return assertion;
-      });
-    }
-    
-    markDirty();
-  }
-  
-  // Update a parameter source in a step's endpoint
-  function updateParameterSource(stepIndex: number, endpointIndex: number, paramType: string, paramIndex: number, source: string, value: any) {
-    const step = flowJson.steps[stepIndex];
-    if (!step) return;
-    
-    const endpoint = step.endpoints[endpointIndex];
-    if (!endpoint) return;
-    
-    const params = endpoint[paramType] || [];
-    if (!params[paramIndex]) return;
-    
-    params[paramIndex].source = source;
-    
-    if (source === 'fixed') {
-      params[paramIndex].value = value;
-      delete params[paramIndex].from;
-    } else if (source === 'function') {
-      params[paramIndex].function = value;
-      delete params[paramIndex].value;
-      delete params[paramIndex].from;
-    } else if (source === 'ai') {
-      params[paramIndex].ai_prompt = value;
-      delete params[paramIndex].value;
-      delete params[paramIndex].from;
-    } else if (source.startsWith('response:')) {
-      const [, stepId, endpointId] = source.split(':');
-      params[paramIndex].from = {
-        step_id: stepId,
-        endpoint_id: endpointId,
-        path: value
-      };
-      delete params[paramIndex].value;
-    }
-    
-    endpoint[paramType] = [...params];
-    markDirty();
-  }
-  
-  // Update assertion
-  function updateAssertion(index: number, changes: any) {
-    flowJson.assertions[index] = {
-      ...flowJson.assertions[index],
-      ...changes
-    };
-    
-    markDirty();
-  }
-  
-  // Update settings
-  function updateSettings(settings: any) {
-    flowJson.settings = settings;
-    markDirty();
   }
 </script>
 
@@ -567,7 +378,8 @@
                     flowJson = {
                       settings: updatedFlowData.settings || flowJson.settings,
                       steps: normalizedSteps,
-                      assertions: updatedAssertions.length > 0 ? updatedAssertions : (updatedFlowData.assertions || flowJson.assertions)
+                      assertions: updatedAssertions.length > 0 ? updatedAssertions : (updatedFlowData.assertions || flowJson.assertions),
+                      variables: updatedFlowData.variables || flowJson.variables || []
                     };
                   }
                   markDirty();
@@ -662,7 +474,7 @@
                         <input 
                           id="assertion-path-{assertionIndex}"
                           type="text" 
-                          bind:value={assertion.target_path}
+                          bind:value={assertion.target}
                           class="text-sm px-2 py-1 border rounded w-full"
                           placeholder="$.response.data.id"
                           on:change={markDirty}
@@ -732,6 +544,57 @@
                 <p class="text-sm text-gray-500 mt-1">
                   The base URL for API requests. Will be automatically populated from the API's host setting if available.
                 </p>
+              </div>
+              
+              <!-- Flow Variables -->
+              <div class="mb-6 mt-8 border-t pt-6">
+                <div class="flex justify-between items-center mb-4">
+                  <h3 class="text-lg font-medium">Flow Variables</h3>
+                  <button 
+                    class="bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 transition text-sm"
+                    on:click={() => {
+                      // Open variables panel in TestFlowEditor/FlowRunner
+                      const testFlowEditor = document.querySelector('svelte-component[this="TestFlowEditor"]');
+                      if (testFlowEditor) {
+                        // Dispatch a custom event to show variables panel
+                        testFlowEditor.dispatchEvent(new CustomEvent('showVariablesPanel'));
+                      }
+                    }}
+                  >
+                    Manage Variables
+                  </button>
+                </div>
+                
+                {#if !flowJson.variables || flowJson.variables.length === 0}
+                  <div class="bg-gray-50 rounded-lg p-4 text-center">
+                    <p class="text-gray-600">
+                      No variables defined yet. Click "Manage Variables" to add some.
+                    </p>
+                  </div>
+                {:else}
+                  <div class="bg-gray-50 rounded-lg p-4">
+                    <table class="w-full">
+                      <thead>
+                        <tr class="text-left">
+                          <th class="pb-2 text-sm font-semibold text-gray-600">Name</th>
+                          <th class="pb-2 text-sm font-semibold text-gray-600">Type</th>
+                          <th class="pb-2 text-sm font-semibold text-gray-600">Required</th>
+                          <th class="pb-2 text-sm font-semibold text-gray-600">Default</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {#each flowJson.variables as variable}
+                          <tr class="border-t border-gray-200">
+                            <td class="py-2 text-sm">{variable.name}</td>
+                            <td class="py-2 text-sm">{variable.type}</td>
+                            <td class="py-2 text-sm">{variable.required ? 'Yes' : 'No'}</td>
+                            <td class="py-2 text-sm">{variable.defaultValue !== undefined ? String(variable.defaultValue) : '-'}</td>
+                          </tr>
+                        {/each}
+                      </tbody>
+                    </table>
+                  </div>
+                {/if}
               </div>
             </div>
           {/if}

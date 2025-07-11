@@ -1,11 +1,32 @@
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
+	import type { TestFlowData, FlowVariable, ExecutionState } from './components/types';
 
 	// Props
-	export let flowData: any; // The complete test flow data
+	export let flowData: TestFlowData = { 
+		variables: [],
+		settings: { api_host: '' },
+		steps: [],
+		assertions: []
+	}; // The complete test flow data
 	export let apiHost: string = ''; // API host URL
 	export let isRunning: boolean = false; // Whether the flow is currently running
-	export let executionState: Record<string, any> = {}; // Execution state for each endpoint
+	export let executionState: ExecutionState = {}; // Execution state for each endpoint
+	
+	// Variable input modal state
+	let showVariableInputModal = false;
+	let variablesWithMissingValues: Array<FlowVariable> = [];
+	
+	// Variables management panel
+	export let showVariablesPanel = false;
+	
+	// Control visibility of buttons - set to false when used by TestFlowEditor
+	export let showButtons = true;
+
+	let editingVariable: null | (FlowVariable & { isNew?: boolean }) = null;
+	
+	// Computed variable values for template resolution
+	let variableValues: Record<string, any> = {};
 
 	// Execution preferences
 	export let preferences = {
@@ -28,6 +49,16 @@
 		message: string;
 		details?: string;
 	}> = []; // Logs for the execution
+
+	// Variables panel state
+	let newVariable = {
+		name: '',
+		type: 'string' as 'string' | 'number' | 'boolean' | 'object' | 'array' | 'null',
+		value: '',
+		defaultValue: '',
+		description: '',
+		required: false
+	};
 
 	// Cookie management
 	// Define the cookie interface for consistency across the component
@@ -82,6 +113,17 @@
 		flowData.endpoints = [];
 		console.warn('No endpoints provided in flowData. The flow may not execute correctly.');
 	}
+	
+	// Ensure variables array exists
+	$: if (!flowData.variables) {
+		console.log("Initializing empty variables array");
+		flowData.variables = [];
+	}
+	
+	// Log whenever variables change
+	$: console.log("Variables in flowData:", flowData.variables);
+
+  $: console.log("flow data", flowData);
 
 	// Watch executionState for changes and emit update events
 	$: if (Object.keys(executionState).length > 0) {
@@ -199,7 +241,22 @@
 			});
 			return;
 		}
-
+		
+		// Prepare variables and check if all required variables have values
+		prepareVariables();
+		if (!checkRequiredVariables()) {
+			// Show the variable input modal if there are missing required values
+			addLog('info', 'Required variables need input', `${variablesWithMissingValues.length} required variable(s) need values`);
+			showVariableInputModal = true;
+			return;
+		}
+		
+		// All variables are ready, execute the flow
+		executeFlowAfterVariableCheck();
+	}
+	
+	// Execute flow after variable check
+	async function executeFlowAfterVariableCheck() {
 		// Notify parent that execution is starting
 		dispatch('executionStart');
 
@@ -247,7 +304,8 @@
 			dispatch('executionComplete', {
 				success: !error,
 				error,
-				storedResponses
+				storedResponses,
+				variableValues
 			});
 		}
 	}
@@ -658,7 +716,9 @@
 		executionState = {};
 		isRunning = false;
 		executionLogs = []; // Clear execution logs
-
+		variableValues = {}; // Clear variable values
+		showVariableInputModal = false; // Close the variable input modal
+		
 		// Reset cookies if user wants to start fresh
 		if (preferences.serverCookieHandling) {
 			cookieStore.clear();
@@ -805,6 +865,10 @@
 			case 'func':
 				// Handle func:functionName(arg1,arg2,...)
 				return resolveFunctionTemplate(path.trim());
+				
+			case 'var':
+				// Handle var:variable_name
+				return resolveVariableTemplate(path.trim());
 
 			default:
 				console.warn(`Unknown template source: ${source}`);
@@ -923,6 +987,21 @@
 			return `{func:${expression}}`;
 		}
 	}
+	
+	// Helper function to resolve variable templates like var:variable_name
+	function resolveVariableTemplate(variableName: string): string {
+		if (variableValues.hasOwnProperty(variableName)) {
+			const value = variableValues[variableName];
+			const result = value !== null && value !== undefined ? String(value) : '';
+			
+			// Add to logs for debugging
+			addLog('debug', `Variable substitution: ${variableName}`, `Value: ${result}`);
+			
+			return result;
+		}
+		console.warn(`Variable not found: ${variableName}`);
+		return `{var:${variableName}}`;
+	}
 
 	// Function for adding debug logs about requests
 	function addRequestDebugLogs(path: string, reqHeaders: Record<string, string>) {
@@ -958,6 +1037,199 @@
 			console.error('Error clearing cookies:', error);
 		}
 	}
+	
+	// Function to prepare variables before executing the flow
+	function prepareVariables() {
+		// Reset variables values store
+		variableValues = {};
+		
+		// Fill variable values from flowData.variables with either values or defaults
+		flowData.variables.forEach((variable: any) => {
+			// If variable has a value, use it
+			if (variable.value !== undefined && variable.value !== null) {
+				variableValues[variable.name] = variable.value;
+			} 
+			// Otherwise use default value if available
+			else if (variable.defaultValue !== undefined && variable.defaultValue !== null) {
+				variableValues[variable.name] = variable.defaultValue;
+				// Also set as current value
+				variable.value = variable.defaultValue;
+			}
+		});
+		
+		// Log the variables for debugging
+		addLog('debug', 'Flow variables prepared', JSON.stringify(variableValues, null, 2));
+	}
+	
+	// Check if all required variables have values
+	function checkRequiredVariables(): boolean {
+		// Clear the missing values array
+		variablesWithMissingValues = [];
+		
+		// Check each variable
+		flowData.variables.forEach((variable: any) => {
+			if (variable.required && 
+			   (variable.value === undefined || variable.value === null) && 
+			   (variable.defaultValue === undefined || variable.defaultValue === null)) {
+				variablesWithMissingValues.push({ ...variable });
+			}
+		});
+		
+		// Return true if no missing values
+		return variablesWithMissingValues.length === 0;
+	}
+	
+	// Function to handle variable input form submission
+	function handleVariableFormSubmit() {
+		// Update the variable values
+		variablesWithMissingValues.forEach((variable) => {
+			// Find the corresponding variable in flowData.variables
+			const originalVar = flowData.variables.find((v: any) => v.name === variable.name);
+			if (originalVar) {
+				originalVar.value = variable.value;
+				variableValues[variable.name] = variable.value;
+			}
+		});
+		
+		// Close the modal
+		showVariableInputModal = false;
+		
+		// Continue with flow execution
+		executeFlowAfterVariableCheck();
+	}
+
+	// Handle saving a variable from the form
+	function handleSaveVariable(variable: any) {
+		console.log("Saving variable:", variable);
+		console.log("Current variables:", flowData.variables);
+		
+		// Ensure variables array exists
+		if (!flowData.variables) {
+			flowData.variables = [];
+		}
+		
+		// Check for duplicate name when adding a new variable
+		if (
+			variable.isNew &&
+			flowData.variables.some((v: any) => v.name === variable.name)
+		) {
+			alert('A variable with this name already exists.');
+			return false;
+		}
+
+		// Remove old variable if editing
+		if (!variable.isNew) {
+			flowData.variables = flowData.variables.filter((v: any) => v.name !== variable.name);
+		}
+
+		// Add the new or updated variable
+		const newVar = {
+			name: variable.name,
+			type: variable.type || 'string',
+			value: variable.value,
+			defaultValue: variable.defaultValue,
+			description: variable.description,
+			required: variable.required === true
+		};
+		
+		// Create a new array to ensure reactivity
+		const newVariables = [...flowData.variables, newVar];
+		
+		// Update flowData with the new variables array
+		flowData = {
+			...flowData,
+			variables: newVariables
+		};
+		
+		console.log("Updated variables:", flowData.variables);
+		
+		// Dispatch change event to notify parent components
+		dispatch('change', { flowData });
+		
+		// Notify parent of variables change
+		dispatch('change', { flowData });
+		
+		// Return success
+		return true;
+	}
+	
+	// Add, edit, or remove flow variables
+	function saveVariable() {
+		// Validate new variable data
+		if (!newVariable.name) {
+			return alert('Variable name is required');
+		}
+
+		if (editingVariable !== null) {
+			// Update existing variable
+			handleSaveVariable(newVariable);
+			editingVariable = null;
+		} else {
+			// Add new variable
+			handleSaveVariable({...newVariable, isNew: true});
+		}
+
+		// Reset new variable state
+		newVariable = {
+			name: '',
+			type: 'string',
+			value: '',
+			defaultValue: '',
+			description: '',
+			required: false
+		};
+	}
+
+	function editVariable(variable: any) {
+		newVariable = { ...variable };
+		editingVariable = { ...variable, isNew: false };
+	}
+
+	function removeVariable(variable: any) {
+		console.log("Removing variable:", variable);
+		console.log("Before removal:", flowData.variables);
+		
+		// Ensure the variables array exists
+		if (!flowData.variables) {
+			return;
+		}
+		
+		// Create new array without the removed variable
+		const updatedVariables = flowData.variables.filter((v: any) => v.name !== variable.name);
+		
+		// Update the whole flowData object to ensure reactivity
+		flowData = {
+			...flowData,
+			variables: updatedVariables
+		};
+		
+		console.log("After removal:", flowData.variables);
+		
+		// Dispatch change event to notify parent components
+		dispatch('change', { flowData });
+		
+		console.log("After removal:", flowData.variables);
+		
+		// Notify parent of variables change
+		dispatch('change', { flowData });
+	}
+
+	// Update variable values when flowData.variables change
+	$: {
+		variableValues = {};
+		if (flowData.variables) {
+			flowData.variables.forEach((variable: any) => {
+				variableValues[variable.name] = variable.value !== undefined ? variable.value : variable.defaultValue;
+			});
+		}
+	}
+
+	// Debug variable reactivity
+	$: if (flowData && flowData.variables) {
+		console.log('FlowRunner: flowData.variables updated', flowData.variables);
+	}
+	
+	// Add debugging to see if variable updates are being triggered
 </script>
 
 <div class="mb-6 rounded-lg border bg-white p-4 shadow-sm">
@@ -992,6 +1264,19 @@
 						Run Flow
 					</div>
 				{/if}
+			</button>
+			
+			<button
+				class="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium hover:bg-gray-50"
+				on:click={() => (showVariablesPanel = !showVariablesPanel)}
+				aria-label="{showVariablesPanel ? 'Hide' : 'Show'} variables panel"
+			>
+				<div class="flex items-center">
+					<svg class="mr-1 h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+						<path fill-rule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd" />
+					</svg>
+					{showVariablesPanel ? 'Hide Variables' : 'Variables'}
+				</div>
 			</button>
 
 			<button
@@ -1123,6 +1408,51 @@
 		</div>
 	{/if}
 
+	<!-- Flow Variables Status Panel -->
+	{#if flowData.variables && flowData.variables.length > 0}
+		<div class="mt-4 border-t pt-4">
+			<div class="flex items-center justify-between">
+				<h4 class="text-sm font-medium text-gray-700">
+					Flow Variables
+					{#if variablesWithMissingValues.length > 0}
+						<span class="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-700">
+							{variablesWithMissingValues.length} required
+						</span>
+					{/if}
+				</h4>
+				
+				<button
+					on:click={() => showVariableInputModal = true}
+					class="rounded bg-gray-100 px-2 py-1 text-xs text-gray-700 hover:bg-gray-200"
+					disabled={isRunning}
+				>
+					Edit Variables
+				</button>
+			</div>
+			
+			{#if Object.keys(variableValues).length > 0}
+				<div class="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+					{#each Object.entries(variableValues) as [name, value]}
+						<div class="text-sm">
+							<span class="font-medium">{name}:</span> 
+							{#if typeof value === 'string' && value.length > 20}
+								{value.substring(0, 18)}...
+							{:else if typeof value === 'object'}
+								[Object]
+							{:else}
+								{String(value)}
+							{/if}
+						</div>
+					{/each}
+				</div>
+			{:else}
+				<p class="mt-1 text-xs text-gray-500">
+					No variable values set. Variables can be referenced with {'{'}{'{'}{' '}var:name{' '}{'}'}{'}'}' syntax.
+				</p>
+			{/if}
+		</div>
+	{/if}
+
 	<!-- Execution Logs Section -->
 	<div class="mt-6 border-t pt-4">
 		<h4 class="mb-3 flex items-center justify-between text-sm font-medium text-gray-700">
@@ -1176,3 +1506,343 @@
 		</div>
 	</div>
 </div>
+
+<!-- Variable Input Modal - Only shown when required variables are missing -->
+{#if showVariableInputModal}
+	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+		<div class="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+			<div class="mb-4 flex items-center justify-between">
+				<h3 class="text-lg font-medium">Required Variables</h3>
+				<button
+					class="text-gray-500 hover:text-gray-700"
+					on:click={() => showVariableInputModal = false}
+					aria-label="Close modal"
+				>
+					<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+					</svg>
+				</button>
+			</div>
+			
+			<p class="mb-4 text-sm text-gray-600">
+				The following variables need values to run the flow:
+			</p>
+			
+			<div class="mb-6 max-h-96 overflow-y-auto">
+				{#each variablesWithMissingValues as variable, i}
+					<div class="mb-4">
+						<label for={`var-${variable.name}`} class="mb-1 block text-sm font-medium text-gray-700">
+							{variable.name} {variable.required ? '*' : ''}
+						</label>
+						
+						{#if variable.description}
+							<p class="mb-2 text-xs text-gray-500">{variable.description}</p>
+						{/if}
+						
+						{#if variable.type === 'string'}
+							<input
+								id={`var-${variable.name}`}
+								type="text"
+								class="block w-full rounded-md border border-gray-300 p-2 shadow-sm"
+								bind:value={variable.value}
+							/>
+						{:else if variable.type === 'number'}
+							<input
+								id={`var-${variable.name}`}
+								type="number"
+								class="block w-full rounded-md border border-gray-300 p-2 shadow-sm"
+								bind:value={variable.value}
+							/>
+						{:else if variable.type === 'boolean'}
+							<label class="flex items-center" for={`var-${variable.name}`}>
+								<input
+									id={`var-${variable.name}`}
+									type="checkbox"
+									class="h-4 w-4 rounded border-gray-300 text-blue-600"
+									bind:checked={variable.value}
+								/>
+								<span class="ml-2 text-sm text-gray-700">Enabled</span>
+							</label>
+						{:else if variable.type === 'object' || variable.type === 'array'}
+							<div>
+								<textarea
+									id={`var-${variable.name}`}
+									class="block w-full rounded-md border border-gray-300 font-mono p-2 shadow-sm"
+									rows="4"
+									value={variable.value ? JSON.stringify(variable.value, null, 2) : ''}
+									on:input={(e) => {
+										const target = e.target as HTMLTextAreaElement;
+										try {
+											variable.value = JSON.parse(target.value);
+										} catch (error) {
+											// Don't update if invalid JSON
+										}
+									}}
+								></textarea>
+								<p class="mt-1 text-xs text-gray-500">Enter a valid JSON {variable.type}</p>
+							</div>
+						{:else}
+							<div class="rounded-md bg-gray-100 p-2">
+								<span class="italic text-gray-700">No input required for {variable.type} type</span>
+							</div>
+						{/if}
+					</div>
+				{/each}
+			</div>
+			
+			<div class="flex justify-end space-x-3">
+				<button
+					class="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium hover:bg-gray-50"
+					on:click={() => showVariableInputModal = false}
+				>
+					Cancel
+				</button>
+				<button
+					class="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+					on:click={handleVariableFormSubmit}
+				>
+					Run Flow
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- Variables Management Panel - Sliding panel for adding/editing variables -->
+{#if showVariablesPanel}
+	<div
+		class="fixed right-0 top-0 bottom-0 h-full w-96 bg-white shadow-xl z-50 p-6 overflow-auto border-l border-gray-200"
+	>
+		<div class="flex justify-between items-center mb-4">
+			<h3 class="text-lg font-semibold">Flow Variables</h3>
+			<button 
+				class="p-2 rounded-full hover:bg-gray-200"
+				on:click={() => (showVariablesPanel = false)}
+				aria-label="Close variables panel"
+			>
+				<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+				</svg>
+			</button>
+		</div>
+
+		<!-- Variables List -->
+		<div class="mb-4">
+			<div class="flex justify-between mb-2">
+				<h4 class="font-medium">Defined Variables</h4>
+				<button
+					class="px-2 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+					on:click={() => {
+						editingVariable = {
+							name: '',
+							type: 'string',
+							value: undefined,
+							defaultValue: undefined,
+							description: '',
+							required: false,
+							isNew: true
+						};
+					}}
+				>
+					Add Variable
+				</button>
+			</div>
+
+			{#if flowData.variables && flowData.variables.length > 0}
+				{@const varCount = flowData.variables.length}
+				<div class="bg-blue-50 p-2 mb-2 text-sm">
+					Found {varCount} variable{varCount !== 1 ? 's' : ''}
+				</div>
+				<div class="overflow-x-auto">
+					<table class="w-full text-sm">
+						<thead class="bg-gray-50 text-gray-600">
+							<tr>
+								<th class="px-2 py-1 text-left">Name</th>
+								<th class="px-2 py-1 text-left">Type</th>
+								<th class="px-2 py-1 text-left">Required</th>
+								<th class="px-2 py-1 text-left">Actions</th>
+							</tr>
+						</thead>
+						<tbody class="divide-y divide-gray-200">
+							{#each flowData.variables as variable, i (i)}
+								<tr class="hover:bg-gray-50">
+									<td class="px-2 py-2">{variable.name}</td>
+									<td class="px-2 py-2">{variable.type || 'string'}</td>
+									<td class="px-2 py-2">{variable.required ? 'Yes' : 'No'}</td>
+									<td class="px-2 py-2 space-x-1">
+										<button
+											class="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded"
+											on:click={() => editVariable(variable)}
+										>
+											Edit
+										</button>
+										<button
+											class="px-2 py-1 text-xs bg-red-100 hover:bg-red-200 text-red-700 rounded"
+											on:click={() => removeVariable(variable)}
+										>
+											Remove
+										</button>
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			{:else}
+				<div class="text-center p-4 bg-gray-50 rounded-md border border-gray-200">
+					<p class="text-gray-500">No variables defined yet. Add a variable to get started.</p>
+				</div>
+			{/if}
+		</div>
+
+		<!-- Variable Editor Form -->
+		{#if editingVariable !== null}
+			{@const variable = editingVariable}
+			<div class="bg-gray-50 border border-gray-200 p-4 rounded-md">
+				<h4 class="font-medium mb-2">
+					{variable.isNew ? 'Add New Variable' : 'Edit Variable'}
+				</h4>
+				<form
+					on:submit|preventDefault={() => {
+						if (handleSaveVariable(variable)) {
+							editingVariable = null;
+						}
+					}}
+				>
+					<div class="mb-2">
+						<label for="var-name" class="block text-sm font-medium mb-1">Name</label>
+						<input
+							id="var-name"
+							type="text"
+							class="input input-sm input-bordered w-full"
+							bind:value={variable.name}
+							required
+						/>
+					</div>
+
+					<div class="mb-2">
+						<label for="var-type" class="block text-sm font-medium mb-1">Type</label>
+						<select
+							id="var-type"
+							class="select select-sm select-bordered w-full"
+							bind:value={variable.type}
+						>
+							<option value="string">String</option>
+							<option value="number">Number</option>
+							<option value="boolean">Boolean</option>
+							<option value="object">Object</option>
+							<option value="array">Array</option>
+							<option value="null">Null</option>
+						</select>
+					</div>
+
+					<div class="mb-2">
+						<label for="var-default" class="block text-sm font-medium mb-1">Default Value</label>
+						{#if variable.type === 'string'}
+							<input
+								id="var-default"
+								type="text"
+								class="input input-sm input-bordered w-full"
+								bind:value={variable.defaultValue}
+							/>
+						{:else if variable.type === 'number'}
+							<input
+								id="var-default"
+								type="number"
+								class="input input-sm input-bordered w-full"
+								bind:value={variable.defaultValue}
+							/>
+						{:else if variable.type === 'boolean'}
+							<select
+								id="var-default"
+								class="select select-sm select-bordered w-full"
+								bind:value={variable.defaultValue}
+							>
+								<option value={undefined}>No default</option>
+								<option value={true}>True</option>
+								<option value={false}>False</option>
+							</select>
+						{:else if variable.type === 'object' || variable.type === 'array'}
+							<textarea
+								id="var-default"
+								class="textarea textarea-sm textarea-bordered w-full h-20"
+								placeholder="Enter valid JSON"
+								bind:value={variable.defaultValue}
+							></textarea>
+						{:else}
+							<input
+								id="var-default"
+								type="text"
+								class="input input-sm input-bordered w-full"
+								disabled
+								value="null"
+							/>
+						{/if}
+					</div>
+
+					<div class="mb-2">
+						<label for="var-description" class="block text-sm font-medium mb-1">Description</label>
+						<textarea
+							id="var-description"
+							class="textarea textarea-sm textarea-bordered w-full"
+							bind:value={variable.description}
+						></textarea>
+					</div>
+
+					<div class="mb-4">
+						<label class="flex items-center">
+							<input
+								type="checkbox"
+								class="checkbox checkbox-sm"
+								bind:checked={variable.required}
+							/>
+							<span class="ml-2 text-sm">Required</span>
+						</label>
+					</div>
+
+					<div class="flex justify-end space-x-2">
+						<button
+							type="button"
+							class="btn btn-sm btn-ghost"
+							on:click={() => {
+								editingVariable = null;
+							}}
+						>
+							Cancel
+						</button>
+						<button type="submit" class="btn btn-sm btn-primary">Save</button>
+					</div>
+				</form>
+			</div>
+		{/if}
+	</div>
+{/if}
+
+<!-- Only show these controls if showButtons is true (independent mode) -->
+{#if showButtons !== false}
+	<div class="mb-4 flex justify-between">
+		<div class="space-x-2">
+			<button
+				class="btn btn-primary"
+				disabled={isRunning || !flowData.steps.length}
+				on:click={() => runFlow()}
+			>
+				{#if isRunning}
+					Running...
+				{:else}
+					Run Flow
+				{/if}
+			</button>
+			<button
+				class="btn btn-outline"
+				on:click={() => (showVariablesPanel = !showVariablesPanel)}
+				class:btn-active={showVariablesPanel}
+			>
+				{showVariablesPanel ? 'Hide Variables' : 'Variables'}
+			</button>
+		</div>
+		{#if currentStep !== null}
+			<button class="btn btn-outline btn-error" on:click={() => stopExecution()}>Stop</button>
+		{/if}
+	</div>
+{/if}

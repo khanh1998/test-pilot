@@ -3,9 +3,10 @@
   import EndpointSelector from './EndpointSelector.svelte';
   import FlowRunner from './FlowRunner.svelte';
   import { fade } from 'svelte/transition';
+  import type { TestFlowData, Endpoint } from './components/types';
   
-  export let flowData: any;
-  export let endpoints: any[] = [];
+  export let flowData: TestFlowData;
+  export let endpoints: Endpoint[] = [];
   export let apiHost: string = '';
   
   let isRunning = false;
@@ -18,6 +19,9 @@
   
   // Execution options panel
   let showExecutionOptions = false;
+  
+  // Variables panel control
+  let showVariablesPanel = false;
   
   // Execution preferences - default values
   let preferences = {
@@ -47,9 +51,35 @@
   import { createEventDispatcher } from 'svelte';
   const dispatch = createEventDispatcher();
 
-  function handleChange() {
-    // Update the local variable 
-    flowData = { ...flowData };
+  // Create event handlers for external triggers
+  function handleShowVariablesPanel(event: CustomEvent) {
+    showVariablesPanel = true;
+  }
+  
+  // Add event listener on mount
+  onMount(() => {
+    // Listen for custom events on the component's node
+    const node = document.querySelector('svelte-component[this="TestFlowEditor"]');
+    if (node) {
+      node.addEventListener('showVariablesPanel', handleShowVariablesPanel as EventListener);
+      
+      return () => {
+        node.removeEventListener('showVariablesPanel', handleShowVariablesPanel as EventListener);
+      };
+    }
+  });
+  
+  function handleChange(event?: any) {
+    // If event has flowData in detail, use it
+    if (event && event.detail && event.detail.flowData) {
+      console.log("Received flowData change:", event.detail.flowData);
+      flowData = { ...event.detail.flowData };
+    } else {
+      // Otherwise update the local variable 
+      console.log("Regular change in TestFlowEditor");
+      flowData = { ...flowData };
+    }
+    
     // Dispatch an event to notify the parent component
     dispatch('change', flowData);
   }
@@ -147,6 +177,22 @@
     }
   }
   
+  // Execute a single step from the UI
+  function executeStep(event: CustomEvent) {
+    const { stepIndex } = event.detail;
+    const step = flowData.steps[stepIndex];
+    
+    if (flowRunner && step) {
+      // We're not resetting the execution state so that previous results remain visible
+      isRunning = true;
+      
+      flowRunner.executeSingleStep(step, stepIndex).catch(err => {
+        console.error(`Error executing step ${step.step_id}:`, err);
+        isRunning = false;
+      });
+    }
+  }
+  
   // Stop the flow execution
   function handleStop() {
     if (flowRunner) {
@@ -211,6 +257,21 @@
           Reset
         </button>
         
+        <!-- Variables Button -->
+        <button
+          class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 mr-2"
+          on:click={() => {
+            // Toggle variables panel using the local state
+            showVariablesPanel = !showVariablesPanel;
+          }}
+          disabled={isRunning}
+        >
+          <svg class="h-4 w-4 mr-1.5" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd" />
+          </svg>
+          Variables
+        </button>
+          
         <!-- Run Flow Button -->
         <button
           class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white {isRunning ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'}"
@@ -316,7 +377,7 @@
   {/if}
   
   <!-- Hidden Flow Runner Component (bind to access its methods) -->
-  <div class="hidden">
+  <div>
     <FlowRunner 
       bind:this={flowRunner}
       {flowData}
@@ -324,7 +385,21 @@
       bind:isRunning
       bind:executionState
       bind:preferences
+      bind:showVariablesPanel={showVariablesPanel}
+      showButtons={false}
       on:reset={handleReset}
+      on:change={(event) => {
+        console.log("Change event from FlowRunner:", event.detail);
+        if (event.detail && event.detail.flowData) {
+          // Handle case when variables are updated
+          if (event.detail.flowData.variables) {
+            console.log("Variables updated in FlowRunner:", event.detail.flowData.variables);
+          }
+          
+          flowData = { ...event.detail.flowData };
+          handleChange();
+        }
+      }}
       on:executionComplete={handleExecutionComplete}
       on:executionStateUpdate={handleExecutionStateUpdate}
       on:endpointStateUpdate={(event) => {
@@ -355,6 +430,7 @@
           on:removeEndpoint={handleRemoveEndpoint}
           on:moveStep={handleMoveStep}
           on:change={handleChange}
+          on:runStep={executeStep}
         >
           <div slot="endpoint-selector">
             <EndpointSelector 

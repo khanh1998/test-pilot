@@ -108,7 +108,8 @@
           flowJson: {
             settings: { api_host: "" },
             steps: [],
-            assertions: []
+            assertions: [],
+            variables: []
           }
         })
       });
