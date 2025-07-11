@@ -67,7 +67,9 @@
     
     // Check if all endpoints have been processed
     const endpointStates = step.endpoints.map((stepEndpoint: StepEndpoint, index: number) => {
-      const endpointId = getEndpointDisplayId(stepEndpoint.endpoint_id, index);
+      // IMPORTANT: We've updated the endpointId format in FlowRunner to use stepId-endpointIndex
+      // instead of endpoint.endpoint_id-endpointIndex for better user reference
+      const endpointId = `${step.step_id}-${index}`;
       return currentState[endpointId]?.status || 'none';
     });
     
@@ -315,6 +317,7 @@
               stepEndpoint={stepEndpoint}
               {endpointIndex}
               {stepIndex}
+              stepId={step.step_id}
               executionState={executionStore}
               {duplicateCount}
               {instanceIndex}
@@ -372,6 +375,7 @@
       stepEndpoint={step.endpoints[safeIndex]}
       {stepIndex}
       endpointIndex={safeIndex}
+      stepId={step.step_id}
       {duplicateCount}
       {instanceIndex}
       {executionState}

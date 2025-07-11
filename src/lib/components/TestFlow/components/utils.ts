@@ -19,7 +19,10 @@ export function getStatusColor(status: number): string {
 
 // Helper to generate unique display ID for an endpoint in a step
 export function getEndpointDisplayId(endpointId: string | number, endpointIndex: number): string {
-  // Make sure this matches the format used in FlowRunner.svelte's executeEndpoint method
+  // This was previously generating using endpointId-endpointIndex format
+  // Now in FlowRunner.svelte we're using stepId-endpointIndex format
+  // TODO: Update this function to take stepId as a parameter instead of endpointId
+  // For now, this function should only be used when creating display IDs, not for execution state lookup
   return `${endpointId}-${endpointIndex}`;
 }
 

@@ -88,6 +88,8 @@
   // Add a new step to the flow
   function addNewStep() {
     // Use consistent step ID format matching the parent component
+    // This step_id is important as it's used to create the endpointId (${stepId}-${endpointIndex})
+    // which is used for referencing responses in templates
     const newStepId = `step${flowData.steps.length + 1}`;
     
     flowData.steps.push({
@@ -115,6 +117,7 @@
     console.log('Execution completed:', event.detail);
     isRunning = false;
     // Force an update of all components that depend on the execution state
+    // This maintains the updated endpoint ID format (stepId-endpointIndex)
     executionStore.update(state => ({ ...state }));
     
     // Dispatch event to parent
@@ -124,6 +127,7 @@
   // Handle execution state update from FlowRunner
   function handleExecutionStateUpdate(event: CustomEvent) {
     // Update the execution state with the new state from FlowRunner
+    // The execution state now uses stepId-endpointIndex as keys instead of endpoint_id-endpointIndex
     executionState = event.detail;
     // Update the store to trigger reactivity across all components
     executionStore.set(executionState);
@@ -326,6 +330,7 @@
       on:endpointStateUpdate={(event) => {
         const { endpointId, state } = event.detail;
         // Force the store to update for better reactivity
+        // endpointId is now using the format `${stepId}-${endpointIndex}` for better user reference
         executionStore.update(store => {
           return { ...store, [endpointId]: state };
         });

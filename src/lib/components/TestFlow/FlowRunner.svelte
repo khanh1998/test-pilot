@@ -307,7 +307,9 @@
 			return;
 		}
 
-		const endpointId = `${endpoint.endpoint_id}-${endpointIndex}`;
+		// Use stepId-endpointIndex format for easier reference by users in templates
+		// This makes it more intuitive than using the internal endpoint_id which users don't see
+		const endpointId = `${stepId}-${endpointIndex}`;
 
 		// Set initial status - create a new object to trigger reactivity
 		executionState = {
@@ -473,8 +475,8 @@
 
 				// Store cookies from the response
 				if (proxyData.cookies && proxyData.cookies.length > 0) {
-					// Generate a unique ID for this endpoint
-					const endpointKey = `${stepId}-${endpointIndex}`;
+					// Generate a unique ID for this endpoint using the same format as endpointId
+					const endpointKey = endpointId;
 
 					// Store cookies by endpoint
 					cookieStore.set(
@@ -492,7 +494,7 @@
 						timestamp: new Date(),
 						level: 'info',
 						message: `Received ${proxyData.cookies.length} cookies from server`,
-						details: `Cookies stored for endpoint: ${endpointKey}`
+						details: `Cookies stored for step: ${endpointKey}`
 					});
 				}
 

@@ -21,8 +21,11 @@
   
   let activeTab: 'request' | 'response' | 'headers' = 'response';
   
-  // Get the endpoint ID
-  $: endpointId = getEndpointDisplayId(stepEndpoint.endpoint_id, endpointIndex);
+  // Additional prop needed for the new endpointId format
+  export let stepId: string;
+
+  // Get the endpoint ID - using stepId-endpointIndex format now instead of endpointId-endpointIndex
+  $: endpointId = `${stepId}-${endpointIndex}`;
   $: executionData = executionState[endpointId] || {};
   
   function closeResponseViewer() {

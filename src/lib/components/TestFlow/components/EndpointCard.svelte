@@ -15,8 +15,12 @@
   import { createEventDispatcher } from 'svelte';
   const dispatch = createEventDispatcher();
   
+  // Additional prop for step ID
+  export let stepId: string;
+
   // Generate a unique ID for this endpoint instance
-  const endpointDisplayId = getEndpointDisplayId(stepEndpoint.endpoint_id, endpointIndex);
+  // Use the stepId-endpointIndex format that matches FlowRunner.svelte
+  const endpointDisplayId = `${stepId}-${endpointIndex}`;
 
   // Create reactive derived values to ensure the component updates when executionState changes
   $: {
