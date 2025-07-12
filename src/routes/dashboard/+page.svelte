@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
-  import { authStore } from '$lib/features/auth/stores/auth';
-  import type { User } from '$lib/features/auth/stores/auth';
+  import { authStore } from '$lib/store/auth';
+  import type { User } from '$lib/store/auth';
 
   // State
   let loading = false;

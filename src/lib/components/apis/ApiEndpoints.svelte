@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { getApiDetails } from '$lib/http_client/apis';
+  import { getApiEndpoints } from '$lib/http_client/apiEndpoints';
 
   export let apiId: number;
 
@@ -67,19 +69,15 @@
 
   onMount(async () => {
     try {
-      const response = await fetch(`/api/apis/${apiId}/endpoints`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('authToken')}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`Error ${response.status}: ${response.statusText}`);
+      const apiDetails = await getApiDetails(apiId.toString());
+      if (apiDetails) {
+        api = apiDetails.api;
       }
 
-      const data = await response.json();
-      api = data.api;
-      endpoints = data.endpoints;
+      const apiEndpoints = await getApiEndpoints(apiId.toString());
+      if (apiEndpoints) {
+        endpoints = apiEndpoints.endpoints;
+      }
       loading = false;
     } catch (err: unknown) {
       error = err instanceof Error ? err.message : 'An error occurred while fetching API data';

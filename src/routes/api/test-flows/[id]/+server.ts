@@ -1,9 +1,9 @@
 import { json } from '@sveltejs/kit';
-import { db } from '$lib/server/drizzle';
+import { db } from '$lib/server/db/drizzle';
 import { testFlows, testFlowApis, apis, apiEndpoints } from '$lib/server/db/schema';
 import { eq, and, inArray } from 'drizzle-orm';
 import type { RequestEvent } from '@sveltejs/kit';
-import type { Endpoint, Parameter } from '$lib/features/test-flows/components';
+import type { Endpoint, Parameter } from '$lib/components/test-flows';
 
 // Get a specific test flow by ID
 export async function GET({ params, locals }: RequestEvent) {

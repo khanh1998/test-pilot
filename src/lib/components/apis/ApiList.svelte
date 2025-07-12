@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
+  import { getApiList, deleteApi as deleteApiStore } from '$lib/http_client/apis';
 
-  let apis: {
+  let apis : {
     id: number;
     name: string;
     description: string;
@@ -10,8 +11,7 @@
     createdAt: string;
     updatedAt: string;
     endpointCount: number;
-  }[] = [];
-
+  }[]  = []; // Initialize with current store value
   let loading = true;
   let error: string | null = null;
   let isDeleting = false;
@@ -21,18 +21,8 @@
   async function loadApis() {
     try {
       loading = true;
-      const response = await fetch('/api/apis', {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('authToken')}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`Error ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      apis = data.apis;
+      const apiList = await getApiList();
+      apis = apiList.apis;
     } catch (err) {
       error = err instanceof Error ? err.message : 'An error occurred while fetching APIs';
     } finally {
@@ -60,19 +50,7 @@
         deleteApiId = apiId;
         deleteError = null;
 
-        const response = await fetch('/api/apis', {
-          method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${localStorage.getItem('authToken')}`
-          },
-          body: JSON.stringify({ id: apiId })
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || `Failed to delete API (${response.status})`);
-        }
+        await deleteApiStore(apiId.toString()); // Use the deleteApi from the store
 
         // Reload the API list
         await loadApis();

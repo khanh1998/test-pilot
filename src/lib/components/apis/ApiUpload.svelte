@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
+  import { uploadSwaggerFile } from '$lib/http_client/apis';
 
   let fileInput: HTMLInputElement;
   let nameInput: string = '';
@@ -39,32 +40,8 @@
       uploading = true;
       error = null;
 
-      // Create form data
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('name', nameInput.trim());
-      if (descriptionInput.trim()) {
-        formData.append('description', descriptionInput.trim());
-      }
-      if (hostInput.trim()) {
-        formData.append('host', hostInput.trim());
-      }
+      await uploadSwaggerFile(file, nameInput.trim(), descriptionInput.trim(), hostInput.trim());
 
-      // Send the request
-      const response = await fetch('/api/swagger/upload', {
-        method: 'POST',
-        body: formData,
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('authToken')}`
-        }
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `Error ${response.status}: ${response.statusText}`);
-      }
-
-      await response.json();
       goto('/dashboard/apis');
     } catch (err) {
       error = err instanceof Error ? err.message : 'An error occurred during upload';

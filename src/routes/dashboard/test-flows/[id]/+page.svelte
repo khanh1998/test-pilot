@@ -2,18 +2,10 @@
   import { page } from '$app/stores';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import type {
-    TestFlowData,
-    FlowVariable,
-    FlowStep,
-    FlowAssertion
-  } from '$lib/features/test-flows/components/types';
+  import type { TestFlowData } from '$lib/components/test-flows/types';
 
   // Import the components we created
-  import EndpointSelector from '$lib/features/test-flows/components/EndpointSelector.svelte';
-  import StepEditor from '$lib/features/test-flows/components/StepEditor.svelte';
-  import FlowRunner from '$lib/features/test-flows/components/FlowRunner.svelte';
-  import TestFlowEditor from '$lib/features/test-flows/components/TestFlowEditor.svelte';
+  import TestFlowEditor from '$lib/components/test-flows/TestFlowEditor.svelte';
 
   $: testFlowId = parseInt($page.params.id || '0');
 

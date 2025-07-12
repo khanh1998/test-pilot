@@ -1,4 +1,4 @@
-import { authStore } from '../auth/stores/auth';
+import { authStore } from '$lib/store/auth';
 
 /**
  * Utility function to make authenticated API requests

@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { db } from '$lib/server/drizzle';
+import { db } from '$lib/server/db/drizzle';
 import { testFlows, testFlowApis, apis } from '$lib/server/db/schema';
 import { eq, and, inArray } from 'drizzle-orm';
 import type { RequestEvent } from '@sveltejs/kit';

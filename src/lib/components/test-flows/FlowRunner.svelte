@@ -852,7 +852,7 @@
     }
   }
 
-  import * as templateFunctionsModule from '../utils/templateFunctions';
+  import * as templateFunctionsModule from './templateFunctions';
 
   // Create an indexed object for dynamic function access
   const templateFunctions: Record<string, (...args: any[]) => any> = {};

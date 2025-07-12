@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
-import { db } from '$lib/server/drizzle';
+import { db } from '$lib/server/db/drizzle';
 import { apis, apiEndpoints } from '$lib/server/db/schema';
-import { parseSwaggerSpec, extractEndpoints, extractHost } from '$lib/features/apis/swagger/parser';
+import { parseSwaggerSpec, extractEndpoints, extractHost } from '$lib/server/swagger/parser';
 import type { RequestEvent } from '@sveltejs/kit';
 
 export async function POST({ request, locals }: RequestEvent) {

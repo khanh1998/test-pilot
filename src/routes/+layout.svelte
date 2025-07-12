@@ -1,7 +1,7 @@
 <script lang="ts">
   import '../app.css';
   import { onMount } from 'svelte';
-  import { authStore } from '$lib/features/auth/stores/auth';
+  import { authStore } from '$lib/store/auth';
 
   let { children } = $props();
   let isLoading = $state(true);

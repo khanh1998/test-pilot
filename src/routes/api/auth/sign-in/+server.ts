@@ -1,10 +1,10 @@
 import { json, error } from '@sveltejs/kit';
-import { db } from '$lib/server/drizzle';
+import { db } from '$lib/server/db/drizzle';
 import { users } from '$lib/server/db/schema';
 import { createClient } from '@supabase/supabase-js';
 import { eq } from 'drizzle-orm';
 import type { RequestEvent } from '@sveltejs/kit';
-import { generateToken } from '$lib/features/auth/server/auth';
+import { generateToken } from '$lib/server/auth/auth';
 
 // Create a Supabase admin client for server-side operations
 const supabaseAdmin = createClient(

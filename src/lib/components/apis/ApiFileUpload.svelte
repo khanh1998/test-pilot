@@ -1,13 +1,14 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
+  import { uploadSwaggerFile, updateSwaggerFile } from '$lib/http_client/apis';
 
   export let apiId: number | null = null; // If provided, we're in update mode
   export let apiName: string = '';
   export let apiDescription: string = '';
   export let apiHost: string = '';
 
-  // HTMLInputElement reference for the file input
-  let fileInput: HTMLInputElement | null = null;
+  // Simple state management
+  let fileInput: HTMLInputElement;
   let nameInput: string = apiName;
   let descriptionInput: string = apiDescription;
   let hostInput: string = apiHost;
@@ -19,59 +20,54 @@
 
   const isUpdateMode = apiId !== null;
 
+  // Simple function to trigger file input click
   function openFileSelector() {
-    console.log('Opening file selector, fileInput:', fileInput);
     if (fileInput) {
       fileInput.click();
     }
   }
 
-  function handleFileChange(event: Event) {
-    const input = event.target as HTMLInputElement;
-    if (input.files && input.files.length > 0) {
-      file = input.files[0];
-      fileError = null;
+  // Handle file selection from input or drop
+  function handleFile(newFile: File) {
+    file = newFile;
+    fileError = null;
 
-      // Auto-fill the name field if it's empty and not in update mode
-      if (!nameInput && !isUpdateMode) {
-        const fileName = file.name.replace(/\.(json|yaml|yml)$/, '');
-        nameInput = fileName.replace(/-|_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase()); // Capitalize words
-      }
+    // Auto-fill the name field if it's empty and not in update mode
+    if (!nameInput && !isUpdateMode) {
+      const fileName = newFile.name.replace(/\.(json|yaml|yml)$/, '');
+      nameInput = fileName.replace(/-|_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase()); // Capitalize words
     }
   }
 
+  // Handle file input change event
+  function handleFileChange(event: Event) {
+    const input = event.target as HTMLInputElement;
+    if (input.files && input.files.length > 0) {
+      handleFile(input.files[0]);
+    }
+  }
+
+  // Simplified drag event handlers
   function handleDragEnter(event: DragEvent) {
     event.preventDefault();
-    event.stopPropagation();
     isDragging = true;
   }
 
   function handleDragLeave(event: DragEvent) {
     event.preventDefault();
-    event.stopPropagation();
     isDragging = false;
   }
 
   function handleDragOver(event: DragEvent) {
     event.preventDefault();
-    event.stopPropagation();
-    isDragging = true;
   }
 
   function handleDrop(event: DragEvent) {
     event.preventDefault();
-    event.stopPropagation();
     isDragging = false;
 
     if (event.dataTransfer && event.dataTransfer.files.length > 0) {
-      file = event.dataTransfer.files[0];
-      fileError = null;
-
-      // Auto-fill the name field if it's empty and not in update mode
-      if (!nameInput && !isUpdateMode) {
-        const fileName = file.name.replace(/\.(json|yaml|yml)$/, '');
-        nameInput = fileName.replace(/-|_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase()); // Capitalize words
-      }
+      handleFile(event.dataTransfer.files[0]);
     }
   }
 
@@ -90,39 +86,14 @@
       uploading = true;
       error = null;
 
-      // Create form data
-      const formData = new FormData();
-      formData.append('file', file);
-
-      if (!isUpdateMode) {
-        // Only include name/description for new APIs
-        formData.append('name', nameInput.trim());
-        if (descriptionInput.trim()) {
-          formData.append('description', descriptionInput.trim());
+      if (isUpdateMode) {
+        if (apiId === null) {
+          throw new Error('API ID is required for update mode.');
         }
+        await updateSwaggerFile(apiId.toString(), file);
+      } else {
+        await uploadSwaggerFile(file, nameInput.trim(), descriptionInput.trim(), hostInput.trim());
       }
-
-      if (hostInput.trim()) {
-        formData.append('host', hostInput.trim());
-      }
-
-      // Send the request - different endpoints for create vs update
-      const endpoint = isUpdateMode ? `/api/swagger/update/${apiId}` : '/api/swagger/upload';
-
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        body: formData,
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('authToken')}`
-        }
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `Error ${response.status}: ${response.statusText}`);
-      }
-
-      await response.json();
 
       // Redirect based on the operation
       if (isUpdateMode) {
@@ -154,7 +125,7 @@
     <div class="space-y-4">
       <!-- File Upload -->
       <div>
-        <label for="file" class="mb-1 block text-sm font-medium text-gray-700">
+        <label for="file-upload" class="mb-1 block text-sm font-medium text-gray-700">
           Specification File (YAML or JSON)
         </label>
         <div
@@ -171,7 +142,7 @@
           on:drop={handleDrop}
         >
           {#if file}
-            <div class="space-y-1">
+            <div class="space-y-2">
               <div class="text-sm font-medium text-blue-500">
                 <svg
                   class="mr-1 inline-block h-5 w-5"
@@ -188,15 +159,18 @@
                 {file.name}
               </div>
               <p class="text-xs text-gray-500">
-                {Math.round(file.size / 1024)} KB • {file.type ||
-                  (file.name.endsWith('.yaml') || file.name.endsWith('.yml')
-                    ? 'application/yaml'
-                    : 'application/json')}
+                {Math.round(file.size / 1024)} KB
               </p>
-              <p class="text-xs text-gray-500">Click to change file</p>
+              <button
+                type="button"
+                class="mt-1 text-sm text-blue-500 underline hover:text-blue-600"
+                on:click={openFileSelector}
+              >
+                Change file
+              </button>
             </div>
           {:else}
-            <div class="space-y-1">
+            <div class="space-y-4">
               <svg
                 class="mx-auto h-12 w-12 text-gray-400"
                 stroke="currentColor"
@@ -211,30 +185,30 @@
                   stroke-linejoin="round"
                 />
               </svg>
-              <div class="flex justify-center text-sm">
-                <label
-                  for="file-upload"
-                  class="relative cursor-pointer rounded-md font-medium text-blue-600 focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2 focus-within:outline-none hover:text-blue-500"
+              <div>
+                <p class="mb-3 text-gray-500">Drag and drop a YAML or JSON file, or</p>
+                <button
+                  type="button"
+                  class="rounded bg-blue-500 px-4 py-2 text-white hover:bg-blue-600"
+                  on:click={openFileSelector}
                 >
-                  <span>Upload a file</span>
-                </label>
-                <p class="pl-1 text-gray-500">or drag and drop</p>
+                  Browse files
+                </button>
               </div>
-              <p class="text-xs text-gray-500">YAML or JSON up to 10MB</p>
             </div>
           {/if}
-
-          <!-- File input (hidden) -->
-          <input
-            bind:this={fileInput}
-            type="file"
-            id="file-upload"
-            name="file"
-            accept=".yaml,.yml,.json"
-            class="hidden"
-            on:change={handleFileChange}
-          />
         </div>
+
+        <!-- File input element, hidden but accessible via click handlers -->
+        <input
+          bind:this={fileInput}
+          type="file"
+          id="file-upload-input"
+          name="file"
+          accept=".yaml,.yml,.json"
+          class="hidden"
+          on:change={handleFileChange}
+        />
 
         {#if fileError}
           <p class="mt-2 text-sm text-red-600">

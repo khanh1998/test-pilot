@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import type { RequestEvent } from '@sveltejs/kit';
 import { error } from '@sveltejs/kit';
-import { db } from '$lib/server/drizzle';
+import { db } from '$lib/server/db/drizzle';
 import { users } from '$lib/server/db/schema';
 import { eq } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';

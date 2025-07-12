@@ -1,5 +1,5 @@
 <script lang="ts">
-  import ApiEndpoints from '$lib/features/apis/components/ApiEndpoints.svelte';
+  import ApiEndpoints from '$lib/components/apis/ApiEndpoints.svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
 

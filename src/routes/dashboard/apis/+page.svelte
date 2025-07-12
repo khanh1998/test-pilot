@@ -1,5 +1,5 @@
 <script lang="ts">
-  import ApiList from '$lib/features/apis/components/ApiList.svelte';
+  import ApiList from '$lib/components/apis/ApiList.svelte';
 </script>
 
 <div class="container mx-auto px-4 py-8">

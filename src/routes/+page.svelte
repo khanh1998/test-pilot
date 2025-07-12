@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { authStore } from '$lib/features/auth/stores/auth';
+  import { authStore } from '$lib/store/auth';
 
   // Form state
   let email = '';

@@ -1,4 +1,4 @@
-import { db } from '$lib/server/drizzle';
+import { db } from '$lib/server/db/drizzle';
 import { users } from '$lib/server/db/schema';
 import { json } from '@sveltejs/kit';
 
