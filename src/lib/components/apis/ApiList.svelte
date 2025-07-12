@@ -2,16 +2,9 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { getApiList, deleteApi as deleteApiStore } from '$lib/http_client/apis';
+  import type { Api } from '$lib/types/api';
 
-  let apis : {
-    id: number;
-    name: string;
-    description: string;
-    host?: string;
-    createdAt: string;
-    updatedAt: string;
-    endpointCount: number;
-  }[]  = []; // Initialize with current store value
+  let apis : Api[] = []; // Initialize with current store value
   let loading = true;
   let error: string | null = null;
   let isDeleting = false;
@@ -22,7 +15,7 @@
     try {
       loading = true;
       const apiList = await getApiList();
-      apis = apiList.apis;
+      apis = apiList && apiList.apis ? apiList.apis : [];
     } catch (err) {
       error = err instanceof Error ? err.message : 'An error occurred while fetching APIs';
     } finally {

@@ -2,27 +2,13 @@
   import { onMount } from 'svelte';
   import { getApiDetails } from '$lib/http_client/apis';
   import { getApiEndpoints } from '$lib/http_client/apiEndpoints';
+  import type { Api, ApiEndpoint } from '$lib/types/api';
 
   export let apiId: number;
 
-  let api: {
-    id: number;
-    name: string;
-    description: string;
-    host?: string;
-    createdAt: string;
-    updatedAt: string;
-  } | null = null;
+  let api: Api | null = null;
 
-  let endpoints: {
-    id: number;
-    path: string;
-    method: string;
-    summary: string;
-    description: string;
-    operationId: string;
-    tags: string[];
-  }[] = [];
+  let endpoints: ApiEndpoint[] = [];
 
   let loading = true;
   let error: string | null = null;
