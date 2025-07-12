@@ -1,5 +1,5 @@
 import { db } from '$lib/server/drizzle';
-import { users } from '../../../db/schema';
+import { users } from '$lib/server/db/schema';
 import { error, json } from '@sveltejs/kit';
 import type { RequestEvent } from '@sveltejs/kit';
 

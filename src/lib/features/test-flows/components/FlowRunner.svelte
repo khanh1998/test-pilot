@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import type { TestFlowData, FlowVariable, ExecutionState, FlowStep, StepEndpoint } from './components/types';
+  import type { TestFlowData, FlowVariable, ExecutionState, FlowStep, StepEndpoint } from './types';
 
   // Props
   export let flowData: TestFlowData = {
@@ -852,7 +852,7 @@
     }
   }
 
-  import * as templateFunctionsModule from './utils/templateFunctions';
+  import * as templateFunctionsModule from '../utils/templateFunctions';
 
   // Create an indexed object for dynamic function access
   const templateFunctions: Record<string, (...args: any[]) => any> = {};
@@ -1192,12 +1192,12 @@
     // Convert the string values
     const varValue = typeof variable.value === 'string' ? variable.value : '';
     const varDefaultValue = typeof variable.defaultValue === 'string' ? variable.defaultValue : '';
-    
+
     newVariable = {
       ...variable,
       value: varValue,
       defaultValue: varDefaultValue,
-      description: variable.description || '',
+      description: variable.description || ''
     };
     editingVariable = { ...variable, isNew: false } as ExtendedFlowVariable;
   }
@@ -1310,7 +1310,7 @@
                   type="checkbox"
                   class="h-4 w-4 rounded border-gray-300 text-blue-600"
                   checked={Boolean(variable.value)}
-                  on:change={(e) => variable.value = e.currentTarget.checked}
+                  on:change={(e) => (variable.value = e.currentTarget.checked)}
                 />
                 <span class="ml-2 text-sm">Enabled</span>
               </label>

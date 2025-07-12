@@ -1,4 +1,4 @@
-export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
+import type { Json } from '$lib/types';
 
 export interface Database {
   public: {

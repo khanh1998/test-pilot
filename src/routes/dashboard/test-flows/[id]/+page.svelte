@@ -7,7 +7,7 @@
     FlowVariable,
     FlowStep,
     FlowAssertion
-  } from '$lib/features/test-flows/components/components/types';
+  } from '$lib/features/test-flows/components/types';
 
   // Import the components we created
   import EndpointSelector from '$lib/features/test-flows/components/EndpointSelector.svelte';

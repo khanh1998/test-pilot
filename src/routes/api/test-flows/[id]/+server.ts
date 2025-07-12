@@ -1,8 +1,9 @@
 import { json } from '@sveltejs/kit';
 import { db } from '$lib/server/drizzle';
-import { testFlows, testFlowApis, apis, apiEndpoints } from '../../../../db/schema';
+import { testFlows, testFlowApis, apis, apiEndpoints } from '$lib/server/db/schema';
 import { eq, and, inArray } from 'drizzle-orm';
 import type { RequestEvent } from '@sveltejs/kit';
+import type { Endpoint, Parameter } from '$lib/features/test-flows/components';
 
 // Get a specific test flow by ID
 export async function GET({ params, locals }: RequestEvent) {
@@ -55,7 +56,7 @@ export async function GET({ params, locals }: RequestEvent) {
 
     let endpoints: Endpoint[] = [];
     if (apiIds.length > 0) {
-      endpoints = await db
+      const dbEndpoints = await db
         .select({
           id: apiEndpoints.id,
           apiId: apiEndpoints.apiId,
@@ -71,6 +72,21 @@ export async function GET({ params, locals }: RequestEvent) {
         })
         .from(apiEndpoints)
         .where(inArray(apiEndpoints.apiId, apiIds));
+
+      // Map the database results to match the expected Endpoint type
+      endpoints = dbEndpoints.map((endpoint) => ({
+        id: endpoint.id,
+        apiId: endpoint.apiId,
+        path: endpoint.path,
+        method: endpoint.method,
+        operationId: endpoint.operationId || undefined, // Convert null to undefined
+        summary: endpoint.summary || undefined,
+        description: endpoint.description || undefined,
+        parameters: endpoint.parameters as Parameter[] | undefined, // Type assertion for parameters
+        requestSchema: endpoint.requestSchema,
+        responseSchema: endpoint.responseSchema,
+        tags: endpoint.tags || undefined
+      }));
     }
 
     return json({

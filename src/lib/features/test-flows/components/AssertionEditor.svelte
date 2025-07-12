@@ -7,6 +7,11 @@
 
   const dispatch = createEventDispatcher();
 
+  // Ensure from is initialized if it's a response type assertion
+  if (assertion.expected_value.source === 'response' && !assertion.expected_value.from) {
+    assertion.expected_value.from = { step_id: '', endpoint_id: '', path: '' };
+  }
+
   interface Assertion {
     step_id: string;
     endpoint_id: string;
@@ -15,7 +20,7 @@
     expected_value: {
       source: 'fixed' | 'response';
       value?: string;
-      from?: {
+      from: {
         step_id: string;
         endpoint_id: string;
         path: string;
@@ -140,7 +145,13 @@
         id="source-{assertionIndex}"
         bind:value={assertion.expected_value.source}
         class="w-full rounded border px-2 py-1 text-sm"
-        on:change={() => dispatch('change')}
+        on:change={() => {
+          // Initialize 'from' object if switching to response source
+          if (assertion.expected_value.source === 'response' && !assertion.expected_value.from) {
+            assertion.expected_value.from = { step_id: '', endpoint_id: '', path: '' };
+          }
+          dispatch('change');
+        }}
       >
         <option value="fixed">Fixed Value</option>
         <option value="response">From Response</option>

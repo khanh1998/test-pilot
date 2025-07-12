@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import type { RequestEvent } from '@sveltejs/kit';
 import { error } from '@sveltejs/kit';
 import { db } from '$lib/server/drizzle';
-import { users } from '../../../../db/schema';
+import { users } from '$lib/server/db/schema';
 import { eq } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 import { env } from '$env/dynamic/private';

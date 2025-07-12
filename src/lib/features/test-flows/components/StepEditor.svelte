@@ -1,9 +1,9 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import type { Endpoint, StepEndpoint, ExecutionState } from './components/types';
-  import EndpointCard from './components/EndpointCard.svelte';
-  import ParameterEditor from './components/ParameterEditor.svelte';
-  import ResponseViewer from './components/ResponseViewer.svelte';
+  import type { Endpoint, StepEndpoint, ExecutionState } from './types';
+  import EndpointCard from './EndpointCard.svelte';
+  import ParameterEditor from './ParameterEditor.svelte';
+  import ResponseViewer from './ResponseViewer.svelte';
 
   export let step: {
     step_id: string;

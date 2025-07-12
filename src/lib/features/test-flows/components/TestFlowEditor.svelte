@@ -3,7 +3,7 @@
   import EndpointSelector from './EndpointSelector.svelte';
   import FlowRunner from './FlowRunner.svelte';
   import { fade } from 'svelte/transition';
-  import type { TestFlowData, Endpoint, ExecutionState, EndpointExecutionState } from './components/types';
+  import type { TestFlowData, Endpoint, ExecutionState, EndpointExecutionState } from './types';
 
   import { writable } from 'svelte/store';
   import { onMount, onDestroy } from 'svelte';
@@ -454,7 +454,9 @@
       }}
       on:executionComplete={handleExecutionComplete}
       on:executionStateUpdate={handleExecutionStateUpdate}
-      on:endpointStateUpdate={(event: CustomEvent<{ endpointId: string; state: EndpointExecutionState }>) => {
+      on:endpointStateUpdate={(
+        event: CustomEvent<{ endpointId: string; state: EndpointExecutionState }>
+      ) => {
         const { endpointId, state } = event.detail;
         // Force the store to update for better reactivity
         // endpointId is now using the format `${stepId}-${endpointIndex}` for better user reference

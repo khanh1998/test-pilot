@@ -25,7 +25,9 @@ export const apis = pgTable('apis', {
 // API Endpoints table - stores individual endpoints extracted from APIs
 export const apiEndpoints = pgTable('api_endpoints', {
   id: serial('id').primaryKey(),
-  apiId: integer('api_id').notNull().references(() => apis.id),
+  apiId: integer('api_id')
+    .notNull()
+    .references(() => apis.id),
   path: text('path').notNull(),
   method: varchar('method', { length: 10 }).notNull(), // GET, POST, PUT, DELETE, etc.
   operationId: text('operation_id'),
@@ -51,7 +53,11 @@ export const testFlows = pgTable('test_flows', {
 
 // Join table for many-to-many relationship between test_flows and apis
 export const testFlowApis = pgTable('test_flow_apis', {
-  testFlowId: integer('test_flow_id').notNull().references(() => testFlows.id),
-  apiId: integer('api_id').notNull().references(() => apis.id),
+  testFlowId: integer('test_flow_id')
+    .notNull()
+    .references(() => testFlows.id),
+  apiId: integer('api_id')
+    .notNull()
+    .references(() => apis.id)
   // Composite primary key is defined in relations.ts
 });

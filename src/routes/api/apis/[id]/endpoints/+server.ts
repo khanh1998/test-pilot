@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { db } from '$lib/server/drizzle';
-import { apis, apiEndpoints } from '../../../../../db/schema';
+import { apis, apiEndpoints } from '$lib/server/db/schema';
 import { eq, and } from 'drizzle-orm';
 import type { RequestEvent } from '@sveltejs/kit';
 

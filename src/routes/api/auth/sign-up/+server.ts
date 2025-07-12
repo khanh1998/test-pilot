@@ -1,6 +1,6 @@
 import { json, error } from '@sveltejs/kit';
 import { db } from '$lib/server/drizzle';
-import { users } from '../../../../db/schema';
+import { users } from '$lib/server/db/schema';
 import { createClient } from '@supabase/supabase-js';
 import type { RequestEvent } from '@sveltejs/kit';
 import { generateToken } from '$lib/features/auth/server/auth';
