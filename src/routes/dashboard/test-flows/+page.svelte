@@ -110,7 +110,7 @@
             settings: { api_host: '' },
             steps: [],
             assertions: [],
-            variables: []
+            parameters: []
           }
         })
       });

@@ -55,7 +55,7 @@ export type ExecutionState = Record<string, EndpointExecutionState> & {
   currentStep?: number;
 };
 
-export type FlowVariable = {
+export type FlowParameter = {
   name: string;
   type: 'string' | 'number' | 'boolean' | 'object' | 'array' | 'null';
   value?: unknown;
@@ -87,7 +87,7 @@ export type TestFlowData = {
     api_host: string;
     // Other settings
   };
-  variables: FlowVariable[];
+  parameters: FlowParameter[];
   steps: FlowStep[];
   assertions: FlowAssertion[];
   endpoints?: Endpoint[]; // Reference to available endpoints

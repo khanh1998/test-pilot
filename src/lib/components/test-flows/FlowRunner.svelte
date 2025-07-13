@@ -1,10 +1,10 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import type { TestFlowData, FlowVariable, ExecutionState, FlowStep, StepEndpoint } from './types';
+  import type { TestFlowData, FlowParameter, ExecutionState, FlowStep, StepEndpoint } from './types';
 
   // Props
   export let flowData: TestFlowData = {
-    variables: [],
+    parameters: [],
     settings: { api_host: '' },
     steps: [],
     assertions: []
@@ -13,25 +13,25 @@
   export let isRunning: boolean = false; // Whether the flow is currently running
   export let executionState: ExecutionState = {}; // Execution state for each endpoint
 
-  // Extended FlowVariable type with isNew property
-  interface ExtendedFlowVariable extends FlowVariable {
+  // Extended FlowParameter type with isNew property
+  interface ExtendedFlowParameter extends FlowParameter {
     isNew?: boolean;
   }
 
-  // Variable input modal state
-  let showVariableInputModal = false;
-  let variablesWithMissingValues: Array<FlowVariable> = [];
+  // Parameter input modal state
+  let showParameterInputModal = false;
+  let parametersWithMissingValues: Array<FlowParameter> = [];
 
-  // Variables management panel
-  export let showVariablesPanel = false;
+  // Parameters management panel
+  export let showParametersPanel = false;
 
   // Control visibility of buttons - set to false when used by TestFlowEditor
   export let showButtons = true;
 
-  let editingVariable: null | ExtendedFlowVariable = null;
+  let editingParameter: null | ExtendedFlowParameter = null;
 
-  // Computed variable values for template resolution
-  let variableValues: Record<string, unknown> = {};
+  // Computed Parameter values for template resolution
+  let parameterValues: Record<string, unknown> = {};
 
   // Execution preferences
   export let preferences = {
@@ -50,8 +50,8 @@
   let storedResponses: Record<string, unknown> = {}; // Stores responses by their names
   
 
-  // Variables panel state
-  let newVariable = {
+  // Parameters panel state
+  let newParameter = {
     name: '',
     type: 'string' as 'string' | 'number' | 'boolean' | 'object' | 'array' | 'null',
     value: '',
@@ -98,14 +98,14 @@
     console.warn('No endpoints provided in flowData. The flow may not execute correctly.');
   }
 
-  // Ensure variables array exists
-  $: if (!flowData.variables) {
-    console.log('Initializing empty variables array');
-    flowData.variables = [];
+  // Ensure parameters array exists
+  $: if (!flowData.parameters) {
+    console.log('Initializing empty parameters array');
+    flowData.parameters = [];
   }
 
-  // Log whenever variables change
-  $: console.log('Variables in flowData:', flowData.variables);
+  // Log whenever parameters change
+  $: console.log('Parameters in flowData:', flowData.parameters);
 
   $: console.log('flow data', flowData);
 
@@ -226,25 +226,25 @@
       return;
     }
 
-    // Prepare variables and check if all required variables have values
-    prepareVariables();
-    if (!checkRequiredVariables()) {
-      // Show the variable input modal if there are missing required values
+    // Prepare parameters and check if all required parameters have values
+    prepareParameters();
+    if (!checkRequiredParameters()) {
+      // Show the Parameter input modal if there are missing required values
       addLog(
         'info',
-        'Required variables need input',
-        `${variablesWithMissingValues.length} required variable(s) need values`
+        'Required parameters need input',
+        `${parametersWithMissingValues.length} required Parameter(s) need values`
       );
-      showVariableInputModal = true;
+      showParameterInputModal = true;
       return;
     }
 
-    // All variables are ready, execute the flow
-    executeFlowAfterVariableCheck();
+    // All parameters are ready, execute the flow
+    executeFlowAfterParameterCheck();
   }
 
-  // Execute flow after variable check
-  async function executeFlowAfterVariableCheck() {
+  // Execute flow after Parameter check
+  async function executeFlowAfterParameterCheck() {
     // Notify parent that execution is starting
     dispatch('executionStart');
 
@@ -293,7 +293,7 @@
         success: !error,
         error,
         storedResponses,
-        variableValues
+        parameterValues: parameterValues
       });
     }
   }
@@ -671,8 +671,8 @@
     executionState = {};
     isRunning = false;
     
-    variableValues = {}; // Clear variable values
-    showVariableInputModal = false; // Close the variable input modal
+    parameterValues = {}; // Clear Parameter values
+    showParameterInputModal = false; // Close the Parameter input modal
 
     // Reset cookies if user wants to start fresh
     if (preferences.serverCookieHandling) {
@@ -787,9 +787,9 @@
           // Handle func:functionName(arg1,arg2,...)
           return resolveFunctionTemplate(path.trim());
 
-        case 'var':
-          // Handle var:variable_name
-          return resolveVariableTemplate(path.trim());
+        case 'param':
+          // Handle param:parameter_name
+          return resolveParameterTemplate(path.trim());
 
         default:
           addLog(
@@ -826,7 +826,7 @@
     });
 
     // Then handle regular double bracket templates {{...}}
-    // Fixed: Store the result of replace() back into the value variable
+    // Fixed: Store the result of replace() back into the value Parameter
     // Also fixed: Removed the trailing space from the regex pattern that was preventing matches
     value = value.replace(/\{\{([^}]+)\}\}/g, (_match, expression) => {
       return processTemplateExpression(expression, storedData, _match);
@@ -937,19 +937,19 @@
     }
   }
 
-  // Helper function to resolve variable templates like var:variable_name
-  function resolveVariableTemplate(variableName: string): string {
-    if (Object.prototype.hasOwnProperty.call(variableValues, variableName)) {
-      const value = variableValues[variableName];
+  // Helper function to resolve Parameter templates like var:Parameter_name
+  function resolveParameterTemplate(parameterName: string): string {
+    if (Object.prototype.hasOwnProperty.call(parameterValues, parameterName)) {
+      const value = parameterValues[parameterName];
       const result = value !== null && value !== undefined ? String(value) : '';
 
       // Add to logs for debugging
-      addLog('debug', `Variable substitution: ${variableName}`, `Value: ${result}`);
+      addLog('debug', `Parameter substitution: ${parameterName}`, `Value: ${result}`);
 
       return result;
     }
-    console.warn(`Variable not found: ${variableName}`);
-    return `{var:${variableName}}`;
+    console.warn(`Parameter not found: ${parameterName}`);
+    return `{var:${parameterName}}`;
   }
 
   // Function for adding debug logs about requests
@@ -957,218 +957,191 @@
     
   }
 
-  // Function to prepare variables before executing the flow
-  function prepareVariables() {
-    // Reset variables values store
-    variableValues = {};
+  // Function to prepare parameters before executing the flow
+  function prepareParameters() {
+    // Reset parameters values store
+    parameterValues = {};
 
-    // Fill variable values from flowData.variables with either values or defaults
-    flowData.variables.forEach((variable) => {
-      // If variable has a value, use it
-      if (variable.value !== undefined && variable.value !== null) {
-        variableValues[variable.name] = variable.value;
+    // Fill Parameter values from flowData.parameters with either values or defaults
+    flowData.parameters.forEach((parameter) => {
+      // If Parameter has a value, use it
+      if (parameter.value !== undefined && parameter.value !== null) {
+        parameterValues[parameter.name] = parameter.value;
       }
       // Otherwise use default value if available
-      else if (variable.defaultValue !== undefined && variable.defaultValue !== null) {
-        variableValues[variable.name] = variable.defaultValue;
+      else if (parameter.defaultValue !== undefined && parameter.defaultValue !== null) {
+        parameterValues[parameter.name] = parameter.defaultValue;
         // Also set as current value
-        variable.value = variable.defaultValue;
+        parameter.value = parameter.defaultValue;
       }
     });
 
-    // Log the variables for debugging
-    addLog('debug', 'Flow variables prepared', JSON.stringify(variableValues, null, 2));
+    // Log the parameters for debugging
+    addLog('debug', 'Flow Parameters prepared', JSON.stringify(parameterValues, null, 2));
   }
 
-  // Check if all required variables have values
-  function checkRequiredVariables(): boolean {
+  // Check if all required parameters have values
+  function checkRequiredParameters(): boolean {
     // Clear the missing values array
-    variablesWithMissingValues = [];
+    parametersWithMissingValues = [];
 
-    // Check each variable
-    flowData.variables.forEach((variable) => {
+    // Check each Parameter
+    flowData.parameters.forEach((parameter) => {
       if (
-        variable.required &&
-        (variable.value === undefined || variable.value === null) &&
-        (variable.defaultValue === undefined || variable.defaultValue === null)
+        parameter.required &&
+        (parameter.value === undefined || parameter.value === null) &&
+        (parameter.defaultValue === undefined || parameter.defaultValue === null)
       ) {
-        variablesWithMissingValues.push({ ...variable });
+        parametersWithMissingValues.push({ ...parameter });
       }
     });
 
     // Return true if no missing values
-    return variablesWithMissingValues.length === 0;
+    return parametersWithMissingValues.length === 0;
   }
 
-  // Function to handle variable input form submission
-  function handleVariableFormSubmit() {
-    // Update the variable values
-    variablesWithMissingValues.forEach((variable) => {
-      // Find the corresponding variable in flowData.variables
-      const originalVar = flowData.variables.find((v) => v.name === variable.name);
+  // Function to handle Parameter input form submission
+  function handleParameterFormSubmit() {
+    // Update the Parameter values
+    parametersWithMissingValues.forEach((parameter) => {
+      // Find the corresponding Parameter in flowData.parameters
+      const originalVar = flowData.parameters.find((v) => v.name === parameter.name);
       if (originalVar) {
-        originalVar.value = variable.value;
-        variableValues[variable.name] = variable.value;
+        originalVar.value = parameter.value;
+        parameterValues[parameter.name] = parameter.value;
       }
     });
 
     // Close the modal
-    showVariableInputModal = false;
+    showParameterInputModal = false;
 
     // Continue with flow execution
-    executeFlowAfterVariableCheck();
+    executeFlowAfterParameterCheck();
   }
 
-  // Handle saving a variable from the form
-  function handleSaveVariable(variable: ExtendedFlowVariable) {
-    console.log('Saving variable:', variable);
-    console.log('Current variables:', flowData.variables);
+  // Handle saving a Parameter from the form
+  function handleSaveParameter(parameter: ExtendedFlowParameter) {
+    console.log('Saving Parameter:', parameter);
+    console.log('Current parameters:', flowData.parameters);
 
-    // Ensure variables array exists
-    if (!flowData.variables) {
-      flowData.variables = [];
+    // Ensure parameters array exists
+    if (!flowData.parameters) {
+      flowData.parameters = [];
     }
 
-    // Check for duplicate name when adding a new variable
-    if (variable.isNew && flowData.variables.some((v) => v.name === variable.name)) {
-      alert('A variable with this name already exists.');
+    // Check for duplicate name when adding a new Parameter
+    if (parameter.isNew && flowData.parameters.some((v) => v.name === parameter.name)) {
+      alert('A Parameter with this name already exists.');
       return false;
     }
 
-    // Remove old variable if editing
-    if (!variable.isNew) {
-      flowData.variables = flowData.variables.filter((v) => v.name !== variable.name);
+    // Remove old Parameter if editing
+    if (!parameter.isNew) {
+      flowData.parameters = flowData.parameters.filter((v) => v.name !== parameter.name);
     }
 
-    // Add the new or updated variable
+    // Add the new or updated Parameter
     const newVar = {
-      name: variable.name,
-      type: variable.type || 'string',
-      value: variable.value,
-      defaultValue: variable.defaultValue,
-      description: variable.description,
-      required: variable.required === true
+      name: parameter.name,
+      type: parameter.type || 'string',
+      value: parameter.value,
+      defaultValue: parameter.defaultValue,
+      description: parameter.description,
+      required: parameter.required === true
     };
 
     // Create a new array to ensure reactivity
-    const newVariables = [...flowData.variables, newVar];
+    const newParameters = [...flowData.parameters, newVar];
 
-    // Update flowData with the new variables array
+    // Update flowData with the new parameters array
     flowData = {
       ...flowData,
-      variables: newVariables
+      parameters: newParameters
     };
 
-    console.log('Updated variables:', flowData.variables);
+    console.log('Updated parameters:', flowData.parameters);
 
     // Dispatch change event to notify parent components
     dispatch('change', { flowData });
 
-    // Notify parent of variables change
+    // Notify parent of parameters change
     dispatch('change', { flowData });
 
     // Return success
     return true;
   }
 
-  // Add, edit, or remove flow variables
-  function saveVariable() {
-    // Validate new variable data
-    if (!newVariable.name) {
-      return alert('Variable name is required');
-    }
-
-    if (editingVariable !== null) {
-      // Update existing variable
-      handleSaveVariable(newVariable as ExtendedFlowVariable);
-      editingVariable = null;
-    } else {
-      // Add new variable
-      handleSaveVariable({ ...newVariable, isNew: true } as ExtendedFlowVariable);
-    }
-
-    // Reset new variable state
-    newVariable = {
-      name: '',
-      type: 'string',
-      value: '',
-      defaultValue: '',
-      description: '',
-      required: false
-    };
-  }
-
-  function editVariable(variable: FlowVariable) {
+  function editParameter(parameter: FlowParameter) {
     // Convert the string values
-    const varValue = typeof variable.value === 'string' ? variable.value : '';
-    const varDefaultValue = typeof variable.defaultValue === 'string' ? variable.defaultValue : '';
+    const varValue = typeof parameter.value === 'string' ? parameter.value : '';
+    const varDefaultValue = typeof parameter.defaultValue === 'string' ? parameter.defaultValue : '';
 
-    newVariable = {
-      ...variable,
+    newParameter = {
+      ...parameter,
       value: varValue,
       defaultValue: varDefaultValue,
-      description: variable.description || ''
+      description: parameter.description || ''
     };
-    editingVariable = { ...variable, isNew: false } as ExtendedFlowVariable;
+    editingParameter = { ...parameter, isNew: false } as ExtendedFlowParameter;
   }
 
-  function removeVariable(variable: FlowVariable) {
-    console.log('Removing variable:', variable);
-    console.log('Before removal:', flowData.variables);
+  function removeParameter(parameter: FlowParameter) {
+    console.log('Removing Parameter:', parameter);
+    console.log('Before removal:', flowData.parameters);
 
-    // Ensure the variables array exists
-    if (!flowData.variables) {
+    // Ensure the parameters array exists
+    if (!flowData.parameters) {
       return;
     }
 
-    // Create new array without the removed variable
-    const updatedVariables = flowData.variables.filter((v) => v.name !== variable.name);
+    // Create new array without the removed Parameter
+    const updatedParameters = flowData.parameters.filter((v) => v.name !== parameter.name);
 
     // Update the whole flowData object to ensure reactivity
     flowData = {
       ...flowData,
-      variables: updatedVariables
+      parameters: updatedParameters
     };
 
-    console.log('After removal:', flowData.variables);
+    console.log('After removal:', flowData.parameters);
 
     // Dispatch change event to notify parent components
     dispatch('change', { flowData });
 
-    console.log('After removal:', flowData.variables);
+    console.log('After removal:', flowData.parameters);
 
-    // Notify parent of variables change
+    // Notify parent of parameters change
     dispatch('change', { flowData });
   }
 
-  // Update variable values when flowData.variables change
+  // Update Parameter values when flowData.parameters change
   $: {
-    variableValues = {};
-    if (flowData.variables) {
-      flowData.variables.forEach((variable) => {
-        variableValues[variable.name] =
-          variable.value !== undefined ? variable.value : variable.defaultValue;
+    parameterValues = {};
+    if (flowData.parameters) {
+      flowData.parameters.forEach((parameter) => {
+        parameterValues[parameter.name] =
+          parameter.value !== undefined ? parameter.value : parameter.defaultValue;
       });
     }
   }
 
-  // Debug variable reactivity
-  $: if (flowData && flowData.variables) {
-    console.log('FlowRunner: flowData.variables updated', flowData.variables);
+  // Debug Parameter reactivity
+  $: if (flowData && flowData.parameters) {
+    console.log('FlowRunner: flowData.parameters updated', flowData.parameters);
   }
 
-  // Add debugging to see if variable updates are being triggered
+  // Add debugging to see if Parameter updates are being triggered
 </script>
 
-<!-- Variable Input Modal - Only shown when required variables are missing -->
-{#if showVariableInputModal}
+<!-- Parameter Input Modal - Only shown when required parameters are missing -->
+{#if showParameterInputModal}
   <div class="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-black">
     <div class="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
       <div class="mb-4 flex items-center justify-between">
-        <h3 class="text-lg font-medium">Required Variables</h3>
+        <h3 class="text-lg font-medium">Required Parameters</h3>
         <button
           class="text-gray-500 hover:text-gray-700"
-          on:click={() => (showVariableInputModal = false)}
+          on:click={() => (showParameterInputModal = false)}
           aria-label="Close modal"
         >
           <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1182,69 +1155,69 @@
         </button>
       </div>
 
-      <p class="mb-4 text-sm text-gray-600">The following variables need values to run the flow:</p>
+      <p class="mb-4 text-sm text-gray-600">The following parameters need values to run the flow:</p>
 
       <div class="mb-6 max-h-96 overflow-y-auto">
-        {#each variablesWithMissingValues as variable (variable.name)}
+        {#each parametersWithMissingValues as parameter (parameter.name)}
           <div class="mb-4">
             <label
-              for={`var-${variable.name}`}
+              for={`var-${parameter.name}`}
               class="mb-1 block text-sm font-medium text-gray-700"
             >
-              {variable.name}
-              {variable.required ? '*' : ''}
+              {parameter.name}
+              {parameter.required ? '*' : ''}
             </label>
 
-            {#if variable.description}
-              <p class="mb-2 text-xs text-gray-500">{variable.description}</p>
+            {#if parameter.description}
+              <p class="mb-2 text-xs text-gray-500">{parameter.description}</p>
             {/if}
 
-            {#if variable.type === 'string'}
+            {#if parameter.type === 'string'}
               <input
-                id={`var-${variable.name}`}
+                id={`var-${parameter.name}`}
                 type="text"
                 class="block w-full rounded-md border border-gray-300 p-2 shadow-sm"
-                bind:value={variable.value}
+                bind:value={parameter.value}
               />
-            {:else if variable.type === 'number'}
+            {:else if parameter.type === 'number'}
               <input
-                id={`var-${variable.name}`}
+                id={`var-${parameter.name}`}
                 type="number"
                 class="block w-full rounded-md border border-gray-300 p-2 shadow-sm"
-                bind:value={variable.value}
+                bind:value={parameter.value}
               />
-            {:else if variable.type === 'boolean'}
-              <label class="flex items-center" for={`var-${variable.name}`}>
+            {:else if parameter.type === 'boolean'}
+              <label class="flex items-center" for={`var-${parameter.name}`}>
                 <input
-                  id={`var-${variable.name}`}
+                  id={`var-${parameter.name}`}
                   type="checkbox"
                   class="h-4 w-4 rounded border-gray-300 text-blue-600"
-                  checked={Boolean(variable.value)}
-                  on:change={(e) => (variable.value = e.currentTarget.checked)}
+                  checked={Boolean(parameter.value)}
+                  on:change={(e) => (parameter.value = e.currentTarget.checked)}
                 />
                 <span class="ml-2 text-sm">Enabled</span>
               </label>
-            {:else if variable.type === 'object' || variable.type === 'array'}
+            {:else if parameter.type === 'object' || parameter.type === 'array'}
               <div>
                 <textarea
-                  id={`var-${variable.name}`}
+                  id={`var-${parameter.name}`}
                   class="block w-full rounded-md border border-gray-300 p-2 font-mono shadow-sm"
                   rows="4"
-                  value={variable.value ? JSON.stringify(variable.value, null, 2) : ''}
+                  value={parameter.value ? JSON.stringify(parameter.value, null, 2) : ''}
                   on:input={(e) => {
                     const target = e.target as HTMLTextAreaElement;
                     try {
-                      variable.value = JSON.parse(target.value);
+                      parameter.value = JSON.parse(target.value);
                     } catch (_error: unknown) {
                       // Don't update if invalid JSON
                     }
                   }}
                 ></textarea>
-                <p class="mt-1 text-xs text-gray-500">Enter a valid JSON {variable.type}</p>
+                <p class="mt-1 text-xs text-gray-500">Enter a valid JSON {parameter.type}</p>
               </div>
             {:else}
               <div class="rounded-md bg-gray-100 p-2">
-                <span class="text-gray-700 italic">No input required for {variable.type} type</span>
+                <span class="text-gray-700 italic">No input required for {parameter.type} type</span>
               </div>
             {/if}
           </div>
@@ -1254,13 +1227,13 @@
       <div class="flex justify-end space-x-3">
         <button
           class="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium hover:bg-gray-50"
-          on:click={() => (showVariableInputModal = false)}
+          on:click={() => (showParameterInputModal = false)}
         >
           Cancel
         </button>
         <button
           class="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-          on:click={handleVariableFormSubmit}
+          on:click={handleParameterFormSubmit}
         >
           Run Flow
         </button>
@@ -1269,17 +1242,17 @@
   </div>
 {/if}
 
-<!-- Variables Management Panel - Sliding panel for adding/editing variables -->
-{#if showVariablesPanel}
+<!-- Parameters Management Panel - Sliding panel for adding/editing parameters -->
+{#if showParametersPanel}
   <div
     class="fixed top-0 right-0 bottom-0 z-50 h-full w-96 overflow-auto border-l border-gray-200 bg-white p-6 shadow-xl"
   >
     <div class="mb-4 flex items-center justify-between">
-      <h3 class="text-lg font-semibold">Flow Variables</h3>
+      <h3 class="text-lg font-semibold">Flow Parameters</h3>
       <button
         class="rounded-full p-2 hover:bg-gray-200"
-        on:click={() => (showVariablesPanel = false)}
-        aria-label="Close variables panel"
+        on:click={() => (showParametersPanel = false)}
+        aria-label="Close parameters panel"
       >
         <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
@@ -1292,14 +1265,14 @@
       </button>
     </div>
 
-    <!-- Variables List -->
+    <!-- Parameters List -->
     <div class="mb-4">
       <div class="mb-2 flex justify-between">
-        <h4 class="font-medium">Defined Variables</h4>
+        <h4 class="font-medium">Defined Parameters</h4>
         <button
           class="rounded bg-blue-600 px-2 py-1 text-sm text-white hover:bg-blue-700"
           on:click={() => {
-            editingVariable = {
+            editingParameter = {
               name: '',
               type: 'string',
               value: undefined,
@@ -1310,14 +1283,14 @@
             };
           }}
         >
-          Add Variable
+          Add Parameter
         </button>
       </div>
 
-      {#if flowData.variables && flowData.variables.length > 0}
-        {@const varCount = flowData.variables.length}
+      {#if flowData.parameters && flowData.parameters.length > 0}
+        {@const varCount = flowData.parameters.length}
         <div class="mb-2 bg-blue-50 p-2 text-sm">
-          Found {varCount} variable{varCount !== 1 ? 's' : ''}
+          Found {varCount} parameter{varCount !== 1 ? 's' : ''}
         </div>
         <div class="overflow-x-auto">
           <table class="w-full text-sm">
@@ -1330,21 +1303,21 @@
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-200">
-              {#each flowData.variables as variable (variable.name)}
+              {#each flowData.parameters as parameter (parameter.name)}
                 <tr class="hover:bg-gray-50">
-                  <td class="px-2 py-2">{variable.name}</td>
-                  <td class="px-2 py-2">{variable.type || 'string'}</td>
-                  <td class="px-2 py-2">{variable.required ? 'Yes' : 'No'}</td>
+                  <td class="px-2 py-2">{parameter.name}</td>
+                  <td class="px-2 py-2">{parameter.type || 'string'}</td>
+                  <td class="px-2 py-2">{parameter.required ? 'Yes' : 'No'}</td>
                   <td class="space-x-1 px-2 py-2">
                     <button
                       class="rounded bg-gray-100 px-2 py-1 text-xs hover:bg-gray-200"
-                      on:click={() => editVariable(variable)}
+                      on:click={() => editParameter(parameter)}
                     >
                       Edit
                     </button>
                     <button
                       class="rounded bg-red-100 px-2 py-1 text-xs text-red-700 hover:bg-red-200"
-                      on:click={() => removeVariable(variable)}
+                      on:click={() => removeParameter(parameter)}
                     >
                       Remove
                     </button>
@@ -1356,22 +1329,22 @@
         </div>
       {:else}
         <div class="rounded-md border border-gray-200 bg-gray-50 p-4 text-center">
-          <p class="text-gray-500">No variables defined yet. Add a variable to get started.</p>
+          <p class="text-gray-500">No parameters defined yet. Add a parameter to get started.</p>
         </div>
       {/if}
     </div>
 
-    <!-- Variable Editor Form -->
-    {#if editingVariable !== null}
-      {@const variable = editingVariable}
+    <!-- Parameter Editor Form -->
+    {#if editingParameter !== null}
+      {@const parameter = editingParameter}
       <div class="rounded-md border border-gray-200 bg-gray-50 p-4">
         <h4 class="mb-2 font-medium">
-          {variable.isNew ? 'Add New Variable' : 'Edit Variable'}
+          {parameter.isNew ? 'Add New Parameter' : 'Edit Parameter'}
         </h4>
         <form
           on:submit|preventDefault={() => {
-            if (handleSaveVariable(variable)) {
-              editingVariable = null;
+            if (handleSaveParameter(parameter)) {
+              editingParameter = null;
             }
           }}
         >
@@ -1381,7 +1354,7 @@
               id="var-name"
               type="text"
               class="input input-sm input-bordered w-full"
-              bind:value={variable.name}
+              bind:value={parameter.name}
               required
             />
           </div>
@@ -1391,7 +1364,7 @@
             <select
               id="var-type"
               class="select select-sm select-bordered w-full"
-              bind:value={variable.type}
+              bind:value={parameter.type}
             >
               <option value="string">String</option>
               <option value="number">Number</option>
@@ -1404,36 +1377,36 @@
 
           <div class="mb-2">
             <label for="var-default" class="mb-1 block text-sm font-medium">Default Value</label>
-            {#if variable.type === 'string'}
+            {#if parameter.type === 'string'}
               <input
                 id="var-default"
                 type="text"
                 class="input input-sm input-bordered w-full"
-                bind:value={variable.defaultValue}
+                bind:value={parameter.defaultValue}
               />
-            {:else if variable.type === 'number'}
+            {:else if parameter.type === 'number'}
               <input
                 id="var-default"
                 type="number"
                 class="input input-sm input-bordered w-full"
-                bind:value={variable.defaultValue}
+                bind:value={parameter.defaultValue}
               />
-            {:else if variable.type === 'boolean'}
+            {:else if parameter.type === 'boolean'}
               <select
                 id="var-default"
                 class="select select-sm select-bordered w-full"
-                bind:value={variable.defaultValue}
+                bind:value={parameter.defaultValue}
               >
                 <option value={undefined}>No default</option>
                 <option value={true}>True</option>
                 <option value={false}>False</option>
               </select>
-            {:else if variable.type === 'object' || variable.type === 'array'}
+            {:else if parameter.type === 'object' || parameter.type === 'array'}
               <textarea
                 id="var-default"
                 class="textarea textarea-sm textarea-bordered h-20 w-full"
                 placeholder="Enter valid JSON"
-                bind:value={variable.defaultValue}
+                bind:value={parameter.defaultValue}
               ></textarea>
             {:else}
               <input
@@ -1451,7 +1424,7 @@
             <textarea
               id="var-description"
               class="textarea textarea-sm textarea-bordered w-full"
-              bind:value={variable.description}
+              bind:value={parameter.description}
             ></textarea>
           </div>
 
@@ -1460,7 +1433,7 @@
               <input
                 type="checkbox"
                 class="checkbox checkbox-sm"
-                bind:checked={variable.required}
+                bind:checked={parameter.required}
               />
               <span class="ml-2 text-sm">Required</span>
             </label>
@@ -1471,7 +1444,7 @@
               type="button"
               class="btn btn-sm btn-ghost"
               on:click={() => {
-                editingVariable = null;
+                editingParameter = null;
               }}
             >
               Cancel
@@ -1501,10 +1474,10 @@
       </button>
       <button
         class="btn btn-outline"
-        on:click={() => (showVariablesPanel = !showVariablesPanel)}
-        class:btn-active={showVariablesPanel}
+        on:click={() => (showParametersPanel = !showParametersPanel)}
+        class:btn-active={showParametersPanel}
       >
-        {showVariablesPanel ? 'Hide Variables' : 'Variables'}
+        {showParametersPanel ? 'Hide Parameters' : 'Parameters'}
       </button>
     </div>
     {#if currentStep !== null}

@@ -19,7 +19,7 @@
     settings: { api_host: '' },
     steps: [],
     assertions: [],
-    variables: []
+    parameters: []
   };
   let isDirty = false;
   let isSaving = false;
@@ -72,7 +72,7 @@
         },
         steps: [],
         assertions: [],
-        variables: []
+        parameters: []
       };
 
       // Make sure settings object has all required properties
@@ -89,12 +89,12 @@
         }
       }
 
-      // Ensure variables array exists
-      if (!flowJson.variables) {
-        console.log('Initializing empty variables array');
-        flowJson.variables = [];
+      // Ensure parameters array exists
+      if (!flowJson.parameters) {
+        console.log('Initializing empty parameters array');
+        flowJson.parameters = [];
       } else {
-        console.log('Loaded flow variables:', flowJson.variables);
+        console.log('Loaded Flow Parameters:', flowJson.parameters);
       }
 
       isDirty = false;
@@ -410,7 +410,7 @@
                         updatedAssertions.length > 0
                           ? updatedAssertions
                           : updatedFlowData.assertions || flowJson.assertions,
-                      variables: updatedFlowData.variables || flowJson.variables || []
+                      parameters: updatedFlowData.parameters || flowJson.parameters || []
                     };
                   }
                   markDirty();
@@ -593,31 +593,31 @@
                 </p>
               </div>
 
-              <!-- Flow Variables -->
+              <!-- Flow Parameters -->
               <div class="mt-8 mb-6 border-t pt-6">
                 <div class="mb-4 flex items-center justify-between">
-                  <h3 class="text-lg font-medium">Flow Variables</h3>
+                  <h3 class="text-lg font-medium">Flow Parameters</h3>
                   <button
                     class="rounded-md bg-blue-600 px-3 py-1 text-sm text-white transition hover:bg-blue-700"
                     on:click={() => {
-                      // Open variables panel in TestFlowEditor/FlowRunner
+                      // Open parameters panel in TestFlowEditor/FlowRunner
                       const testFlowEditor = document.querySelector(
                         'svelte-component[this="TestFlowEditor"]'
                       );
                       if (testFlowEditor) {
-                        // Dispatch a custom event to show variables panel
-                        testFlowEditor.dispatchEvent(new CustomEvent('showVariablesPanel'));
+                        // Dispatch a custom event to show parameters panel
+                        testFlowEditor.dispatchEvent(new CustomEvent('showParametersPanel'));
                       }
                     }}
                   >
-                    Manage Variables
+                    Manage parameters
                   </button>
                 </div>
 
-                {#if !flowJson.variables || flowJson.variables.length === 0}
+                {#if !flowJson.parameters || flowJson.parameters.length === 0}
                   <div class="rounded-lg bg-gray-50 p-4 text-center">
                     <p class="text-gray-600">
-                      No variables defined yet. Click "Manage Variables" to add some.
+                      No parameters defined yet. Click "Manage parameters" to add some.
                     </p>
                   </div>
                 {:else}
@@ -632,14 +632,14 @@
                         </tr>
                       </thead>
                       <tbody>
-                        {#each flowJson.variables as variable}
+                        {#each flowJson.parameters as parameter}
                           <tr class="border-t border-gray-200">
-                            <td class="py-2 text-sm">{variable.name}</td>
-                            <td class="py-2 text-sm">{variable.type}</td>
-                            <td class="py-2 text-sm">{variable.required ? 'Yes' : 'No'}</td>
+                            <td class="py-2 text-sm">{parameter.name}</td>
+                            <td class="py-2 text-sm">{parameter.type}</td>
+                            <td class="py-2 text-sm">{parameter.required ? 'Yes' : 'No'}</td>
                             <td class="py-2 text-sm"
-                              >{variable.defaultValue !== undefined
-                                ? String(variable.defaultValue)
+                              >{parameter.defaultValue !== undefined
+                                ? String(parameter.defaultValue)
                                 : '-'}</td
                             >
                           </tr>

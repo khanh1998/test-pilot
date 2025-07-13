@@ -23,8 +23,8 @@
   // Execution options panel
   let showExecutionOptions = false;
 
-  // Variables panel control
-  let showVariablesPanel = false;
+  // parameters panel control
+  let showParametersPanel = false;
 
   // Execution preferences - default values
   let preferences = {
@@ -54,8 +54,8 @@
   const dispatch = createEventDispatcher();
 
   // Create event handlers for external triggers
-  function handleShowVariablesPanel() {
-    showVariablesPanel = true;
+  function handleshowParametersPanel() {
+    showParametersPanel = true;
   }
 
   // Add event listener on mount
@@ -63,10 +63,10 @@
     // Listen for custom events on the component's node
     const node = document.querySelector('svelte-component[this="TestFlowEditor"]');
     if (node) {
-      node.addEventListener('showVariablesPanel', handleShowVariablesPanel as EventListener);
+      node.addEventListener('showParametersPanel', handleshowParametersPanel as EventListener);
 
       return () => {
-        node.removeEventListener('showVariablesPanel', handleShowVariablesPanel as EventListener);
+        node.removeEventListener('showParametersPanel', handleshowParametersPanel as EventListener);
       };
     }
   });
@@ -270,12 +270,12 @@
           Reset
         </button>
 
-        <!-- Variables Button -->
+        <!-- parameters Button -->
         <button
           class="mr-2 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
           on:click={() => {
-            // Toggle variables panel using the local state
-            showVariablesPanel = !showVariablesPanel;
+            // Toggle parameters panel using the local state
+            showParametersPanel = !showParametersPanel;
           }}
           disabled={isRunning}
         >
@@ -286,7 +286,7 @@
               clip-rule="evenodd"
             />
           </svg>
-          Variables
+          Parameters
         </button>
 
         <!-- Run Flow Button -->
@@ -441,15 +441,15 @@
       bind:isRunning
       bind:executionState
       bind:preferences
-      bind:showVariablesPanel
+      bind:showParametersPanel
       showButtons={false}
       on:reset={handleReset}
       on:change={(event: CustomEvent<{ flowData: TestFlowData }>) => {
         console.log('Change event from FlowRunner:', event.detail);
         if (event.detail && event.detail.flowData) {
-          // Handle case when variables are updated
-          if (event.detail.flowData.variables) {
-            console.log('Variables updated in FlowRunner:', event.detail.flowData.variables);
+          // Handle case when parameters are updated
+          if (event.detail.flowData.parameters) {
+            console.log('parameters updated in FlowRunner:', event.detail.flowData.parameters);
           }
 
           flowData = { ...event.detail.flowData };
