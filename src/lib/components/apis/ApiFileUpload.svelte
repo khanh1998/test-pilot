@@ -21,7 +21,10 @@
   const isUpdateMode = apiId !== null;
 
   // Simple function to trigger file input click
-  function openFileSelector() {
+  function openFileSelector(event?: Event) {
+    if (event) {
+      event.stopPropagation();
+    }
     if (fileInput) {
       fileInput.click();
     }
@@ -44,6 +47,8 @@
     const input = event.target as HTMLInputElement;
     if (input.files && input.files.length > 0) {
       handleFile(input.files[0]);
+      // Reset the input value to ensure change event fires even if selecting the same file again
+      input.value = '';
     }
   }
 
@@ -134,8 +139,8 @@
             : 'border-gray-300'} cursor-pointer rounded-md border-dashed px-6 py-8 text-center transition-colors hover:border-blue-500"
           role="button"
           tabindex="0"
-          on:click={openFileSelector}
-          on:keydown={(e) => e.key === 'Enter' && openFileSelector()}
+          on:click={(e) => openFileSelector(e)}
+          on:keydown={(e) => e.key === 'Enter' && openFileSelector(e)}
           on:dragenter={handleDragEnter}
           on:dragleave={handleDragLeave}
           on:dragover={handleDragOver}
@@ -164,7 +169,7 @@
               <button
                 type="button"
                 class="mt-1 text-sm text-blue-500 underline hover:text-blue-600"
-                on:click={openFileSelector}
+                on:click={(e) => openFileSelector(e)}
               >
                 Change file
               </button>
@@ -190,7 +195,7 @@
                 <button
                   type="button"
                   class="rounded bg-blue-500 px-4 py-2 text-white hover:bg-blue-600"
-                  on:click={openFileSelector}
+                  on:click={(e) => openFileSelector(e)}
                 >
                   Browse files
                 </button>
@@ -204,7 +209,7 @@
           bind:this={fileInput}
           type="file"
           id="file-upload-input"
-          name="file"
+          name="swaggerFile"
           accept=".yaml,.yml,.json"
           class="hidden"
           on:change={handleFileChange}

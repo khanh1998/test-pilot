@@ -1,6 +1,6 @@
 <script lang="ts">
   import { page } from '$app/stores';
-  import ApiFileUpload from '$lib/features/apis/components/ApiFileUpload.svelte';
+  import ApiFileUpload from '$lib/components/apis/ApiFileUpload.svelte';
   import { onMount } from 'svelte';
 
   const apiId = parseInt($page.params.id);

@@ -48,12 +48,7 @@
   let progress = 0; // 0-100
   let error: unknown = null;
   let storedResponses: Record<string, unknown> = {}; // Stores responses by their names
-  let executionLogs: Array<{
-    timestamp: Date;
-    level: 'info' | 'debug' | 'error' | 'warning';
-    message: string;
-    details?: string;
-  }> = []; // Logs for the execution
+  
 
   // Variables panel state
   let newVariable = {
@@ -65,15 +60,13 @@
     required: false
   };
 
-  // Cookie management
-  // Define the cookie interface for consistency across the component
-  interface RequestCookie {
-    name: string;
-    value: string;
-    domain: string;
-    path?: string;
-  }
+  import {
+	executeDirectEndpoint,
+	executeProxiedEndpoint,
+	type RequestCookie
+} from '$lib/http_client/test-flow';
 
+  // Cookie management
   let cookieStore: Map<string, Array<RequestCookie>> = new Map();
   // Format: Map<"stepId-endpointIndex", Array<RequestCookie>>
 
@@ -86,20 +79,7 @@
     message: string,
     details?: string
   ) {
-    executionLogs = [
-      ...executionLogs,
-      {
-        timestamp: new Date(),
-        level,
-        message,
-        details
-      }
-    ];
-
-    // For errors, also console log them
-    if (level === 'error') {
-      console.error(message, details);
-    }
+    dispatch('log', { level, message, details });
   }
 
   // Initialize when component mounts
@@ -472,10 +452,6 @@
       // Start timer
       const startTime = performance.now();
 
-      // Create AbortController for timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), preferences.timeout);
-
       // Add request debug logs
       addRequestDebugLogs(endpointDef.path, headers);
 
@@ -484,9 +460,6 @@
 
       if (preferences.serverCookieHandling) {
         // Use server proxy for cookie handling
-        const proxyUrl = '/api/proxy/request';
-
-        // Prepare cookies to send with the request
         const targetUrl = new URL(url);
         const domain = targetUrl.hostname;
 
@@ -501,90 +474,58 @@
                 requestCookies.push(cookie);
               }
             }
-          }
+          } 
         }
 
         // Log the cookies being sent
-        executionLogs.push({
-          timestamp: new Date(),
-          level: 'debug',
-          message: `Sending ${requestCookies.length} cookies with request`,
-          details: `Target domain: ${domain}`
-        });
+        addLog(
+          'debug',
+          `Sending ${requestCookies.length} cookies with request`,
+          `Target domain: ${domain}`
+        );
 
-        // Make the proxy request
-        const proxyResponse = await fetch(proxyUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${localStorage.getItem('authToken')}`
-          },
-          body: JSON.stringify({
-            url,
-            method: endpointDef.method,
-            headers,
-            body: body ? JSON.stringify(body) : null,
-            cookies: requestCookies
-          }),
-          signal: controller.signal
-        });
+        const proxiedResult = await executeProxiedEndpoint(
+          endpointDef,
+          url,
+          headers,
+          body,
+          requestCookies,
+          preferences.timeout
+        );
 
-        // Extract the response data from the proxy
-        const proxyData = await proxyResponse.json();
-
-        // Create a synthetic Response object from proxy data
-        response = new Response(proxyData.body ? JSON.stringify(proxyData.body) : null, {
-          status: proxyData.status,
-          statusText: proxyData.statusText,
-          headers: new Headers(proxyData.headers)
-        });
+        response = proxiedResult.response;
+        const responseCookies = proxiedResult.cookies;
 
         // Store cookies from the response
-        if (proxyData.cookies && proxyData.cookies.length > 0) {
-          // Generate a unique ID for this endpoint using the same format as endpointId
+        if (responseCookies && responseCookies.length > 0) {
           const endpointKey = endpointId;
-
-          // Store cookies by endpoint
           cookieStore.set(
             endpointKey,
-            proxyData.cookies.map((c: RequestCookie) => ({
+            responseCookies.map((c: RequestCookie) => ({
               name: c.name,
               value: c.value,
               domain: c.domain || targetUrl.hostname,
               path: c.path
             }))
           );
-
-          // Add cookie info to logs
-          executionLogs.push({
-            timestamp: new Date(),
-            level: 'info',
-            message: `Received ${proxyData.cookies.length} cookies from server`,
-            details: `Cookies stored for step: ${endpointKey}`
-          });
+          
         }
 
-        // Add proxy info to logs
-        executionLogs.push({
-          timestamp: new Date(),
-          level: 'info',
-          message: 'Request proxied through server for cookie handling',
-          details: `Original URL: ${url}\nProxy URL: ${proxyUrl}`
-        });
+        addLog(
+          'info',
+          'Request proxied through server for cookie handling',
+          `Original URL: ${url}\nProxy URL: /api/proxy/request`
+        );
       } else {
         // Direct fetch without proxy
-        response = await fetch(url, {
-          method: endpointDef.method,
+        response = await executeDirectEndpoint(
+          endpointDef,
+          url,
           headers,
-          body: body ? JSON.stringify(body) : null,
-          signal: controller.signal,
-          mode: 'cors', // Enable CORS for cross-origin requests
-          credentials: 'include'
-        });
+          body,
+          preferences.timeout
+        );
       }
-
-      // Clear timeout
-      clearTimeout(timeoutId);
 
       // Calculate timing - create a new object for reactivity
       const endTime = performance.now();
@@ -600,21 +541,7 @@
       // Process response
       const responseData = await getResponseData(response);
 
-      // Add response info to logs
-      const responseHeaders = Object.fromEntries([...response.headers.entries()]);
-      executionLogs.push({
-        timestamp: new Date(),
-        level: 'info',
-        message: `Response status: ${response.status} ${response.statusText}`,
-        details: `Received from ${endpointDef.path}`
-      });
-
-      executionLogs.push({
-        timestamp: new Date(),
-        level: 'info',
-        message: 'Response headers:',
-        details: JSON.stringify(responseHeaders, null, 2)
-      });
+      
 
       // Store response details - create a new object for reactivity
       executionState = {
@@ -632,11 +559,30 @@
 
       // Always store response with endpointId for reference by templates
       storedResponses[endpointId] = responseData;
+      
+      // Log the stored response for debugging
+      addLog(
+        'debug',
+        `Stored response for endpoint: ${endpointId}`,
+        `Response data type: ${responseData ? typeof responseData : 'undefined'}`
+      );
 
       // Also store with custom name if requested
       if (endpoint.store_response_as) {
         storedResponses[endpoint.store_response_as] = responseData;
+        addLog(
+          'info',
+          `Also stored response as: ${endpoint.store_response_as}`,
+          `This can be referenced in templates as: {{res:${endpoint.store_response_as}}}`
+        );
       }
+      
+      // Debug log all stored responses
+      addLog(
+        'debug', 
+        'Currently stored responses:', 
+        `Available keys: ${JSON.stringify(Object.keys(storedResponses))}`
+      );
 
       // Update status - create a new object for reactivity
       if (response.ok) {
@@ -724,7 +670,7 @@
     storedResponses = {};
     executionState = {};
     isRunning = false;
-    executionLogs = []; // Clear execution logs
+    
     variableValues = {}; // Clear variable values
     showVariableInputModal = false; // Close the variable input modal
 
@@ -733,37 +679,7 @@
       cookieStore.clear();
     }
 
-    // Add initial log entry
-    executionLogs.push({
-      timestamp: new Date(),
-      level: 'info',
-      message: 'Test flow execution reset',
-      details: 'Ready to execute'
-    });
-
-    // Add a log about CORS if an API host is set
-    if (apiHost) {
-      const apiUrl = new URL(apiHost.startsWith('http') ? apiHost : `https://${apiHost}`);
-      const frontend = window.location.origin;
-
-      if (frontend !== apiUrl.origin) {
-        executionLogs.push({
-          timestamp: new Date(),
-          level: 'info',
-          message: 'Cross-Origin API detected',
-          details: `Frontend: ${frontend}\nAPI: ${apiUrl.origin}`
-        });
-
-        // Add suggestion about cookie handling if cross-origin
-        executionLogs.push({
-          timestamp: new Date(),
-          level: 'info',
-          message: 'Tip: For APIs that use cookies',
-          details:
-            'If this API uses cookies for auth or sessions, enable "Use server for cookie handling" in Execution Preferences.'
-        });
-      }
-    }
+    
 
     // Removed dispatch('reset') to prevent infinite recursion
   }
@@ -782,72 +698,44 @@
       const contentType = response.headers.get('content-type') || '';
       let data: unknown;
 
-      // Add content type to logs
-      executionLogs.push({
-        timestamp: new Date(),
-        level: 'debug',
-        message: 'Response content type:',
-        details: contentType || 'No content-type header'
-      });
+      addLog(
+        'debug',
+        'Response content type:',
+        contentType || 'No content-type header'
+      );
 
       // Handle different content types
       if (contentType.includes('application/json')) {
         data = await response.json();
-        executionLogs.push({
-          timestamp: new Date(),
-          level: 'debug',
-          message: 'Response parsed as JSON'
-        });
+        addLog('debug', 'Response parsed as JSON');
       } else if (contentType.includes('text/html')) {
         data = await response.text();
-        executionLogs.push({
-          timestamp: new Date(),
-          level: 'debug',
-          message: 'Response parsed as HTML'
-        });
+        addLog('debug', 'Response parsed as HTML');
       } else if (contentType.includes('text/')) {
         data = await response.text();
-        executionLogs.push({
-          timestamp: new Date(),
-          level: 'debug',
-          message: 'Response parsed as text'
-        });
+        addLog('debug', 'Response parsed as text');
       } else if (contentType.includes('application/xml') || contentType.includes('text/xml')) {
         data = await response.text();
-        executionLogs.push({
-          timestamp: new Date(),
-          level: 'debug',
-          message: 'Response parsed as XML'
-        });
+        addLog('debug', 'Response parsed as XML');
       } else {
         // Try to parse as JSON first
         try {
           data = await response.json();
-          executionLogs.push({
-            timestamp: new Date(),
-            level: 'debug',
-            message: 'Response auto-detected as JSON'
-          });
+          addLog('debug', 'Response auto-detected as JSON');
         } catch (_e: unknown) {
           // Then try as text
           data = await response.text();
-          executionLogs.push({
-            timestamp: new Date(),
-            level: 'debug',
-            message: 'Response auto-detected as text'
-          });
+          addLog('debug', 'Response auto-detected as text');
         }
       }
 
       return data;
     } catch (_error: unknown) {
-      // Log the error
-      executionLogs.push({
-        timestamp: new Date(),
-        level: 'error',
-        message: 'Failed to parse response:',
-        details: _error instanceof Error ? _error.message : String(_error)
-      });
+      addLog(
+        'error',
+        'Failed to parse response:',
+        _error instanceof Error ? _error.message : String(_error)
+      );
       return 'Unable to parse response data';
     }
   }
@@ -868,24 +756,56 @@
     storedData: Record<string, unknown>,
     originalMatch: string
   ): string {
-    const [source, path] = expression.trim().split(':', 2);
+    try {
+      // First verify that we have a valid expression with a source and path
+      if (!expression || expression.indexOf(':') === -1) {
+        addLog(
+          'warning',
+          `Invalid template expression: ${expression}`,
+          `Expression must be in format 'source:path'`
+        );
+        return originalMatch;
+      }
+      
+      const [source, path] = expression.trim().split(':', 2);
+      
+      if (!path || path.trim() === '') {
+        addLog(
+          'warning', 
+          `Missing path in template expression: ${expression}`,
+          `Expression must include a path after the colon`
+        );
+        return originalMatch;
+      }
 
-    switch (source.trim()) {
-      case 'res':
-        // Handle res:stepId-endpointIndex.jsonpath
-        return resolveResponseTemplate(path.trim(), storedData);
+      switch (source.trim()) {
+        case 'res':
+          // Handle res:stepId-endpointIndex.jsonpath
+          return resolveResponseTemplate(path.trim(), storedData);
 
-      case 'func':
-        // Handle func:functionName(arg1,arg2,...)
-        return resolveFunctionTemplate(path.trim());
+        case 'func':
+          // Handle func:functionName(arg1,arg2,...)
+          return resolveFunctionTemplate(path.trim());
 
-      case 'var':
-        // Handle var:variable_name
-        return resolveVariableTemplate(path.trim());
+        case 'var':
+          // Handle var:variable_name
+          return resolveVariableTemplate(path.trim());
 
-      default:
-        console.warn(`Unknown template source: ${source}`);
-        return originalMatch; // Keep original template if source is unknown
+        default:
+          addLog(
+            'warning',
+            `Unknown template source: ${source}`,
+            `Valid sources are: 'res', 'func', and 'var'`
+          );
+          return originalMatch; // Keep original template if source is unknown
+      }
+    } catch (error: unknown) {
+      addLog(
+        'error',
+        `Error processing template expression: ${expression}`,
+        error instanceof Error ? error.message : String(error)
+      );
+      return originalMatch;
     }
   }
 
@@ -939,6 +859,15 @@
     const responseData = storedData[stepEndpointId];
     if (!responseData) {
       console.warn(`Response data not found for: ${stepEndpointId}`);
+      
+      // Log available keys to help debug
+      const availableKeys = Object.keys(storedData);
+      addLog(
+        'warning',
+        `Response data not found for: ${stepEndpointId}`,
+        `Available response keys: ${JSON.stringify(availableKeys)}`
+      );
+      
       return `{res:${path}}`;
     }
 
@@ -949,6 +878,11 @@
         return result !== undefined ? String(result) : `{res:${path}}`;
       } catch (error: unknown) {
         console.error(`Error applying JSONPath '${jsonPathExpr}' to response:`, error);
+        addLog(
+          'error',
+          `Error applying JSONPath to response`,
+          `Path: ${jsonPathExpr}\nError: ${error instanceof Error ? error.message : String(error)}`
+        );
         return `{res:${path}}`;
       }
     }
@@ -1020,31 +954,7 @@
 
   // Function for adding debug logs about requests
   function addRequestDebugLogs(path: string, reqHeaders: Record<string, string>) {
-    // Add debug info to logs
-    executionLogs.push({
-      timestamp: new Date(),
-      level: 'info',
-      message: `Request headers for ${path}:`,
-      details: JSON.stringify(reqHeaders, null, 2)
-    });
-  }
-
-  // Function to clear all cookies in the client-side cookie store
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  function clearCookies() {
-    try {
-      cookieStore.clear();
-
-      // Add log entry
-      executionLogs.push({
-        timestamp: new Date(),
-        level: 'info',
-        message: 'Cookies cleared',
-        details: 'All cookies have been cleared from the client-side cookie store'
-      });
-    } catch (error: unknown) {
-      console.error('Error clearing cookies:', error);
-    }
+    
   }
 
   // Function to prepare variables before executing the flow

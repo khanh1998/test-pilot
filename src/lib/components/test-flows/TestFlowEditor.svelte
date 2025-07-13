@@ -165,6 +165,10 @@
     executionStore.set(executionState);
   }
 
+  function handleLog(event: CustomEvent) {
+    dispatch('log', event.detail);
+  }
+
   // Run the entire flow
   function runFlow() {
     if (flowRunner) {
@@ -454,6 +458,7 @@
       }}
       on:executionComplete={handleExecutionComplete}
       on:executionStateUpdate={handleExecutionStateUpdate}
+      on:log={handleLog}
       on:endpointStateUpdate={(
         event: CustomEvent<{ endpointId: string; state: EndpointExecutionState }>
       ) => {

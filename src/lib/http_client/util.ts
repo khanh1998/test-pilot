@@ -7,10 +7,17 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}) {
   // Get auth headers
   const headers = authStore.getAuthHeaders();
 
-  // Merge with existing headers
+  // Get existing headers or initialize empty object
+  const existingHeaders = options.headers as Record<string, string> || {};
+  
+  // Check if we're sending FormData (in which case we shouldn't set Content-Type)
+  const isFormData = options.body instanceof FormData;
+  
+  // Merge headers with proper Content-Type
   const mergedHeaders = {
-    'Content-Type': 'application/json',
-    ...(options.headers as Record<string, string>),
+    // Only set default Content-Type if not FormData
+    ...(!isFormData ? { 'Content-Type': 'application/json' } : {}),
+    ...existingHeaders,
     ...headers
   };
 

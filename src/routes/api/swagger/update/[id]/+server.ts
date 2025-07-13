@@ -41,7 +41,7 @@ export async function POST({ request, locals, params }: RequestEvent) {
 
     // Parse the multipart form data
     const formData = await request.formData();
-    const file = formData.get('file') as File | null;
+    const file = formData.get('swaggerFile') as File | null;
     const userProvidedHost = formData.get('host') as string;
 
     if (!file) {

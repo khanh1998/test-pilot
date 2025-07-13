@@ -41,10 +41,7 @@ export async function uploadSwaggerFile(
 
 		const response = await fetchWithAuth('/api/swagger/upload', {
 			method: 'POST',
-			body: formData,
-			headers: {
-				'Content-Type': 'multipart/form-data'
-			}
+			body: formData
 		});
 
 		if (response.ok) {
@@ -65,11 +62,8 @@ export async function updateSwaggerFile(id: string, file: File): Promise<UpdateS
 		formData.append('swaggerFile', file);
 
 		const response = await fetchWithAuth(`/api/swagger/update/${id}`, {
-			method: 'PUT',
-			body: formData,
-			headers: {
-				'Content-Type': 'multipart/form-data'
-			}
+			method: 'POST',
+			body: formData
 		});
 
 		if (response.ok) {

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { getApiDetails } from '$lib/http_client/apis';
-  import { getApiEndpoints } from '$lib/http_client/apiEndpoints';
+  import { getApiEndpoints } from '$lib/http_client/api-endpoints';
   import type { Api, ApiEndpoint } from '$lib/types/api';
 
   export let apiId: number;

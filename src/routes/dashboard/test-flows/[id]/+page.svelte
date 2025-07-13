@@ -154,6 +154,14 @@
   }
 
   // Handle execution completion
+  function handleLog(event: CustomEvent) {
+    const { level, message, details } = event.detail;
+    console.log(`[LOG] ${level.toUpperCase()}: ${message}`, details || '');
+    if (level === 'error') {
+      error = message;
+    }
+  }
+
   function handleExecutionComplete(event: CustomEvent) {
     console.log('Flow execution complete:', event.detail);
     const { success, error: executionError, storedResponses } = event.detail;
@@ -409,6 +417,7 @@
                 }}
                 on:reset={handleReset}
                 on:executionComplete={handleExecutionComplete}
+                on:log={handleLog}
               />
 
               <!-- Empty state when there are no steps -->
