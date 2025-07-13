@@ -11,6 +11,7 @@
     endpoints: StepEndpoint[];
   };
   export let endpoints: Endpoint[] = [];
+  export let apiHosts: Record<string | number, { url: string; name?: string; description?: string }> = {};
   export let stepIndex: number;
   export let isFirstStep: boolean = false;
   export let isLastStep: boolean = false;
@@ -406,6 +407,7 @@
               executionState={executionStore}
               {duplicateCount}
               {instanceIndex}
+              {apiHosts}
               on:openParamEditor={openParamEditor}
               on:openResponseViewer={openResponseViewer}
               on:removeEndpoint={() => removeEndpoint(endpointIndex)}

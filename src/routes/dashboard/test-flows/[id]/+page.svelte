@@ -16,16 +16,15 @@
   let error: string | null = null;
   let currentTab: 'steps' | 'assertions' | 'settings' = 'steps';
   let flowJson: TestFlowData = {
-    settings: { api_host: '' },
+    settings: { 
+      api_hosts: {}  // Multi-API host configuration
+    },
     steps: [],
     assertions: [],
     parameters: []
   };
   let isDirty = false;
   let isSaving = false;
-
-  // API host for the flow
-  let apiHost = '';
 
   // New step related state
   let showNewStepModal = false;
@@ -34,15 +33,13 @@
   onMount(async () => {
     await fetchTestFlow();
 
-    // Try to get API host from settings first if available
-    if (flowJson?.settings?.api_host && flowJson.settings.api_host.trim() !== '') {
-      console.log('Setting initial API host from settings:', flowJson.settings.api_host);
-      apiHost = flowJson.settings.api_host;
-      // TODO: each API will have their own Host, need new approach here.
+    // Initialize api_hosts if not existing
+    if (!flowJson.settings.api_hosts) {
+      flowJson.settings.api_hosts = {};
     }
 
-    // Then fetch the API host from the API (will use settings value if it exists)
-    await fetchApiHost();
+    // Initialize API hosts from API information
+    await fetchApiHosts();
   });
 
   async function fetchTestFlow() {
@@ -68,7 +65,7 @@
       // Initialize flowJson with proper defaults if not provided from backend
       flowJson = testFlow.flowJson || {
         settings: {
-          api_host: ''
+          api_hosts: {}
         },
         steps: [],
         assertions: [],
@@ -77,15 +74,11 @@
 
       // Make sure settings object has all required properties
       if (!flowJson.settings) {
-        flowJson.settings = { api_host: '' };
+        flowJson.settings = { api_hosts: {} };
       } else {
-        // Ensure api_host is initialized
-        if (!flowJson.settings.hasOwnProperty('api_host')) {
-          flowJson.settings.api_host = '';
-        } else if (flowJson.settings.api_host && flowJson.settings.api_host.trim() !== '') {
-          // If we have an API host in settings, update our local variable
-          apiHost = flowJson.settings.api_host;
-          console.log('Setting apiHost from loaded flowJson:', apiHost);
+        // Ensure api_hosts is initialized
+        if (!flowJson.settings.hasOwnProperty('api_hosts')) {
+          flowJson.settings.api_hosts = {};
         }
       }
 
@@ -106,7 +99,58 @@
     }
   }
 
-  async function fetchApiHost() {
+  async function fetchApiHosts() {
+    try {
+      // First, ensure we have a valid settings.api_hosts object
+      if (!flowJson.settings.api_hosts) {
+        flowJson.settings.api_hosts = {};
+      }
+      
+      // Get all APIs related to this test flow
+      const response = await fetch(`/api/apis`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('authToken')}`
+        }
+      });
+
+      if (response.ok) {
+        const apisData = await response.json();
+        console.log('APIs data fetched:', apisData); // Debug log
+        
+        if (apisData && apisData.apis && Array.isArray(apisData.apis)) {
+          // For each API found, add it to the api_hosts if not already there
+          apisData.apis.forEach((api: {id: number, host?: string, name?: string}) => {
+            const apiIdStr = String(api.id);
+            
+            // If this API isn't in our hosts yet, add it
+            if (api.host && flowJson.settings.api_hosts && !flowJson.settings.api_hosts[apiIdStr]) {
+              flowJson.settings.api_hosts[apiIdStr] = {
+                name: api.name || `API ${api.id}`,
+                url: api.host
+              };
+              console.log(`Added API host from API ${api.id}:`, api.host);
+              markDirty();
+            }
+          });
+        }
+        
+        // If we have a primary API in the testFlow, make sure it's in our hosts
+        if (testFlow && testFlow.apiId) {
+          const primaryApiId = String(testFlow.apiId);
+          
+          // If we don't have the primary API in our hosts, fetch it specifically
+          if (!flowJson.settings.api_hosts[primaryApiId]) {
+            await fetchPrimaryApiHost();
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching API hosts:', err);
+    }
+  }
+  
+  // Fetch the primary API host for this test flow
+  async function fetchPrimaryApiHost() {
     if (!testFlow || !testFlow.apiId) return;
 
     try {
@@ -118,32 +162,31 @@
 
       if (response.ok) {
         const apiData = await response.json();
-        console.log('API data fetched:', apiData); // Debug log
+        console.log('Primary API data fetched:', apiData);
 
-        // Set the API host from the 'host' column in the apis table
+        // Get the host from the API data
         const hostFromApi = apiData.host || '';
+        const apiId = String(apiData.id);
 
-        // Store the host in the flow settings if not already set or if empty
-        if (hostFromApi && (!flowJson.settings.api_host || flowJson.settings.api_host === '')) {
-          console.log(`Setting API host from API: ${hostFromApi}`); // Debug log
-          flowJson.settings.api_host = hostFromApi;
-          apiHost = hostFromApi;
-        } else if (flowJson.settings.api_host && flowJson.settings.api_host.trim() !== '') {
-          // If flow settings already has a non-empty host, prefer that one
-          console.log(`Using API host from settings: ${flowJson.settings.api_host}`); // Debug log
-          apiHost = flowJson.settings.api_host;
-        } else if (hostFromApi) {
-          // Last resort: if we have a host from the API but somehow didn't handle it above
-          console.log(`Fallback to API host: ${hostFromApi}`); // Debug log
-          apiHost = hostFromApi;
-          flowJson.settings.api_host = hostFromApi;
+        if (hostFromApi) {
+          // Make sure we have an api_hosts object
+          if (!flowJson.settings.api_hosts) {
+            flowJson.settings.api_hosts = {};
+          }
+          
+          // Add the primary API to our hosts
+          flowJson.settings.api_hosts[apiId] = {
+            name: apiData.name || `API ${apiData.id}`,
+            url: hostFromApi
+          };
+          console.log(`Added primary API host: ${hostFromApi}`);
+          
+          markDirty();
         }
       }
     } catch (err) {
-      console.error('Error fetching API host:', err);
+      console.error('Error fetching primary API host:', err);
     }
-
-    console.log('Final apiHost value:', apiHost); // Debug log
   }
 
   // Reset execution state
@@ -348,13 +391,13 @@
             <div class="mb-6">
               <h2 class="mb-4 text-xl font-semibold">Test Flow Steps</h2>
 
-              {#if !apiHost || apiHost.trim() === ''}
+              {#if !flowJson.settings.api_hosts || Object.keys(flowJson.settings.api_hosts).length === 0}
                 <div
                   class="mb-4 rounded border border-yellow-300 bg-yellow-100 px-4 py-3 text-yellow-800"
                 >
-                  <p class="font-medium">API Host is not configured</p>
+                  <p class="font-medium">API Hosts Not Configured</p>
                   <p>
-                    Please set the API host URL in the Settings tab before running the test flow.
+                    Please configure at least one API host in the Settings tab before running the test flow.
                   </p>
                 </div>
               {/if}
@@ -363,7 +406,6 @@
               <TestFlowEditor
                 flowData={{ ...flowJson, endpoints }}
                 {endpoints}
-                apiHost={apiHost || ''}
                 on:change={(event) => {
                   // Extract and update the flow data from the event
                   const updatedFlowData = event.detail;
@@ -569,28 +611,132 @@
             </div>
 
             <div class="max-w-lg">
-              <!-- API Host Setting -->
+              <!-- API Hosts Settings -->
               <div class="mb-6">
-                <label for="settings-api-host" class="mb-1 block text-sm font-medium text-gray-700"
-                  >API Host URL</label
-                >
-                <div class="flex items-center">
-                  <input
-                    id="settings-api-host"
-                    type="text"
-                    bind:value={flowJson.settings.api_host}
-                    on:input={() => {
-                      apiHost = flowJson.settings.api_host;
+                <div class="flex items-center justify-between mb-3">
+                  <h3 class="text-lg font-medium text-gray-800">API Hosts</h3>
+                  <button
+                    class="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700 flex items-center"
+                    on:click={() => {
+                      // Initialize api_hosts if not existing
+                      if (!flowJson.settings.api_hosts) {
+                        flowJson.settings.api_hosts = {};
+                      }
+                      
+                      // Generate a unique ID for the new API host
+                      const newApiId = `api-${Date.now()}`;
+                      
+                      // Add the new API host
+                      flowJson.settings.api_hosts[newApiId] = {
+                        name: `API ${Object.keys(flowJson.settings.api_hosts).length + 1}`,
+                        url: ''
+                      };
+                      
                       markDirty();
                     }}
-                    class="flex-1 rounded-md border border-gray-300 px-3 py-2"
-                    placeholder="https://api.example.com"
-                  />
+                  >
+                    <svg class="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                    </svg>
+                    Add API Host
+                  </button>
                 </div>
-                <p class="mt-1 text-sm text-gray-500">
-                  The base URL for API requests. Will be automatically populated from the API's host
-                  setting if available.
+                
+                <p class="mb-4 text-sm text-gray-600">
+                  Configure the hosts for each API used in this test flow. Each endpoint in your flow will use its corresponding API host.
                 </p>
+                
+                <!-- API Hosts List -->
+                {#if flowJson.settings.api_hosts && Object.keys(flowJson.settings.api_hosts).length > 0}
+                  <div class="rounded-lg border border-gray-200 overflow-hidden">
+                    <table class="min-w-full divide-y divide-gray-200">
+                      <thead class="bg-gray-50">
+                        <tr>
+                          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/3">API Name</th>
+                          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Host URL</th>
+                          <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-16">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody class="bg-white divide-y divide-gray-200">
+                        {#each Object.entries(flowJson.settings.api_hosts || {}) as [apiId, apiInfo], index}
+                          <tr class={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                            <td class="px-4 py-3 whitespace-nowrap">
+                              <div class="flex items-center">
+                                <input
+                                  type="text"
+                                  bind:value={apiInfo.name}
+                                  on:input={markDirty}
+                                  class="rounded border border-gray-300 px-3 py-1.5 text-sm w-full"
+                                  placeholder="API Name"
+                                />
+                              </div>
+                              <div class="text-xs text-gray-500 mt-1">ID: {apiId}</div>
+                            </td>
+                            <td class="px-4 py-3 whitespace-nowrap">
+                              <input
+                                type="text"
+                                bind:value={apiInfo.url}
+                                on:input={markDirty}
+                                class="w-full rounded border border-gray-300 px-3 py-1.5 text-sm"
+                                placeholder="https://api.example.com"
+                              />
+                            </td>
+                            <td class="px-4 py-3 whitespace-nowrap text-right">
+                              <button
+                                class="inline-flex items-center justify-center p-1.5 rounded-full text-red-600 hover:text-white hover:bg-red-600 transition-colors"
+                                on:click={() => {
+                                  if (flowJson.settings.api_hosts) {
+                                    delete flowJson.settings.api_hosts[apiId];
+                                    flowJson.settings.api_hosts = {...flowJson.settings.api_hosts};
+                                    markDirty();
+                                  }
+                                }}
+                                aria-label="Delete API host"
+                                title="Delete this API host"
+                              >
+                                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                </svg>
+                              </button>
+                            </td>
+                          </tr>
+                        {/each}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div class="mt-2 text-xs text-gray-500 flex items-center">
+                    <svg class="h-4 w-4 mr-1 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    API hosts can be referenced in test steps by their ID
+                  </div>
+                {:else}
+                  <div class="flex flex-col items-center justify-center bg-gray-50 border border-gray-200 rounded-lg p-8 text-center">
+                    <svg class="h-12 w-12 text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path>
+                    </svg>
+                    <p class="mb-4 text-gray-600">No API hosts configured yet</p>
+                    <button
+                      class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md flex items-center text-sm"
+                      on:click={() => {
+                        if (!flowJson.settings.api_hosts) {
+                          flowJson.settings.api_hosts = {};
+                        }
+                        const newApiId = `api-${Date.now()}`;
+                        flowJson.settings.api_hosts[newApiId] = {
+                          name: "Primary API",
+                          url: ''
+                        };
+                        markDirty();
+                      }}
+                    >
+                      <svg class="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                      </svg>
+                      Add Your First API Host
+                    </button>
+                  </div>
+                {/if}
               </div>
 
               <!-- Flow Parameters -->

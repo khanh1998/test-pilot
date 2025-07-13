@@ -23,6 +23,7 @@ export type Endpoint = {
 
 export type StepEndpoint = {
   endpoint_id: string | number;
+  api_id: string | number; // API identifier that maps to the host in settings.api_hosts
   store_response_as?: string;
   pathParams?: Record<string, string>;
   queryParams?: Record<string, string>;
@@ -82,9 +83,15 @@ export type FlowAssertion = {
   // Other assertion properties
 };
 
+export type ApiHostInfo = {
+  url: string;
+  name?: string;
+  description?: string;
+};
+
 export type TestFlowData = {
   settings: {
-    api_host: string;
+    api_hosts?: Record<string | number, ApiHostInfo>; // New multi-API host structure
     // Other settings
   };
   parameters: FlowParameter[];

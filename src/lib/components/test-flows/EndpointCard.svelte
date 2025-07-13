@@ -10,6 +10,7 @@
   export let executionState: ExecutionState = {};
   export let duplicateCount: number = 1;
   export let instanceIndex: number = 1;
+  export let apiHosts: Record<string | number, { url: string; name?: string; description?: string }> = {};
 
   // Emitted events will be handled by the parent component
   import { createEventDispatcher } from 'svelte';
@@ -88,6 +89,11 @@
       >
         {endpoint.method}
       </span>
+      {#if stepEndpoint.api_id && stepEndpoint.api_id !== endpoint.apiId}
+        <span class="ml-1 rounded bg-purple-100 px-1.5 py-0.5 text-xs font-medium text-purple-800">
+          {apiHosts[stepEndpoint.api_id]?.name || `API ${stepEndpoint.api_id}`}
+        </span>
+      {/if}
       {#if duplicateCount > 1}
         <span class="ml-1 rounded bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-800">
           #{instanceIndex}

@@ -115,7 +115,7 @@ export async function POST({ request, locals }: RequestEvent) {
 
     // Create default flow JSON structure if not provided
     const defaultFlowJson = {
-      settings: { api_host: '' },
+      settings: { api_hosts: {} },
       steps: [],
       assertions: []
     };

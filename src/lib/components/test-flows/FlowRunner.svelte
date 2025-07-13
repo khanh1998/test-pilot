@@ -5,11 +5,12 @@
   // Props
   export let flowData: TestFlowData = {
     parameters: [],
-    settings: { api_host: '' },
+    settings: { 
+      api_hosts: {}
+    },
     steps: [],
     assertions: []
   }; // The complete test flow data
-  export let apiHost: string = ''; // API host URL
   export let isRunning: boolean = false; // Whether the flow is currently running
   export let executionState: ExecutionState = {}; // Execution state for each endpoint
 
@@ -87,10 +88,7 @@
     totalSteps = flowData.steps.length;
   }
 
-  // Make sure apiHost is not undefined when passed to fetch
-  $: if (apiHost === undefined || apiHost === null) {
-    apiHost = '';
-  }
+  // No need to check apiHost anymore as we only use api_hosts
 
   // Ensure endpoints are available
   $: if (!flowData.endpoints) {
@@ -153,12 +151,16 @@
       return;
     }
 
-    // Validate API host
-    if (!apiHost || apiHost.trim() === '') {
+    // Validate that at least one API host is configured
+    const hasApiHosts = flowData.settings && 
+      flowData.settings.api_hosts && 
+      Object.values(flowData.settings.api_hosts).some(host => host.url && host.url.trim() !== '');
+    
+    if (!hasApiHosts) {
       error = new Error(
-        'API Host is not configured. Please set the API host before running the flow.'
+        'No API Hosts are configured. Please configure at least one API host before running the flow.'
       );
-      dispatch('error', { message: 'API Host is not configured' });
+      dispatch('error', { message: 'No API Hosts are configured' });
       return;
     }
 
@@ -212,10 +214,14 @@
     resetExecution();
     shouldStopExecution = false;
 
-    // Validate API host
-    if (!apiHost || apiHost.trim() === '') {
+    // Validate that at least one API host is configured
+    const hasApiHosts = flowData.settings && 
+      flowData.settings.api_hosts && 
+      Object.values(flowData.settings.api_hosts).some(host => host.url && host.url.trim() !== '');
+    
+    if (!hasApiHosts) {
       error = new Error(
-        'API Host is not configured. Please set the API host before running the flow.'
+        'No API Hosts are configured. Please configure at least one API host before running the flow.'
       );
       isRunning = false;
       dispatch('executionComplete', {
@@ -382,9 +388,28 @@
       if (!endpointDef) {
         throw new Error(`Endpoint definition not found for ID: ${endpoint.endpoint_id}`);
       }
-
+      
+      // Get the API host for this endpoint
+      let endpointHost = '';
+      
+      // Get host from api_hosts using endpoint's api_id
+      if (endpoint.api_id && flowData.settings && flowData.settings.api_hosts) {
+        const apiHostInfo = flowData.settings.api_hosts[endpoint.api_id];
+        if (apiHostInfo && apiHostInfo.url) {
+          endpointHost = apiHostInfo.url;
+          addLog('debug', `Using host for API ID ${endpoint.api_id}: ${endpointHost}`);
+        } else {
+          addLog('warning', `API host not found for ID: ${endpoint.api_id}`);
+        }
+      }
+      
+      if (!endpointHost) {
+        addLog('error', 'No API host available for endpoint', `Endpoint ID: ${endpoint.endpoint_id}`);
+        throw new Error(`No API host available for endpoint ${endpoint.endpoint_id}`);
+      }
+      
       // Build the URL with path parameters
-      let url = apiHost + endpointDef.path;
+      let url = endpointHost + endpointDef.path;
 
       // Replace path parameters
       if (endpoint.pathParams && typeof endpoint.pathParams === 'object') {

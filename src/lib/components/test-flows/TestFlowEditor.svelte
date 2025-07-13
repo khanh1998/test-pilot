@@ -9,9 +9,9 @@
   import { onMount, onDestroy } from 'svelte';
   import { createEventDispatcher } from 'svelte';
 
+  // flowData includes settings.api_hosts which contains multiple API host configurations
   export let flowData: TestFlowData;
   export let endpoints: Endpoint[] = [];
-  export let apiHost: string = '';
 
   let isRunning = false;
   let executionState: ExecutionState = {};
@@ -42,6 +42,7 @@
     // Add endpoint to the step
     flowData.steps[stepIndex].endpoints.push({
       endpoint_id: selectedEndpoint.id,
+      api_id: selectedEndpoint.apiId, // Include API ID for multi-API support
       store_response_as: '',
       pathParams: {},
       queryParams: {}
@@ -203,8 +204,48 @@
   function handleStop() {
     if (flowRunner) {
       flowRunner.stopExecution();
+      isRunning = false;
     }
-    isRunning = false;
+  }
+
+  // Check if there are valid API hosts configured
+  function hasValidApiHosts(): boolean {
+    // Check if we have api_hosts structure with at least one valid host
+    if (flowData.settings.api_hosts && Object.keys(flowData.settings.api_hosts).length > 0) {
+      // Check if at least one API host has a valid URL
+      return Object.values(flowData.settings.api_hosts).some(
+        (hostInfo) => hostInfo && hostInfo.url && hostInfo.url.trim() !== ''
+      );
+    }
+    
+    return false;
+  }
+
+  // Update the execution state for step headers
+  function getStepExecutionState(stepId: string): { status: string; count: number } {
+    // Subscribe once to get the current state and store the unsubscriber
+    const unsubscriber = executionStore.subscribe(() => {});
+    unsubscriber(); // Immediately unsubscribe
+    
+    // Use the current executionState which is already being kept updated by the main subscription
+    // Extract the relevant part of the state for the given stepId
+    const stepState = Object.keys(executionState).reduce(
+      (acc, key) => {
+        if (key.startsWith(stepId)) {
+          acc.push(executionState[key]);
+        }
+        return acc;
+      },
+      [] as EndpointExecutionState[]
+    );
+
+    // Determine the overall status for the step based on its endpoints' statuses
+    const status = stepState.length > 0 ? (stepState.some((s) => s.status === 'error') ? 'error' : 'success') : 'idle';
+
+    return {
+      status,
+      count: stepState.length
+    };
   }
 
   let unsubscribe: () => void;
@@ -295,7 +336,7 @@
             ? 'bg-red-600 hover:bg-red-700'
             : 'bg-blue-600 hover:bg-blue-700'}"
           on:click={isRunning ? handleStop : runFlow}
-          disabled={!apiHost || flowData.steps.length === 0}
+          disabled={!hasValidApiHosts() || flowData.steps.length === 0}
         >
           {#if isRunning}
             <svg
@@ -437,7 +478,6 @@
     <FlowRunner
       bind:this={flowRunner}
       {flowData}
-      {apiHost}
       bind:isRunning
       bind:executionState
       bind:preferences
@@ -479,6 +519,7 @@
         <StepEditor
           {step}
           {endpoints}
+          apiHosts={flowData?.settings?.api_hosts || {}}
           {stepIndex}
           isFirstStep={stepIndex === 0}
           isLastStep={stepIndex === flowData.steps.length - 1}
@@ -493,6 +534,7 @@
           <div slot="endpoint-selector">
             <EndpointSelector
               {endpoints}
+              apiHosts={flowData?.settings?.api_hosts || {}}
               on:select={(e) => handleEndpointSelected(e, stepIndex)}
               disabled={isRunning}
             />

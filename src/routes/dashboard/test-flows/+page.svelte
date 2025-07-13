@@ -107,7 +107,7 @@
           description: newFlowDescription,
           apiIds: selectedApiIds,
           flowJson: {
-            settings: { api_host: '' },
+            settings: { api_hosts: {} },
             steps: [],
             assertions: [],
             parameters: []
