@@ -18,9 +18,12 @@
   let activeTab: 'path' | 'query' | 'body' | 'headers' = 'path';
   let jsonBodyContent: string = '{}';
   let headers: { name: string; value: string; enabled: boolean }[] = [];
+  let initialized = false; // Add a flag to track if we've already initialized
 
   // Initialize state when component mounts
-  $: if (isMounted && endpoint) {
+  $: if (isMounted && endpoint && !initialized) {
+    initialized = true; // Set the flag to true so this block runs only once
+
     // Initialize headers if needed
     if (!stepEndpoint.headers) {
       stepEndpoint.headers = [];
@@ -87,17 +90,28 @@
   }
 
   // Add a new header
-  function addHeader() {
+  function addHeader(event?: Event) {
+    if (event) event.stopPropagation(); // Stop event propagation
     headers = [...headers, { name: '', value: '', enabled: true }];
+    // Ensure we stay on the headers tab
+    activeTab = 'headers';
   }
 
   // Remove a header
-  function removeHeader(index: number) {
+  function removeHeader(index: number, event?: Event) {
+    if (event) event.stopPropagation(); // Stop event propagation
     headers = headers.filter((_, i) => i !== index);
+    // Ensure we stay on the headers tab
+    activeTab = 'headers';
   }
 
   function closeParamEditor() {
     dispatch('close');
+  }
+  
+  // Helper function to ensure we stay on headers tab
+  function keepOnHeadersTab() {
+    activeTab = 'headers';
   }
 </script>
 
@@ -438,14 +452,14 @@
 
       <!-- Headers Tab -->
       {#if activeTab === 'headers'}
-        <div class="space-y-4">
+        <div class="space-y-4" on:click|stopPropagation>
           <div class="mb-2 flex items-center justify-between">
             <h4 class="text-sm font-medium text-gray-700">Headers</h4>
             <button
-              class="flex items-center rounded bg-gray-100 px-2 py-1 text-xs hover:bg-gray-200"
-              on:click={addHeader}
+              class="flex items-center rounded bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700"
+              on:click|stopPropagation={(e) => addHeader(e)}
             >
-              <svg class="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg class="mr-1 h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   stroke-linecap="round"
                   stroke-linejoin="round"
@@ -453,51 +467,119 @@
                   d="M12 6v6m0 0v6m0-6h6m-6 0H6"
                 ></path>
               </svg>
-              Add Header
+              Add New Header
             </button>
           </div>
 
           <div class="space-y-3">
-            {#each headers as header (header.name)}
-              <div class="group flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  bind:checked={header.enabled}
-                  class="h-4 w-4 accent-blue-600"
-                  id="header-checkbox-{stepIndex}-{endpointIndex}-{header.name}-{instanceIndex}"
-                />
-                <input
-                  type="text"
-                  placeholder="Header Name"
-                  bind:value={header.name}
-                  class="flex-1 rounded-md border bg-gray-50 px-2 py-1 text-sm transition-colors focus:border-blue-500 focus:bg-white"
-                  aria-label="Header name"
-                />
-                <input
-                  type="text"
-                  placeholder="Value"
-                  bind:value={header.value}
-                  class="flex-1 rounded-md border bg-gray-50 px-2 py-1 text-sm transition-colors focus:border-blue-500 focus:bg-white"
-                  aria-label="Header value"
-                />
+            {#if headers.length === 0}
+              <div class="flex flex-col items-center justify-center rounded-md border-2 border-dashed border-gray-300 bg-gray-50 p-6 text-center">
+                <svg class="mb-2 h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                </svg>
+                <p class="text-sm text-gray-500">No headers added yet.</p>
+                <p class="mt-1 text-xs text-gray-400">HTTP headers allow you to send additional information with your request</p>
                 <button
-                  class="text-gray-400 opacity-0 transition-colors group-hover:opacity-100 hover:text-red-600 focus:opacity-100"
-                  on:click={() => removeHeader(headers.indexOf(header))}
-                  aria-label="Remove Header"
+                  class="mt-3 flex items-center rounded bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700"
+                  on:click|stopPropagation={(e) => addHeader(e)}
                 >
-                  <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                  <svg class="mr-1 h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path
-                      fill-rule="evenodd"
-                      d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                      clip-rule="evenodd"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M12 6v6m0 0v6m0-6h6m-6 0H6"
                     ></path>
                   </svg>
+                  Add First Header
                 </button>
               </div>
-            {/each}
-
-            {#if headers.length === 0}
-              <p class="text-sm text-gray-500">No headers added yet.</p>
+            {:else}
+              <div class="rounded-md border border-gray-200 bg-gray-50 shadow-sm">
+                <table class="w-full border-collapse">
+                  <thead>
+                    <tr class="border-b bg-gray-100 text-left">
+                      <th class="w-10 px-3 py-2"></th>
+                      <th class="px-3 py-2 text-xs font-medium text-gray-600">Name</th>
+                      <th class="px-3 py-2 text-xs font-medium text-gray-600">Value</th>
+                      <th class="w-10 px-3 py-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each headers as header, index (index)}
+                      <tr class="group border-b border-gray-200 last:border-0 hover:bg-gray-50">
+                        <td class="px-3 py-2 text-center">
+                          <input
+                            type="checkbox"
+                            bind:checked={header.enabled}
+                            class="h-4 w-4 cursor-pointer rounded accent-blue-600"
+                            id="header-checkbox-{stepIndex}-{endpointIndex}-{index}-{instanceIndex}"
+                            aria-label="Enable header"
+                            on:click|stopPropagation
+                          />
+                        </td>
+                        <td class="px-3 py-2">
+                          <input
+                            type="text"
+                            placeholder="Header Name"
+                            bind:value={header.name}
+                            class="w-full rounded-md border-0 bg-transparent px-0 py-0 text-sm transition-colors focus:border-b-2 focus:border-blue-500 focus:outline-none focus:ring-0 {!header.enabled ? 'text-gray-400' : ''}"
+                            aria-label="Header name"
+                            on:click|stopPropagation
+                            on:keydown|stopPropagation
+                            on:input|stopPropagation
+                            on:focus={() => { activeTab = 'headers'; }}
+                          />
+                        </td>
+                        <td class="px-3 py-2">
+                          <input
+                            type="text"
+                            placeholder="Value"
+                            bind:value={header.value}
+                            class="w-full rounded-md border-0 bg-transparent px-0 py-0 text-sm transition-colors focus:border-b-2 focus:border-blue-500 focus:outline-none focus:ring-0 {!header.enabled ? 'text-gray-400' : ''}"
+                            aria-label="Header value"
+                            on:click|stopPropagation
+                            on:keydown|stopPropagation
+                            on:input|stopPropagation
+                            on:focus={() => { activeTab = 'headers'; }}
+                          />
+                        </td>
+                        <td class="px-3 py-2 text-right">
+                          <button
+                            class="text-gray-400 opacity-30 transition-all hover:text-red-600 group-hover:opacity-100 focus:opacity-100"
+                            on:click|stopPropagation={(e) => removeHeader(index, e)}
+                            aria-label="Remove Header"
+                          >
+                            <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                              <path
+                                fill-rule="evenodd"
+                                d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                                clip-rule="evenodd"
+                              ></path>
+                            </svg>
+                          </button>
+                        </td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
+              </div>
+              <div class="mt-2 text-right">
+                <button
+                  class="inline-flex items-center rounded bg-gray-100 px-3 py-1.5 text-xs hover:bg-gray-200"
+                  on:click|stopPropagation={(e) => addHeader(e)}
+                >
+                  <svg class="mr-1 h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                    ></path>
+                  </svg>
+                  Add Header
+                </button>
+              </div>
             {/if}
           </div>
         </div>
