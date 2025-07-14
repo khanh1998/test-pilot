@@ -452,7 +452,7 @@
 
       <!-- Headers Tab -->
       {#if activeTab === 'headers'}
-        <div class="space-y-4" on:click|stopPropagation>
+        <div class="space-y-4">
           <div class="mb-2 flex items-center justify-between">
             <h4 class="text-sm font-medium text-gray-700">Headers</h4>
             <button
