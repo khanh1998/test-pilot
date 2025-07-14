@@ -49,6 +49,7 @@
   let progress = 0; // 0-100
   let error: unknown = null;
   let storedResponses: Record<string, unknown> = {}; // Stores responses by their names
+  let storedTransformations: Record<string, Record<string, unknown>> = {}; // Stores transformed values by endpoint id and alias
   
 
   // Parameters panel state
@@ -608,6 +609,32 @@
         'Currently stored responses:', 
         `Available keys: ${JSON.stringify(Object.keys(storedResponses))}`
       );
+      
+      // Process transformations if configured for this endpoint
+      if (endpoint.transformations && endpoint.transformations.length > 0) {
+        const transformedData: Record<string, unknown> = {};
+        
+        // Phase 1: Simply store the raw response under each alias
+        // In Phase 2, we'll evaluate the expression here
+        for (const transform of endpoint.transformations) {
+          transformedData[transform.alias] = responseData;
+          
+          addLog(
+            'debug',
+            `Applied transformation: ${transform.alias}`,
+            `Expression: ${transform.expression} (evaluation deferred to Phase 2)`
+          );
+        }
+        
+        // Store all transformations for this endpoint
+        storedTransformations[endpointId] = transformedData;
+        
+        addLog(
+          'info',
+          `Stored ${endpoint.transformations.length} transformations for endpoint: ${endpointId}`,
+          `Available aliases: ${Object.keys(transformedData).join(', ')}`
+        );
+      }
 
       // Update status - create a new object for reactivity
       if (response.ok) {
@@ -693,6 +720,7 @@
     progress = 0;
     error = null;
     storedResponses = {};
+    storedTransformations = {};
     executionState = {};
     isRunning = false;
     
@@ -808,6 +836,10 @@
           // Handle res:stepId-endpointIndex.jsonpath
           return resolveResponseTemplate(path.trim(), storedData);
 
+        case 'proc':
+          // Handle proc:stepId-endpointIndex.$.alias.path
+          return resolveTransformationTemplate(path.trim());
+
         case 'func':
           // Handle func:functionName(arg1,arg2,...)
           return resolveFunctionTemplate(path.trim());
@@ -820,7 +852,7 @@
           addLog(
             'warning',
             `Unknown template source: ${source}`,
-            `Valid sources are: 'res', 'func', and 'var'`
+            `Valid sources are: 'res', 'proc', 'func', and 'param'`
           );
           return originalMatch; // Keep original template if source is unknown
       }
@@ -913,6 +945,88 @@
     }
 
     return String(responseData);
+  }
+
+  // Helper function to resolve transformation templates like stepId-endpointIndex.$.alias.path
+  function resolveTransformationTemplate(path: string): string {
+    // Format: "step1-0.$.alias.path"
+    const dotSeparated = path.split('.');
+    
+    if (dotSeparated.length < 2) {
+      addLog(
+        'warning',
+        `Invalid transformation template: ${path}`,
+        `Format should be stepId-endpointIndex.$.alias.path`
+      );
+      return `{proc:${path}}`;
+    }
+    
+    // Extract step ID and alias
+    const stepEndpointId = dotSeparated[0];
+    
+    // Check if we have a $ indicating JSON path
+    if (dotSeparated[1] !== '$') {
+      addLog(
+        'warning',
+        `Invalid transformation template: ${path}`,
+        `Format should include $ to indicate JSON path: stepId-endpointIndex.$.alias.path`
+      );
+      return `{proc:${path}}`;
+    }
+    
+    // The alias is the next part after $
+    const alias = dotSeparated[2];
+    
+    // Check if this step and transformation exist
+    if (!storedTransformations[stepEndpointId]) {
+      // Log available keys to help debug
+      const availableKeys = Object.keys(storedTransformations);
+      addLog(
+        'warning',
+        `Transformation data not found for: ${stepEndpointId}`,
+        `Available transformation keys: ${JSON.stringify(availableKeys)}`
+      );
+      
+      return `{proc:${path}}`;
+    }
+    
+    // Get the transformed data by alias
+    const transformedData = storedTransformations[stepEndpointId][alias];
+    if (transformedData === undefined) {
+      // Log available aliases to help debug
+      const availableAliases = Object.keys(storedTransformations[stepEndpointId]);
+      addLog(
+        'warning',
+        `Transformation alias not found: ${alias} for step ${stepEndpointId}`,
+        `Available aliases: ${JSON.stringify(availableAliases)}`
+      );
+      
+      return `{proc:${path}}`;
+    }
+    
+    // If there are more parts, it's a JSON path into the transformed data
+    if (dotSeparated.length > 3) {
+      try {
+        // Reconstruct the JSON path by joining all parts after the alias with dots
+        const jsonPathParts = dotSeparated.slice(3);
+        const jsonPath = jsonPathParts.join('.');
+        
+        // Use the same jsonPath function that's used for response templates
+        const result = templateFunctions.jsonPath(transformedData, jsonPath);
+        return result !== undefined ? String(result) : `{proc:${path}}`;
+      } catch (error: unknown) {
+        console.error(`Error applying JSONPath to transformation:`, error);
+        addLog(
+          'error',
+          `Error applying JSONPath to transformation`,
+          `Path: ${path}\nError: ${error instanceof Error ? error.message : String(error)}`
+        );
+        return `{proc:${path}}`;
+      }
+    }
+    
+    // If no JSON path specified beyond the alias, return the full transformed data
+    return String(transformedData);
   }
 
   // Helper function to resolve function templates like functionName(arg1,arg2,...)

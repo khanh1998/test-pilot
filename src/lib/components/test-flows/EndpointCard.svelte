@@ -70,6 +70,10 @@
     dispatch('openResponseViewer', { endpointIndex });
   }
 
+  function openTransformationEditor() {
+    dispatch('openTransformationEditor', { endpointIndex });
+  }
+
   function removeEndpoint() {
     dispatch('removeEndpoint', { endpointIndex });
   }
@@ -194,6 +198,28 @@
           />
         </svg>
         Edit Request
+      </button>
+
+      <!-- Transformation Editor Button -->
+      <button
+        class="flex flex-1 items-center justify-center rounded border border-purple-200 bg-purple-50 px-2 py-1 text-xs text-purple-700 transition-colors hover:bg-purple-100"
+        on:click={openTransformationEditor}
+      >
+        <svg 
+          xmlns="http://www.w3.org/2000/svg" 
+          class="mr-1 h-3 w-3"
+          fill="none" 
+          viewBox="0 0 24 24" 
+          stroke="currentColor"
+        >
+          <path 
+            stroke-linecap="round" 
+            stroke-linejoin="round" 
+            stroke-width="2" 
+            d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" 
+          />
+        </svg>
+        Transform
       </button>
 
       <!-- Response Viewer Button -->

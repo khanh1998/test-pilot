@@ -29,6 +29,10 @@ export type StepEndpoint = {
   queryParams?: Record<string, string>;
   body?: unknown;
   headers?: { name: string; value: string; enabled: boolean }[];
+  transformations?: Array<{
+    alias: string;      // Name used for referencing the transformed value
+    expression: string; // Will store the transformation expression as string in Phase 1
+  }>;
 };
 
 export type EndpointExecutionState = {

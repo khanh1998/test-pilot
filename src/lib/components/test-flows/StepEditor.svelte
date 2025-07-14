@@ -4,6 +4,7 @@
   import EndpointCard from './EndpointCard.svelte';
   import ParameterEditor from './ParameterEditor.svelte';
   import ResponseViewer from './ResponseViewer.svelte';
+  import TransformationEditor from './TransformationEditor.svelte';
 
   export let step: {
     step_id: string;
@@ -40,6 +41,11 @@
   let isResponseViewerOpen = false;
   let isResponseViewerMounted = false;
   let activeResponseEndpointIndex: number | null = null;
+  
+  // Transformation editor state
+  let isTransformationEditorOpen = false;
+  let isTransformationEditorMounted = false;
+  let activeTransformationEndpointIndex: number | null = null;
 
   // Step execution state
   let stepExecutionState = { status: 'none' };
@@ -177,7 +183,43 @@
     }, 300);
   }
 
-  // No additional execution functions needed
+  // Open transformation editor panel for a specific endpoint
+  function openTransformationEditor(event: CustomEvent<{ endpointIndex: number }>) {
+    const { endpointIndex } = event.detail;
+    activeTransformationEndpointIndex = endpointIndex;
+
+    // First set the panel as mounted but with transform to the right
+    isTransformationEditorMounted = true;
+    isTransformationEditorOpen = false;
+
+    // Add a class to the body to prevent scrolling while modal is open
+    document.body.classList.add('overflow-hidden');
+
+    // Use requestAnimationFrame to ensure the DOM is updated before applying the animation
+    requestAnimationFrame(() => {
+      // Then in the next frame, trigger the animation by setting open to true
+      isTransformationEditorOpen = true;
+    });
+  }
+
+  // Close transformation editor panel
+  function closeTransformationEditor() {
+    isTransformationEditorOpen = false;
+
+    // Use a timeout to allow the exit animation to complete before unmounting
+    setTimeout(() => {
+      isTransformationEditorMounted = false;
+      activeTransformationEndpointIndex = null;
+
+      // Remove the class from body to re-enable scrolling
+      document.body.classList.remove('overflow-hidden');
+    }, 300);
+  }
+
+  // Handle transformation changes
+  function handleTransformationChange() {
+    dispatch('change');
+  }
 </script>
 
 <div
@@ -409,6 +451,7 @@
               {instanceIndex}
               {apiHosts}
               on:openParamEditor={openParamEditor}
+              on:openTransformationEditor={openTransformationEditor}
               on:openResponseViewer={openResponseViewer}
               on:removeEndpoint={() => removeEndpoint(endpointIndex)}
             />
@@ -475,6 +518,32 @@
       {instanceIndex}
       {executionState}
       on:close={closeResponseViewer}
+    />
+  {/if}
+{/if}
+
+<!-- Transformation Editor Slide-out Panel -->
+{#if isTransformationEditorMounted && activeTransformationEndpointIndex !== null}
+  {@const safeIndex = activeTransformationEndpointIndex!}
+  {@const activeEndpoint = findEndpoint(step.endpoints[safeIndex].endpoint_id)}
+  {@const duplicateCount = step.endpoints
+    .slice(0, safeIndex + 1)
+    .filter((e: StepEndpoint) => e.endpoint_id === step.endpoints[safeIndex].endpoint_id
+    ).length}
+  {@const instanceIndex = duplicateCount}
+
+  {#if activeEndpoint}
+    <TransformationEditor
+      isOpen={isTransformationEditorOpen}
+      isMounted={true}
+      endpoint={activeEndpoint}
+      stepEndpoint={step.endpoints[safeIndex]}
+      {stepIndex}
+      endpointIndex={safeIndex}
+      {duplicateCount}
+      {instanceIndex}
+      on:close={closeTransformationEditor}
+      on:change={handleTransformationChange}
     />
   {/if}
 {/if}
