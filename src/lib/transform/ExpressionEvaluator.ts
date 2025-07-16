@@ -469,6 +469,11 @@ export class SafeExpressionEvaluator {
    * @returns Result of the evaluation
    */
   private evaluateWithContext(expression: string, context: unknown): unknown {
+    // Check if it's a template expression (e.g., {{func:uuid()}})
+    if (this.isTemplateExpression(expression)) {
+      return expression; // Keep template expressions as-is
+    }
+    
     // Replace "item" with context path if needed
     if (expression.includes('item.')) {
       const contextObj = { item: context };
@@ -559,6 +564,15 @@ export class SafeExpressionEvaluator {
     ];
     
     return dangerousPatterns.some(dangerous => dangerous.test(pattern));
+  }
+  
+  /**
+   * Check if a string is a template expression (e.g., {{func:uuid()}})
+   * @param str - String to check
+   * @returns Whether the string is a template expression
+   */
+  private isTemplateExpression(str: string): boolean {
+    return typeof str === 'string' && str.includes('{{') && str.includes('}}');
   }
 }
 
