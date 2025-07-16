@@ -1256,7 +1256,7 @@
     const newVar = {
       name: parameter.name,
       type: parameter.type || 'string',
-      value: parameter.value,
+      // value: parameter.value,
       defaultValue: parameter.defaultValue,
       description: parameter.description,
       required: parameter.required === true

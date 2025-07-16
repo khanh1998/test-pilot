@@ -96,6 +96,19 @@
       loading = true;
       error = null;
 
+      // Create an api_hosts object with API IDs as keys and objects containing url and name as values
+      // This will be used when running the test flow to know which host to send requests to
+      const apiHosts = selectedApiIds.reduce<Record<number, {url: string, name: string}>>((hosts, apiId) => {
+        const api = availableApis.find(a => a.id === apiId);
+        if (api) {
+          hosts[apiId] = {
+            url: api.host,
+            name: api.name
+          };
+        }
+        return hosts;
+      }, {});
+
       const response = await fetch('/api/test-flows', {
         method: 'POST',
         headers: {
@@ -107,7 +120,9 @@
           description: newFlowDescription,
           apiIds: selectedApiIds,
           flowJson: {
-            settings: { api_hosts: {} },
+            settings: { 
+              api_hosts: apiHosts
+            },
             steps: [],
             assertions: [],
             parameters: []
