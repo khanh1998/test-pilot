@@ -228,7 +228,9 @@
       dispatch('executionComplete', {
         success: false,
         error,
-        storedResponses
+        storedResponses,
+        parameterValues,
+        transformResponse,
       });
       return;
     }
@@ -300,7 +302,8 @@
         success: !error,
         error,
         storedResponses,
-        parameterValues: parameterValues
+        parameterValues,
+        transformResponse,
       });
     }
   }
@@ -614,16 +617,69 @@
       if (endpoint.transformations && endpoint.transformations.length > 0) {
         const transformedData: Record<string, unknown> = {};
         
-        // Phase 1: Simply store the raw response under each alias
-        // In Phase 2, we'll evaluate the expression here
-        for (const transform of endpoint.transformations) {
-          transformedData[transform.alias] = responseData;
+        try {
+          // Import the transformation module
+          const transformModule = await import('$lib/transform');
           
+          // Phase 1 & 2: Store and evaluate transformations
+          for (const transform of endpoint.transformations) {
+            try {
+              // Phase 1: Store the raw response under the alias
+              transformedData[transform.alias] = responseData;
+              
+              // Phase 2: Evaluate the expression if provided
+              if (transform.expression && transform.expression.trim()) {
+                // Evaluate the expression using the transformation engine
+                const evaluatedResult = transformModule.transformResponse(responseData, transform.expression);
+                
+                if (evaluatedResult !== null && evaluatedResult !== undefined) {
+                  // Update with the evaluated result
+                  transformedData[transform.alias] = evaluatedResult;
+                  
+                  addLog(
+                    'debug',
+                    `Applied transformation: ${transform.alias}`,
+                    `Expression: ${transform.expression} evaluated successfully, value: ${JSON.stringify(evaluatedResult)}`
+                  );
+                } else {
+                  addLog(
+                    'warning',
+                    `Transformation evaluation returned null/undefined: ${transform.alias}`,
+                    `Expression: ${transform.expression}`
+                  );
+                }
+              } else {
+                addLog(
+                  'debug',
+                  `Applied transformation: ${transform.alias}`,
+                  `No expression provided, using raw response`
+                );
+              }
+            } catch (error: unknown) {
+              addLog(
+                'error',
+                `Failed to apply transformation: ${transform.alias}`,
+                `Expression: ${transform.expression}\nError: ${error instanceof Error ? error.message : String(error)}`
+              );
+            }
+          }
+        } catch (error: unknown) {
           addLog(
-            'debug',
-            `Applied transformation: ${transform.alias}`,
-            `Expression: ${transform.expression} (evaluation deferred to Phase 2)`
+            'error',
+            `Failed to load transformation module`,
+            `Error: ${error instanceof Error ? error.message : String(error)}`
           );
+          
+          // Fallback to Phase 1 only if transformation module fails to load
+          for (const transform of endpoint.transformations) {
+            transformedData[transform.alias] = responseData;
+            
+            addLog(
+              'debug',
+              `Applied transformation (fallback): ${transform.alias}`,
+              `Expression: ${transform.expression} (evaluation skipped)`
+            );
+          }
         }
         
         // Store all transformations for this endpoint
@@ -794,6 +850,7 @@
   }
 
   import * as templateFunctionsModule from './templateFunctions';
+  import { transformResponse } from '$lib/transform';
 
   // Create an indexed object for dynamic function access
   const templateFunctions: Record<string, (...args: any[]) => any> = {};
@@ -1012,8 +1069,13 @@
         const jsonPath = jsonPathParts.join('.');
         
         // Use the same jsonPath function that's used for response templates
+        // This is synchronous and more reliable in this context
         const result = templateFunctions.jsonPath(transformedData, jsonPath);
-        return result !== undefined ? String(result) : `{proc:${path}}`;
+        if (result !== undefined) {
+          return String(result);
+        }
+        
+        return `{proc:${path}}`;
       } catch (error: unknown) {
         console.error(`Error applying JSONPath to transformation:`, error);
         addLog(
@@ -1022,6 +1084,17 @@
           `Path: ${path}\nError: ${error instanceof Error ? error.message : String(error)}`
         );
         return `{proc:${path}}`;
+      }
+    }
+    
+    // Handle different types of transformed data
+    if (transformedData === null || transformedData === undefined) {
+      return '';
+    } else if (typeof transformedData === 'object') {
+      try {
+        return JSON.stringify(transformedData);
+      } catch {
+        return String(transformedData);
       }
     }
     
