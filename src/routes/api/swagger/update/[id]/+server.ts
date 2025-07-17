@@ -2,7 +2,7 @@ import { json } from '@sveltejs/kit';
 import { db } from '$lib/server/db/drizzle';
 import { apis, apiEndpoints } from '$lib/server/db/schema';
 import { parseSwaggerSpec, extractEndpoints, extractHost } from '$lib/server/swagger/parser';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, sql, inArray } from 'drizzle-orm';
 import type { RequestEvent } from '@sveltejs/kit';
 
 export async function POST({ request, locals, params }: RequestEvent) {
@@ -141,9 +141,11 @@ export async function POST({ request, locals, params }: RequestEvent) {
     );
 
     if (endpointsToDelete.length > 0) {
+      // Use individual parameters for each ID rather than a comma-joined string
+      const idsToDelete = endpointsToDelete.map((e) => e.id);
       await db
         .delete(apiEndpoints)
-        .where(sql`${apiEndpoints.id} IN (${endpointsToDelete.map((e) => e.id).join(',')})`);
+        .where(inArray(apiEndpoints.id, idsToDelete));
     }
 
     return json({
