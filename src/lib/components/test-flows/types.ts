@@ -33,15 +33,7 @@ export type StepEndpoint = {
     alias: string;      // Name used for referencing the transformed value
     expression: string; // Will store the transformation expression as string in Phase 1
   }>;
-  assertions?: Array<{
-    id: string;
-    data_source: AssertionDataSource;
-    assertion_type: AssertionType;
-    data_id: string;
-    operator: AssertionOperator;
-    expected_value: unknown;
-    enabled: boolean;
-  }>;
+  assertions?: Array<import('$lib/assertions/types').Assertion>;
 };
 
 export type EndpointExecutionState = {
@@ -86,9 +78,9 @@ export type FlowStep = {
   // Other step properties
 };
 
-export type AssertionDataSource = 'response' | 'transformed_data';
-export type AssertionType = 'status_code' | 'response_time' | 'header' | 'json_body';
-export type AssertionOperator = 'equals' | 'not_equals' | 'contains' | 'exists' | 'greater_than' | 'less_than';
+// Assertion types are now imported from $lib/assertions/types
+import type { AssertionDataSource, AssertionType, AssertionOperator } from '$lib/assertions/types';
+export type { AssertionDataSource, AssertionType, AssertionOperator };
 
 export type ApiHostInfo = {
   url: string;

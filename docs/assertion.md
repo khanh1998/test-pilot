@@ -131,3 +131,35 @@ Every assertion consists of four parts:
 - UI provides intuitive assertion creation and management
 - Assertion results are clearly displayed with pass/fail status
 - Feature integrates seamlessly with existing Request/Response/Transform workflow
+
+
+Here are additional operators you should consider for a comprehensive assertion system:
+
+## String-Specific Operators
+- `starts_with` - Check if string starts with specific text
+- `ends_with` - Check if string ends with specific text  
+- `matches_regex` - Pattern matching with regular expressions
+- `not_contains` - Inverse of contains
+- `is_empty` - Check if string/array is empty
+- `is_not_empty` - Check if string/array has content
+
+## Numeric Operators
+- `greater_than_or_equal` - >= comparison
+- `less_than_or_equal` - <= comparison
+- `between` - Value within range (requires two expected values)
+- `not_between` - Value outside range
+
+## Array-Specific Operators
+- `has_length` - Array/string length equals specific number
+- `length_greater_than` - Array/string length > number
+- `length_less_than` - Array/string length < number
+- `contains_all` - Array contains all specified elements. only support primitive types.
+- `contains_any` - Array contains at least one of specified elements. only support primitive types.
+- `not_contains_any` - Array doesn't contain any of specified elements. only support primitive types.
+- `one_of` - Value matches any from a list of options. only support primitive types.
+- `not_one_of` - Value doesn't match any from a list. only support primitive types.
+
+## Type Validation Operators
+- `is_type` - Validate data type (string, number, boolean, array, object, null)
+- `is_null` - Check if value is null/undefined
+- `is_not_null` - Check if value exists and is not null

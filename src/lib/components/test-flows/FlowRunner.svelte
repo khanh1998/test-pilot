@@ -1,6 +1,8 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import type { TestFlowData, FlowParameter, ExecutionState, FlowStep, StepEndpoint } from './types';
+  // Import assertion types (will be used when typing the endpoint.assertions array)
+  import type { Assertion } from '$lib/assertions/types';
 
   // Props
   export let flowData: TestFlowData = {
@@ -689,6 +691,87 @@
           `Stored ${endpoint.transformations.length} transformations for endpoint: ${endpointId}`,
           `Available aliases: ${Object.keys(transformedData).join(', ')}`
         );
+      }
+
+      // Run assertions if configured for this endpoint
+      if (endpoint.assertions && endpoint.assertions.length > 0) {
+        addLog(
+          'info',
+          `Running ${endpoint.assertions.length} assertions for endpoint: ${endpointId}`
+        );
+        
+        try {
+          // Import the assertion engine module
+          const assertionModule = await import('$lib/assertions');
+          
+          // Run all assertions
+          const transformedDataForEndpoint = storedTransformations[endpointId] || null;
+          const assertionResults = await assertionModule.runAssertions(
+            endpoint.assertions,
+            response,
+            responseData,
+            transformedDataForEndpoint,
+            timing
+          );
+          
+          // Process the results
+          for (const result of assertionResults.results) {
+            // Log each assertion result
+            addLog(
+              result.passed ? 'debug' : 'error',
+              result.message || '',
+              `Actual value: ${JSON.stringify(result.actualValue)}`
+            );
+          }
+          
+          // Update status based on overall assertion results
+          if (!assertionResults.passed) {
+            // Update execution state with failed assertion
+            executionState = {
+              ...executionState,
+              [endpointId]: {
+                ...executionState[endpointId],
+                status: 'failed',
+                error: assertionResults.failureMessage || 'Assertion failed'
+              }
+            };
+            
+            // Set error if stopOnError is true
+            if (preferences.stopOnError) {
+              error = new Error(assertionResults.failureMessage || 'Assertion failed');
+            }
+            
+            // Emit execution state update
+            dispatch('executionStateUpdate', executionState);
+            
+            return;
+          }
+        } catch (error) {
+          const errorMessage = `Failed to run assertions: ${error instanceof Error ? error.message : String(error)}`;
+          
+          // Update execution state with the error
+          executionState = {
+            ...executionState,
+            [endpointId]: {
+              ...executionState[endpointId],
+              status: 'failed',
+              error: errorMessage
+            }
+          };
+          
+          // Set error if stopOnError is true
+          if (preferences.stopOnError) {
+            error = new Error(errorMessage);
+          }
+          
+          // Log the error
+          addLog('error', errorMessage);
+          
+          // Emit execution state update
+          dispatch('executionStateUpdate', executionState);
+          
+          return;
+        }
       }
 
       // Update status - create a new object for reactivity
