@@ -5,6 +5,7 @@
   import ParameterEditor from './ParameterEditor.svelte';
   import ResponseViewer from './ResponseViewer.svelte';
   import TransformationEditor from './TransformationEditor.svelte';
+  import AssertionEditor from './AssertionEditor.svelte';
 
   export let step: {
     step_id: string;
@@ -46,6 +47,11 @@
   let isTransformationEditorOpen = false;
   let isTransformationEditorMounted = false;
   let activeTransformationEndpointIndex: number | null = null;
+
+  // Assertion editor state
+  let isAssertionEditorOpen = false;
+  let isAssertionEditorMounted = false;
+  let activeAssertionEndpointIndex: number | null = null;
 
   // Step execution state
   let stepExecutionState = { status: 'none' };
@@ -206,10 +212,43 @@
   function closeTransformationEditor() {
     isTransformationEditorOpen = false;
 
-    // Use a timeout to allow the exit animation to complete before unmounting
+    // Add a small delay to allow for animation to complete before unmounting
     setTimeout(() => {
       isTransformationEditorMounted = false;
       activeTransformationEndpointIndex = null;
+
+      // Remove the class from body to re-enable scrolling
+      document.body.classList.remove('overflow-hidden');
+    }, 300);
+  }
+
+  // Open assertion editor panel for a specific endpoint
+  function openAssertionEditor(event: CustomEvent<{ endpointIndex: number }>) {
+    const { endpointIndex } = event.detail;
+    activeAssertionEndpointIndex = endpointIndex;
+
+    // First set the panel as mounted but with transform to the right
+    isAssertionEditorMounted = true;
+    isAssertionEditorOpen = false;
+
+    // Add a class to the body to prevent scrolling while modal is open
+    document.body.classList.add('overflow-hidden');
+
+    // Use requestAnimationFrame to ensure the DOM is updated before applying the animation
+    requestAnimationFrame(() => {
+      // Then in the next frame, trigger the animation by setting open to true
+      isAssertionEditorOpen = true;
+    });
+  }
+
+  // Close assertion editor panel
+  function closeAssertionEditor() {
+    isAssertionEditorOpen = false;
+
+    // Add a small delay to allow for animation to complete before unmounting
+    setTimeout(() => {
+      isAssertionEditorMounted = false;
+      activeAssertionEndpointIndex = null;
 
       // Remove the class from body to re-enable scrolling
       document.body.classList.remove('overflow-hidden');
@@ -453,6 +492,7 @@
               on:openParamEditor={openParamEditor}
               on:openTransformationEditor={openTransformationEditor}
               on:openResponseViewer={openResponseViewer}
+              on:openAssertionEditor={openAssertionEditor}
               on:removeEndpoint={() => removeEndpoint(endpointIndex)}
             />
           {/if}
@@ -544,6 +584,33 @@
       {instanceIndex}
       on:close={closeTransformationEditor}
       on:change={handleTransformationChange}
+    />
+  {/if}
+{/if}
+
+<!-- Assertion Editor Slide-out Panel -->
+{#if isAssertionEditorMounted && activeAssertionEndpointIndex !== null}
+  {@const safeIndex = activeAssertionEndpointIndex!}
+  {@const activeEndpoint = findEndpoint(step.endpoints[safeIndex].endpoint_id)}
+  {@const duplicateCount = step.endpoints.filter(
+    (e: StepEndpoint) => e.endpoint_id === step.endpoints[safeIndex].endpoint_id
+  ).length}
+  {@const instanceIndex = step.endpoints
+    .slice(0, safeIndex + 1)
+    .filter((e: StepEndpoint) => e.endpoint_id === step.endpoints[safeIndex].endpoint_id).length}
+
+  {#if activeEndpoint}
+    <AssertionEditor
+      isOpen={isAssertionEditorOpen}
+      isMounted={true}
+      endpoint={activeEndpoint}
+      stepEndpoint={step.endpoints[safeIndex]}
+      {stepIndex}
+      endpointIndex={safeIndex}
+      {duplicateCount}
+      {instanceIndex}
+      on:close={closeAssertionEditor}
+      on:change={handleParamChange}
     />
   {/if}
 {/if}

@@ -117,7 +117,6 @@ export async function POST({ request, locals }: RequestEvent) {
     const defaultFlowJson = {
       settings: { api_hosts: {} },
       steps: [],
-      assertions: []
     };
 
     // Insert the test flow

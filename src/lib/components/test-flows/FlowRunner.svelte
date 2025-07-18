@@ -9,7 +9,6 @@
       api_hosts: {}
     },
     steps: [],
-    assertions: []
   }; // The complete test flow data
   export let isRunning: boolean = false; // Whether the flow is currently running
   export let executionState: ExecutionState = {}; // Execution state for each endpoint

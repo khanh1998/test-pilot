@@ -124,7 +124,6 @@
               api_hosts: apiHosts
             },
             steps: [],
-            assertions: [],
             parameters: []
           }
         })

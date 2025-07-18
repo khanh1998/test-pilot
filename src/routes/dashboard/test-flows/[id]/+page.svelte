@@ -14,13 +14,12 @@
   let selectedEndpoint: any = null;
   let loading = true;
   let error: string | null = null;
-  let currentTab: 'steps' | 'assertions' | 'settings' = 'steps';
+  let currentTab: 'steps' | 'settings' = 'steps';
   let flowJson: TestFlowData = {
     settings: { 
       api_hosts: {}  // Multi-API host configuration
     },
     steps: [],
-    assertions: [],
     parameters: []
   };
   let isDirty = false;
@@ -68,7 +67,6 @@
           api_hosts: {}
         },
         steps: [],
-        assertions: [],
         parameters: []
       };
 
@@ -277,30 +275,6 @@
     showNewStepModal = false;
     markDirty();
   }
-
-  function addAssertion() {
-    // Add a new properly formatted assertion to the flow
-    const newAssertionId = `assertion-${Date.now()}`;
-    flowJson.assertions = [
-      ...flowJson.assertions,
-      {
-        id: newAssertionId,
-        step_id: flowJson.steps[0]?.step_id || '',
-        target: '$.response',
-        condition: 'equals',
-        expected_value: ''
-      }
-    ];
-
-    markDirty();
-  }
-
-  function removeAssertion(assertionIndex: number) {
-    if (confirm('Are you sure you want to remove this assertion?')) {
-      flowJson.assertions = flowJson.assertions.filter((_: any, i: number) => i !== assertionIndex);
-      markDirty();
-    }
-  }
 </script>
 
 <div class="container mx-auto px-4 py-8">
@@ -366,15 +340,6 @@
             </button>
             <button
               class="border-b-2 px-6 py-3 text-sm font-medium text-gray-700
-                    {currentTab === 'assertions'
-                ? 'border-blue-500 text-blue-500'
-                : 'border-transparent hover:border-gray-300'}"
-              on:click={() => (currentTab = 'assertions')}
-            >
-              Assertions
-            </button>
-            <button
-              class="border-b-2 px-6 py-3 text-sm font-medium text-gray-700
                     {currentTab === 'settings'
                 ? 'border-blue-500 text-blue-500'
                 : 'border-transparent hover:border-gray-300'}"
@@ -432,26 +397,9 @@
                       return step;
                     });
 
-                    // Update any assertions that reference the old step IDs
-                    const updatedAssertions = (updatedFlowData.assertions || []).map(
-                      (assertion: any) => {
-                        if (assertion.step_id && stepIdMap.has(assertion.step_id)) {
-                          return {
-                            ...assertion,
-                            step_id: stepIdMap.get(assertion.step_id)
-                          };
-                        }
-                        return assertion;
-                      }
-                    );
-
                     flowJson = {
                       settings: updatedFlowData.settings || flowJson.settings,
                       steps: normalizedSteps,
-                      assertions:
-                        updatedAssertions.length > 0
-                          ? updatedAssertions
-                          : updatedFlowData.assertions || flowJson.assertions,
                       parameters: updatedFlowData.parameters || flowJson.parameters || []
                     };
                   }
@@ -476,132 +424,6 @@
                 </div>
               {/if}
             </div>
-          {/if}
-
-          <!-- Assertions Tab -->
-          {#if currentTab === 'assertions'}
-            <div class="mb-6 flex items-center justify-between">
-              <h2 class="text-xl font-semibold">Test Flow Assertions</h2>
-              <button
-                class="rounded-md bg-blue-600 px-3 py-1 text-sm text-white transition hover:bg-blue-700"
-                on:click={addAssertion}
-              >
-                Add Assertion
-              </button>
-            </div>
-
-            {#if !flowJson.assertions || flowJson.assertions.length === 0}
-              <div class="rounded-lg bg-gray-50 p-8 text-center">
-                <h3 class="mb-2 text-xl font-semibold">No Assertions Yet</h3>
-                <p class="mb-6 text-gray-600">Add assertions to verify your test flow results.</p>
-                <button
-                  class="rounded-md bg-blue-600 px-4 py-2 text-white transition hover:bg-blue-700"
-                  on:click={addAssertion}
-                >
-                  Add First Assertion
-                </button>
-              </div>
-            {:else}
-              <div class="space-y-4">
-                {#each flowJson.assertions as assertion, assertionIndex}
-                  <div class="rounded-lg border bg-white p-4 shadow-sm">
-                    <div class="mb-4 flex items-center justify-between">
-                      <h3 class="text-lg font-medium">Assertion {assertionIndex + 1}</h3>
-                      <button
-                        class="text-red-600 hover:text-red-800"
-                        on:click={() => removeAssertion(assertionIndex)}
-                        aria-label="Remove Assertion"
-                      >
-                        <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                          <path
-                            fill-rule="evenodd"
-                            d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                            clip-rule="evenodd"
-                          ></path>
-                        </svg>
-                      </button>
-                    </div>
-
-                    <!-- Assertion configuration will be handled by AssertionEditor component -->
-                    <div class="grid grid-cols-1 gap-4">
-                      <div>
-                        <label
-                          for="assertion-step-{assertionIndex}"
-                          class="mb-1 block text-xs font-medium text-gray-500"
-                        >
-                          Step:
-                        </label>
-                        <select
-                          id="assertion-step-{assertionIndex}"
-                          bind:value={assertion.step_id}
-                          class="w-full rounded border px-2 py-1 text-sm"
-                          on:change={markDirty}
-                        >
-                          <option value="">Select Step</option>
-                          {#each flowJson.steps as step}
-                            <option value={step.step_id}>{step.label}</option>
-                          {/each}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label
-                          for="assertion-path-{assertionIndex}"
-                          class="mb-1 block text-xs font-medium text-gray-500"
-                        >
-                          Target Path:
-                        </label>
-                        <input
-                          id="assertion-path-{assertionIndex}"
-                          type="text"
-                          bind:value={assertion.target}
-                          class="w-full rounded border px-2 py-1 text-sm"
-                          placeholder="$.response.data.id"
-                          on:change={markDirty}
-                        />
-                      </div>
-
-                      <div>
-                        <label
-                          for="assertion-condition-{assertionIndex}"
-                          class="mb-1 block text-xs font-medium text-gray-500"
-                        >
-                          Condition:
-                        </label>
-                        <select
-                          id="assertion-condition-{assertionIndex}"
-                          bind:value={assertion.condition}
-                          class="w-full rounded border px-2 py-1 text-sm"
-                          on:change={markDirty}
-                        >
-                          <option value="equals">Equals</option>
-                          <option value="not_equals">Not Equals</option>
-                          <option value="contains">Contains</option>
-                          <option value="greater_than">Greater Than</option>
-                          <option value="less_than">Less Than</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label
-                          for="assertion-value-{assertionIndex}"
-                          class="mb-1 block text-xs font-medium text-gray-500"
-                        >
-                          Expected Value:
-                        </label>
-                        <input
-                          id="assertion-value-{assertionIndex}"
-                          type="text"
-                          bind:value={assertion.expected_value}
-                          class="w-full rounded border px-2 py-1 text-sm"
-                          on:change={markDirty}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                {/each}
-              </div>
-            {/if}
           {/if}
 
           <!-- Settings Tab -->

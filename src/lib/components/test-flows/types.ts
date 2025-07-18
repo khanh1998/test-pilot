@@ -33,6 +33,15 @@ export type StepEndpoint = {
     alias: string;      // Name used for referencing the transformed value
     expression: string; // Will store the transformation expression as string in Phase 1
   }>;
+  assertions?: Array<{
+    id: string;
+    data_source: AssertionDataSource;
+    assertion_type: AssertionType;
+    data_id: string;
+    operator: AssertionOperator;
+    expected_value: unknown;
+    enabled: boolean;
+  }>;
 };
 
 export type EndpointExecutionState = {
@@ -77,15 +86,9 @@ export type FlowStep = {
   // Other step properties
 };
 
-export type FlowAssertion = {
-  id: string;
-  step_id: string;
-  endpoint_index?: number;
-  target: string;
-  condition: string;
-  expected_value: unknown;
-  // Other assertion properties
-};
+export type AssertionDataSource = 'response' | 'transformed_data';
+export type AssertionType = 'status_code' | 'response_time' | 'header' | 'json_body';
+export type AssertionOperator = 'equals' | 'not_equals' | 'contains' | 'exists' | 'greater_than' | 'less_than';
 
 export type ApiHostInfo = {
   url: string;
@@ -100,6 +103,5 @@ export type TestFlowData = {
   };
   parameters: FlowParameter[];
   steps: FlowStep[];
-  assertions: FlowAssertion[];
   endpoints?: Endpoint[]; // Reference to available endpoints
 };

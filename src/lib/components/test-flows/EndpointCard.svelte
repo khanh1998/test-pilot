@@ -73,6 +73,10 @@
   function openTransformationEditor() {
     dispatch('openTransformationEditor', { endpointIndex });
   }
+  
+  function openAssertionEditor() {
+    dispatch('openAssertionEditor', { endpointIndex });
+  }
 
   function removeEndpoint() {
     dispatch('removeEndpoint', { endpointIndex });
@@ -80,7 +84,7 @@
 </script>
 
 <div
-  class="relative max-w-[300px] min-w-[280px] flex-shrink-0 rounded-md border bg-gray-50 p-3 {isRunning
+  class="relative max-w-[290px] min-w-[260px] flex-shrink-0 rounded-md border bg-gray-50 p-2 {isRunning
     ? 'border-blue-400 shadow-md shadow-blue-100'
     : 'border-gray-200'} {isCompleted ? 'border-green-500' : ''} {isFailed
     ? 'border-red-500'
@@ -170,17 +174,18 @@
     </div>
   {/if}
 
-  <div class="mb-2">
-    <div class="font-mono text-xs break-all text-gray-700">
+  <div class="mb-1">
+    <div class="font-mono text-[10px] truncate text-gray-700" title="{endpoint.path}">
       {endpoint.path}
     </div>
   </div>
 
   <!-- Parameter configuration summary -->
-  <div class="mt-3">
-    <div class="mt-2 flex gap-2">
+  <div class="mt-2">
+    <!-- Button row 1: Primary actions -->
+    <div class="mb-1 grid grid-cols-2 gap-1">
       <button
-        class="flex flex-1 items-center justify-center rounded border border-blue-200 bg-blue-50 px-2 py-1 text-xs text-blue-700 transition-colors hover:bg-blue-100"
+        class="flex items-center justify-center rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-xs text-blue-700 transition-colors hover:bg-blue-100"
         on:click={openParamEditor}
       >
         <svg
@@ -200,33 +205,11 @@
         Edit Request
       </button>
 
-      <!-- Transformation Editor Button -->
-      <button
-        class="flex flex-1 items-center justify-center rounded border border-purple-200 bg-purple-50 px-2 py-1 text-xs text-purple-700 transition-colors hover:bg-purple-100"
-        on:click={openTransformationEditor}
-      >
-        <svg 
-          xmlns="http://www.w3.org/2000/svg" 
-          class="mr-1 h-3 w-3"
-          fill="none" 
-          viewBox="0 0 24 24" 
-          stroke="currentColor"
-        >
-          <path 
-            stroke-linecap="round" 
-            stroke-linejoin="round" 
-            stroke-width="2" 
-            d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" 
-          />
-        </svg>
-        Transform
-      </button>
-
       <!-- Response Viewer Button -->
       <button
-        class="flex-1 px-2 py-1 text-xs {executionResponse
+        class="flex items-center justify-center rounded border px-1.5 py-0.5 text-xs {executionResponse
           ? 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100'
-          : 'border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100'} flex items-center justify-center rounded border transition-colors"
+          : 'border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100'} transition-colors"
         on:click={openResponseViewer}
         disabled={!executionResponse}
         title={executionResponse
@@ -249,15 +232,61 @@
         </svg>
         Response
       </button>
+    
+      <!-- Transformation Editor Button -->
+      <button
+        class="flex items-center justify-center rounded border border-purple-200 bg-purple-50 px-1.5 py-0.5 text-xs text-purple-700 transition-colors hover:bg-purple-100"
+        on:click={openTransformationEditor}
+      >
+        <svg 
+          xmlns="http://www.w3.org/2000/svg" 
+          class="mr-1 h-3 w-3"
+          fill="none" 
+          viewBox="0 0 24 24" 
+          stroke="currentColor"
+        >
+          <path 
+            stroke-linecap="round" 
+            stroke-linejoin="round" 
+            stroke-width="2" 
+            d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" 
+          />
+        </svg>
+        Transform
+      </button>
+      
+      <!-- Assertion Editor Button -->
+      <button
+        class="flex items-center justify-center rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-xs text-amber-700 transition-colors hover:bg-amber-100"
+        on:click={openAssertionEditor}
+      >
+        <svg 
+          xmlns="http://www.w3.org/2000/svg" 
+          class="mr-1 h-3 w-3"
+          fill="none" 
+          viewBox="0 0 24 24" 
+          stroke="currentColor"
+        >
+          <path 
+            stroke-linecap="round" 
+            stroke-linejoin="round" 
+            stroke-width="2" 
+            d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" 
+          />
+        </svg>
+        {#if stepEndpoint.assertions && stepEndpoint.assertions.length > 0}
+          ({stepEndpoint.assertions.length})
+        {/if}
+      </button>
     </div>
 
     <!-- Execution time and status if available -->
-    <div class="mt-1 flex flex-wrap gap-1 text-xs">
+    <div class="mt-0.5 flex items-center gap-1 text-[10px]">
       {#if executionTiming}
-        <span class="inline-flex items-center text-gray-500">
+        <span class="inline-flex items-center text-gray-500 bg-gray-50 rounded px-0.5 py-px">
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            class="mr-1 h-3 w-3"
+            class="mr-0.5 h-2 w-2"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -274,9 +303,9 @@
       {/if}
 
       {#if isRunning}
-        <span class="inline-flex items-center text-blue-500">
+        <span class="inline-flex items-center text-blue-500 bg-blue-50 rounded px-0.5 py-px">
           <svg
-            class="mr-1 h-3 w-3 animate-spin"
+            class="mr-0.5 h-2 w-2 animate-spin"
             xmlns="http://www.w3.org/2000/svg"
             fill="none"
             viewBox="0 0 24 24"
@@ -289,40 +318,41 @@
               d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
             ></path>
           </svg>
-          Executing...
+          Run
         </span>
       {:else if isCompleted}
-        <span class="inline-flex items-center text-green-500">
-          <svg class="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+        <span class="inline-flex items-center text-green-500 bg-green-50 rounded px-0.5 py-px">
+          <svg class="mr-0.5 h-2 w-2" fill="currentColor" viewBox="0 0 20 20">
             <path
               fill-rule="evenodd"
               d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
               clip-rule="evenodd"
             ></path>
           </svg>
-          Completed
+          OK
         </span>
       {:else if isFailed}
-        <span class="inline-flex items-center text-red-500">
-          <svg class="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+        <span class="inline-flex items-center text-red-500 bg-red-50 rounded px-0.5 py-px">
+          <svg class="mr-0.5 h-2 w-2" fill="currentColor" viewBox="0 0 20 20">
             <path
               fill-rule="evenodd"
               d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
               clip-rule="evenodd"
             ></path>
           </svg>
-          Failed
+          Fail
         </span>
       {/if}
     </div>
 
-    <!-- Parameter summary -->
-    {#if endpoint.parameters && endpoint.parameters.length > 0}
-      <div class="mt-2 flex flex-wrap gap-1">
+    <!-- Combined parameter indicators -->
+    <div class="mt-0.5 flex flex-wrap gap-0.5 text-[10px]">
+      <!-- Path & query parameters -->
+      {#if endpoint.parameters && endpoint.parameters.length > 0}
         {#each endpoint.parameters.filter((p) => p.in === 'path') as param (param.name)}
           {#if stepEndpoint.pathParams && stepEndpoint.pathParams[param.name]}
             <span
-              class="rounded bg-purple-100 px-1 py-0.5 text-xs text-purple-800"
+              class="rounded bg-purple-100 px-0.5 py-px text-purple-800"
               title="{param.name}: {stepEndpoint.pathParams[param.name]}"
             >
               {param.name}
@@ -332,25 +362,23 @@
         {#each endpoint.parameters.filter((p) => p.in === 'query') as param (param.name)}
           {#if stepEndpoint.queryParams && stepEndpoint.queryParams[param.name]}
             <span
-              class="rounded bg-blue-100 px-1 py-0.5 text-xs text-blue-800"
+              class="rounded bg-blue-100 px-0.5 py-px text-blue-800"
               title="{param.name}: {stepEndpoint.queryParams[param.name]}"
             >
               {param.name}
             </span>
           {/if}
         {/each}
-      </div>
-    {/if}
+      {/if}
 
-    <!-- Body indicator -->
-    {#if endpoint.requestSchema && stepEndpoint.body && Object.keys(stepEndpoint.body).length > 0}
-      <div class="mt-1">
+      <!-- Body indicator -->
+      {#if endpoint.requestSchema && stepEndpoint.body && Object.keys(stepEndpoint.body).length > 0}
         <span
-          class="inline-flex items-center rounded bg-green-100 px-1 py-0.5 text-xs text-green-800"
+          class="inline-flex items-center rounded bg-green-100 px-0.5 py-px text-green-800"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            class="mr-0.5 h-3 w-3"
+            class="mr-px h-2 w-2"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -364,18 +392,16 @@
           </svg>
           Body
         </span>
-      </div>
-    {/if}
+      {/if}
 
-    <!-- Headers indicator -->
-    {#if stepEndpoint.headers && stepEndpoint.headers.filter((h) => h.enabled).length > 0}
-      <div class="mt-1">
+      <!-- Headers indicator -->
+      {#if stepEndpoint.headers && stepEndpoint.headers.filter((h) => h.enabled).length > 0}
         <span
-          class="inline-flex items-center rounded bg-yellow-100 px-1 py-0.5 text-xs text-yellow-800"
+          class="inline-flex items-center rounded bg-yellow-100 px-0.5 py-px text-yellow-800"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            class="mr-0.5 h-3 w-3"
+            class="mr-px h-2 w-2"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -387,9 +413,9 @@
               d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
             />
           </svg>
-          {stepEndpoint.headers.filter((h) => h.enabled).length} Headers
+          {stepEndpoint.headers.filter((h) => h.enabled).length}H
         </span>
-      </div>
-    {/if}
+      {/if}
+    </div>
   </div>
 </div>
