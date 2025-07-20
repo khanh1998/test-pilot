@@ -2,45 +2,39 @@
   import ApiEndpoints from '$lib/components/apis/ApiEndpoints.svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
+  import { getApiDetails, deleteApi as deleteApiCall } from '$lib/http_client/apis';
 
-  // Define the Api type locally based on the schema and server response
-  type Api = {
+  // Define the ApiDetails type locally based on what we expect from the server
+  type ApiDetails = {
     id: number;
     name: string;
-    description: string;
-    host?: string;
-    createdAt: string;
-    updatedAt: string;
+    description: string | null;
+    host?: string | null;
+    createdAt: string | Date;
+    updatedAt: string | Date;
     endpointCount: number;
   };
 
   $: apiId = parseInt($page.params.id || '0');
 
   let apiName = '';
-  let apiDetails: Api | null = null;
+  let apiDetails: ApiDetails | null = null;
   let loading = false;
   let error: string | null = null;
 
   // Fetch API details on component mount
   // This is done here to get the API name for the header and delete confirmation
   // The ApiEndpoints component will fetch its own data
+  
   async function fetchApiDetails() {
     try {
-      const response = await fetch(`/api/apis/${apiId}`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('authToken')}`
-        }
-      });
-
-      if (response.ok) {
-        const apiData = await response.json();
-        apiDetails = apiData.api;
+      const apiData = await getApiDetails(apiId);
+      if (apiData) {
+        apiDetails = apiData.api as ApiDetails;
         apiName = apiDetails?.name || 'API';
-      } else if (response.status === 404) {
+      } else {
         // If API not found, redirect to APIs list
         goto('/dashboard/apis');
-      } else {
-        throw new Error(`Error ${response.status}: ${response.statusText}`);
       }
     } catch (err: unknown) {
       console.error('Failed to load API details:', err);
@@ -56,7 +50,7 @@
   function goToUpdatePage() {
     goto(`/dashboard/apis/${apiId}/update`);
   }
-
+  
   async function deleteApi() {
     if (
       confirm(
@@ -67,20 +61,8 @@
         loading = true;
         error = null;
 
-        const response = await fetch('/api/apis', {
-          method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${localStorage.getItem('authToken')}`
-          },
-          body: JSON.stringify({ id: apiId })
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || `Failed to delete API (${response.status})`);
-        }
-
+        await deleteApiCall(apiId);
+        
         // Navigate back to the APIs list
         goto('/dashboard/apis');
       } catch (err: unknown) {

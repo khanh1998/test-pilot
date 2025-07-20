@@ -2,6 +2,7 @@
   import { page } from '$app/stores';
   import ApiFileUpload from '$lib/components/apis/ApiFileUpload.svelte';
   import { onMount } from 'svelte';
+  import { getApiDetails } from '$lib/http_client/apis';
 
   const apiId = parseInt($page.params.id);
 
@@ -10,24 +11,18 @@
   let api: {
     id: number;
     name: string;
-    description: string;
-    host?: string;
+    description: string | null;
+    host?: string | null;
   } | null = null;
 
   onMount(async () => {
     try {
-      const response = await fetch(`/api/apis/${apiId}`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('authToken')}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`Error ${response.status}: ${response.statusText}`);
+      const data = await getApiDetails(apiId);
+      if (!data) {
+        throw new Error(`Error fetching API details`);
       }
-
-      const data = await response.json();
-      api = data.api;
+      
+      api = data.api as typeof api;
     } catch (err) {
       error = err instanceof Error ? err.message : 'An error occurred while fetching API details';
     } finally {

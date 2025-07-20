@@ -78,24 +78,26 @@ export async function updateSwaggerFile(id: string, file: File): Promise<UpdateS
 	}
 }
 
-export async function deleteApi(id: string): Promise<DeleteApiResponse> {
+export async function deleteApi(id: number): Promise<DeleteApiResponse | null> {
 	try {
-		const response = await fetchWithAuth(`/api/apis/${id}`, {
-			method: 'DELETE'
+		const response = await fetchWithAuth('/api/apis', {
+			method: 'DELETE',
+			body: JSON.stringify({ id })
 		});
-
+		
 		if (response.ok) {
 			return await response.json();
+		} else {
+			const errorData = await response.json();
+			throw new Error(errorData.error || `Failed to delete API (${response.status})`);
 		}
-		const errorData = await response.json();
-		throw new Error(errorData.message || 'Failed to delete API');
 	} catch (error) {
 		console.error('Error deleting API:', error);
 		throw error;
 	}
 }
 
-export async function getApiDetails(id: string): Promise<GetApiDetailsResponse | null> {
+export async function getApiDetails(id: number): Promise<GetApiDetailsResponse | null> {
 	try {
 		const response = await fetchWithAuth(`/api/apis/${id}`);
 		if (response.ok) {

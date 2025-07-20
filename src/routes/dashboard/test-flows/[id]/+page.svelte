@@ -3,6 +3,8 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import type { TestFlowData } from '$lib/components/test-flows/types';
+  import { getTestFlow, saveTestFlow as saveTestFlowFn } from '$lib/http_client/test-flow';
+  import { getApiList, getApiDetails } from '$lib/http_client/apis';
 
   // Import the components we created
   import TestFlowEditor from '$lib/components/test-flows/TestFlowEditor.svelte';
@@ -46,18 +48,11 @@
       loading = true;
       error = null;
 
-      const response = await fetch(`/api/test-flows/${testFlowId}`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('authToken')}`
-        }
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `Failed to fetch test flow: ${response.statusText}`);
+      const data = await getTestFlow(testFlowId.toString());
+      if (!data) {
+        throw new Error(`Failed to fetch test flow`);
       }
-
-      const data = await response.json();
+      
       testFlow = data.testFlow;
       endpoints = testFlow.endpoints || [];
 
@@ -105,19 +100,13 @@
       }
       
       // Get all APIs related to this test flow
-      const response = await fetch(`/api/apis`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('authToken')}`
-        }
-      });
-
-      if (response.ok) {
-        const apisData = await response.json();
+      const apisData = await getApiList();
+      if (apisData) {
         console.log('APIs data fetched:', apisData); // Debug log
         
         if (apisData && apisData.apis && Array.isArray(apisData.apis)) {
           // For each API found, add it to the api_hosts if not already there
-          apisData.apis.forEach((api: {id: number, host?: string, name?: string}) => {
+          apisData.apis.forEach((api: {id: number, host: string | null, name: string}) => {
             const apiIdStr = String(api.id);
             
             // If this API isn't in our hosts yet, add it
@@ -152,19 +141,13 @@
     if (!testFlow || !testFlow.apiId) return;
 
     try {
-      const response = await fetch(`/api/apis/${testFlow.apiId}`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('authToken')}`
-        }
-      });
-
-      if (response.ok) {
-        const apiData = await response.json();
+      const apiData = await getApiDetails(testFlow.apiId);
+      if (apiData && apiData.api) {
         console.log('Primary API data fetched:', apiData);
 
         // Get the host from the API data
-        const hostFromApi = apiData.host || '';
-        const apiId = String(apiData.id);
+        const hostFromApi = apiData.api.host || '';
+        const apiId = String(apiData.api.id);
 
         if (hostFromApi) {
           // Make sure we have an api_hosts object
@@ -174,7 +157,7 @@
           
           // Add the primary API to our hosts
           flowJson.settings.api_hosts[apiId] = {
-            name: apiData.name || `API ${apiData.id}`,
+            name: apiData.api.name || `API ${apiData.api.id}`,
             url: hostFromApi
           };
           console.log(`Added primary API host: ${hostFromApi}`);
@@ -227,24 +210,12 @@
       isSaving = true;
       error = null;
 
-      const response = await fetch(`/api/test-flows/${testFlowId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('authToken')}`
-        },
-        body: JSON.stringify({
-          name: testFlow.name,
-          description: testFlow.description,
-          flowJson
-        })
+      await saveTestFlowFn(testFlowId, {
+        name: testFlow.name,
+        description: testFlow.description,
+        flowJson
       });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `Failed to update test flow: ${response.statusText}`);
-      }
-
+      
       isDirty = false;
     } catch (err: any) {
       console.error('Error updating test flow:', err);

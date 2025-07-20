@@ -156,3 +156,28 @@ export async function executeProxiedEndpoint(
 
 	return { response, cookies: proxyData.cookies || [] };
 }
+
+/**
+ * Update a test flow with new data
+ * @param testFlowId The ID of the test flow to update
+ * @param data The updated data (name, description, flowJson)
+ * @returns The updated test flow data or null on error
+ */
+export async function saveTestFlow(testFlowId: number, data: any) {
+	try {
+		const response = await fetchWithAuth(`/api/test-flows/${testFlowId}`, {
+			method: 'PUT',
+			body: JSON.stringify(data)
+		});
+
+		if (!response.ok) {
+			const errorData = await response.json();
+			throw new Error(errorData.error || `Failed to update test flow: ${response.statusText}`);
+		}
+
+		return await response.json();
+	} catch (err) {
+		console.error('Error updating test flow:', err);
+		throw err;
+	}
+}
