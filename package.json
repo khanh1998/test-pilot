@@ -26,7 +26,7 @@
     "test": "npm run test:unit -- --run",
     "tauri": "tauri",
     "tauri:dev": "cross-env VITE_APP_ENV=desktop tauri dev",
-    "tauri:build": "npm run build:desktop && tauri build",
+    "tauri:build": "npm run build:desktop && tauri build --debug",
     "deploy": "npm run build:web && vercel deploy"
   },
   "devDependencies": {

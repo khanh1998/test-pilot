@@ -92,7 +92,7 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}) {
         headers: tauriHeaders,
         body: processedBody,
         // Copy other fetch options as needed
-        credentials: options.credentials,
+        credentials: 'include', // Always include credentials for desktop requests
         redirect: options.redirect,
         cache: options.cache,
       });

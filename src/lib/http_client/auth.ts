@@ -1,4 +1,5 @@
 import { apiUrl } from '$lib/api-config';
+import { fetchWithAuth } from './util';
 
 export interface SignInRequest {
   email: string;
@@ -20,10 +21,11 @@ export interface AuthResponse {
 
 export async function signIn(credentials: SignInRequest): Promise<AuthResponse> {
   try {
-    const response = await fetch(apiUrl('/api/auth/sign-in'), {
+    const response = await fetchWithAuth('/api/auth/sign-in', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(credentials)
+      body: JSON.stringify(credentials),
+      credentials: 'include'
     });
 
     if (!response.ok) {
@@ -39,16 +41,18 @@ export async function signIn(credentials: SignInRequest): Promise<AuthResponse> 
     };
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('[Auth] Sign in error:', error);
     return { success: false, error: errorMessage || 'Authentication failed' };
   }
 }
 
 export async function signUp(credentials: SignUpRequest): Promise<AuthResponse> {
   try {
-    const response = await fetch(apiUrl('/api/auth/sign-up'), {
+    const response = await fetchWithAuth('/api/auth/sign-up', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(credentials)
+      body: JSON.stringify(credentials),
+      credentials: 'include'
     });
 
     if (!response.ok) {
@@ -64,6 +68,7 @@ export async function signUp(credentials: SignUpRequest): Promise<AuthResponse> 
     };
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('[Auth] Sign up error:', error);
     return { success: false, error: errorMessage || 'Registration failed' };
   }
 }

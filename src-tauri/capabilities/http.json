@@ -8,16 +8,29 @@
       "identifier": "http:default",
       "allow": [
         {
-          "url": "http://**"
+          "url": "http://**",
+          "headers": ["*"],
+          "methods": ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
         },
         {
-          "url": "https://**"
+          "url": "https://**",
+          "headers": ["*"],
+          "methods": ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
         },
         {
-          "url": "http://localhost:*/**"
+          "url": "http://localhost:*/**",
+          "headers": ["*"],
+          "methods": ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
         },
         {
-          "url": "http://127.0.0.1:*/**"
+          "url": "http://127.0.0.1:*/**",
+          "headers": ["*"],
+          "methods": ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
+        },
+        {
+          "url": "https://test-pilot-five.vercel.app/**",
+          "headers": ["*"],
+          "methods": ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
         }
       ],
       "deny": []
