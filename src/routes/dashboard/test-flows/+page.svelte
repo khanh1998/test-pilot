@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
+  import * as testFlowClient from '$lib/http_client/test-flow';
+  import * as apiClient from '$lib/http_client/apis';
 
   let testFlows: {
     id: number;
@@ -33,18 +35,8 @@
       loading = true;
       error = null;
 
-      const response = await fetch('/api/test-flows', {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('authToken')}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch test flows: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      testFlows = data.testFlows || [];
+      const result = await testFlowClient.getTestFlows();
+      testFlows = result || [];
     } catch (err: unknown) {
       console.error('Error fetching test flows:', err);
       error = err instanceof Error ? err.message : 'An unknown error occurred';
@@ -55,18 +47,12 @@
 
   async function fetchAvailableApis() {
     try {
-      const response = await fetch('/api/apis', {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('authToken')}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch APIs: ${response.statusText}`);
+      const result = await apiClient.getApiList();
+      if (result && result.apis) {
+        availableApis = result.apis as { id: number; name: string; host: string; selected?: boolean }[];
+      } else {
+        availableApis = [];
       }
-
-      const data = await response.json();
-      availableApis = data.apis || [];
     } catch (err: unknown) {
       console.error('Error fetching APIs:', err);
       error = err instanceof Error ? err.message : 'An unknown error occurred';
@@ -109,32 +95,22 @@
         return hosts;
       }, {});
 
-      const response = await fetch('/api/test-flows', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('authToken')}`
-        },
-        body: JSON.stringify({
-          name: newFlowName,
-          description: newFlowDescription,
-          apiIds: selectedApiIds,
-          flowJson: {
-            settings: { 
-              api_hosts: apiHosts
-            },
-            steps: [],
-            parameters: []
-          }
-        })
+      const result = await testFlowClient.createTestFlow({
+        name: newFlowName,
+        description: newFlowDescription,
+        apiIds: selectedApiIds,
+        flowJson: {
+          settings: { 
+            api_hosts: apiHosts
+          },
+          steps: [],
+          parameters: []
+        }
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to create test flow');
+      if (!result) {
+        throw new Error('Failed to create test flow');
       }
-
-      const data = await response.json();
 
       // Reset form and close modal
       newFlowName = '';
@@ -142,8 +118,10 @@
       selectedApiIds = [];
       showCreateModal = false;
 
-      // Navigate to the new test flow editor
-      goto(`/dashboard/test-flows/${data.testFlow.id}`);
+      if (result.testFlow) {
+        // Navigate to the new test flow editor
+        goto(`/dashboard/test-flows/${result.testFlow.id}`);
+      }
     } catch (err: unknown) {
       console.error('Error creating test flow:', err);
       error = err instanceof Error ? err.message : 'An unknown error occurred';
@@ -165,18 +143,10 @@
       loading = true;
       error = null;
 
-      const response = await fetch('/api/test-flows', {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('authToken')}`
-        },
-        body: JSON.stringify({ id })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to delete test flow');
+      const result = await testFlowClient.deleteTestFlow(id);
+      
+      if (!result) {
+        throw new Error('Failed to delete test flow');
       }
 
       // Refresh the list

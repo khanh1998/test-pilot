@@ -1,4 +1,5 @@
 import { writable } from 'svelte/store';
+import * as authClient from '$lib/http_client/auth';
 
 export interface User {
   id: string;
@@ -36,21 +37,15 @@ function createAuthStore() {
       update((state) => ({ ...state, loading: true }));
 
       try {
-        const response = await fetch('/api/auth/sign-in', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password })
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || 'Sign in failed');
+        const result = await authClient.signIn({ email, password });
+        
+        if (!result.success) {
+          throw new Error(result.error || 'Sign in failed');
         }
-
-        const data = await response.json();
+        
         // Use our custom JWT token instead of Supabase session token
-        const token = data.token;
-        const user = data.user;
+        const token = result.token!;
+        const user = result.user!;
 
         // Store token in localStorage for persistence
         localStorage.setItem('authToken', token);
@@ -77,23 +72,16 @@ function createAuthStore() {
       update((state) => ({ ...state, loading: true }));
 
       try {
-        const response = await fetch('/api/auth/sign-up', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, email, password })
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || 'Sign up failed');
+        const result = await authClient.signUp({ name, email, password });
+        
+        if (!result.success) {
+          throw new Error(result.error || 'Sign up failed');
         }
 
-        const data = await response.json();
-
         // After successful signup, automatically sign in the user
-        if (data.token) {
-          const token = data.token;
-          const user = data.user;
+        if (result.token) {
+          const token = result.token;
+          const user = result.user;
 
           // Store token in localStorage for persistence
           localStorage.setItem('authToken', token);
