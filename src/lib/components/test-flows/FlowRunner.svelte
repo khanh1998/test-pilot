@@ -63,7 +63,8 @@
     required: false
   };
 
-  import {
+  import { isDesktop } from '$lib/environment';
+import {
 	executeDirectEndpoint,
 	executeProxiedEndpoint,
 	type RequestCookie
@@ -553,8 +554,20 @@
           url,
           headers,
           body,
-          preferences.timeout
+          preferences.timeout,
+          cookieStore,  // Pass the cookieStore for cookie management
+          endpointId    // Pass the endpointId for storage reference
         );
+        
+        // Check for cookies in the response if we're in desktop mode
+        if (isDesktop) {
+          // The cookies are already stored inside executeDirectEndpoint if in desktop mode
+          addLog(
+            'debug',
+            `Desktop mode: cookies managed via Tauri HTTP client`,
+            `Cookies for ${endpointId}: ${cookieStore.has(endpointId) ? cookieStore.get(endpointId)?.length : 0} cookies`
+          );
+        }
       }
 
       // Calculate timing - create a new object for reactivity
