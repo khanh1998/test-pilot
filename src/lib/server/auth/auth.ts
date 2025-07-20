@@ -5,16 +5,16 @@ import { db } from '$lib/server/db/drizzle';
 import { users } from '$lib/server/db/schema';
 import { eq } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
-import { env } from '$env/dynamic/private';
+import { JWT_SECRET, JWT_EXPIRY } from '$env/static/private';
 
-// JWT Secret key - from environment variables
-const JWT_SECRET = env.JWT_SECRET || 'test-pilot-secret-key-replace-in-production';
-const JWT_EXPIRY = env.JWT_EXPIRY || '24h'; // Token expiry time from env or default to 24 hours
+// JWT Secret key - from environment variables (with fallbacks for static builds)
+const jwtSecretKey = JWT_SECRET || 'test-pilot-secret-key-replace-in-production';
+const jwtExpiry = JWT_EXPIRY || '24h'; // Token expiry time from env or default to 24 hours
 
 // Create a Supabase admin client for server-side operations
 const supabaseAdmin = createClient(
-  process.env.VITE_SUPABASE_URL || '',
-  process.env.VITE_SUPABASE_SERVICE_KEY || '', // Use SERVICE KEY, not anon key for server-side
+  process.env.SUPABASE_URL || '',
+  process.env.SUPABASE_SERVICE_KEY || '', // Use SERVICE KEY, not anon key for server-side
   {
     auth: {
       autoRefreshToken: false,
@@ -34,7 +34,7 @@ export function generateToken(userData: { id: number; email: string; name?: stri
   };
 
   // @ts-expect-error - Working around type issues
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRY });
+  return jwt.sign(payload, jwtSecretKey, { expiresIn: jwtExpiry });
 }
 
 /**
@@ -53,7 +53,7 @@ export interface JWTPayload {
  */
 export function verifyToken(token: string): JWTPayload | null {
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, jwtSecretKey);
     if (typeof decoded === 'object' && 'userId' in decoded) {
       return decoded as JWTPayload;
     }

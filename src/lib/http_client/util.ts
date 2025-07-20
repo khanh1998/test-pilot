@@ -1,9 +1,12 @@
 import { authStore } from '$lib/store/auth';
+import { apiUrl } from '$lib/api-config';
 
 /**
  * Utility function to make authenticated API requests
  */
 export async function fetchWithAuth(url: string, options: RequestInit = {}) {
+  // Convert relative API URLs to absolute URLs based on environment
+  const fullUrl = url.startsWith('http') ? url : apiUrl(url);
   // Get auth headers
   const headers = authStore.getAuthHeaders();
 
@@ -22,7 +25,7 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}) {
   };
 
   // Make the request with auth headers
-  const response = await fetch(url, {
+  const response = await fetch(fullUrl, {
     ...options,
     headers: mergedHeaders as HeadersInit
   });

@@ -8,8 +8,8 @@ import { generateToken } from '$lib/server/auth/auth';
 
 // Create a Supabase admin client for server-side operations
 const supabaseAdmin = createClient(
-  process.env.VITE_SUPABASE_URL || '',
-  process.env.VITE_SUPABASE_SERVICE_KEY || '', // Use SERVICE KEY, not anon key for server-side
+  process.env.SUPABASE_URL || '',
+  process.env.SUPABASE_SERVICE_KEY || '', // Use SERVICE KEY, not anon key for server-side
   {
     auth: {
       autoRefreshToken: false,

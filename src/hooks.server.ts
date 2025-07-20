@@ -12,7 +12,7 @@ export const handle: Handle = async ({ event, resolve }) => {
     '/api/auth/sign-in',
     '/api/auth/sign-up',
     // Static assets and client-side routes don't need server authentication
-    '/favicon.svg',
+    '/favicon.ico',
     '/_app'
     // Add other public routes as needed
   ];
