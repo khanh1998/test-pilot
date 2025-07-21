@@ -23,16 +23,6 @@
   // Emitted events will be handled by the parent component
   const dispatch = createEventDispatcher();
 
-  // Local execution state, updated from executionStore
-  let executionState: ExecutionState = {};
-
-  $: {
-    // When executionStore changes, update our local executionState
-    if (Object.keys(executionStore).length > 0) {
-      executionState = { ...executionStore };
-    }
-  }
-
   // Parameter editor state
   let isParamEditorOpen = false;
   let isParamEditorMounted = false;
@@ -84,15 +74,12 @@
       return { status: 'none' };
     }
 
-    // Use either executionStore or executionState (prefer executionStore if available)
-    const currentState = Object.keys(executionStore).length > 0 ? executionStore : executionState;
-
     // Check if all endpoints have been processed
     const endpointStates = step.endpoints.map((stepEndpoint: StepEndpoint, index: number) => {
       // IMPORTANT: We've updated the endpointId format in FlowRunner to use stepId-endpointIndex
       // instead of endpoint.endpoint_id-endpointIndex for better user reference
       const endpointId = `${step.step_id}-${index}`;
-      return currentState[endpointId]?.status || 'none';
+      return executionStore[endpointId]?.status || 'none';
     });
 
     // Check if any endpoints are currently running
@@ -556,7 +543,7 @@
       stepId={step.step_id}
       {duplicateCount}
       {instanceIndex}
-      {executionState}
+      executionState={executionStore}
       on:close={closeResponseViewer}
     />
   {/if}

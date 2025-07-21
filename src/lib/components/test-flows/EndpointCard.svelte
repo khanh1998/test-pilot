@@ -84,10 +84,10 @@
 </script>
 
 <div
-  class="relative max-w-[290px] min-w-[260px] flex-shrink-0 rounded-md border bg-gray-50 p-2 {isRunning
-    ? 'border-blue-400 shadow-md shadow-blue-100'
-    : 'border-gray-200'} {isCompleted ? 'border-green-500' : ''} {isFailed
-    ? 'border-red-500'
+  class="relative max-w-[290px] min-w-[260px] flex-shrink-0 rounded-md border p-2 {isRunning
+    ? 'border-blue-400 bg-blue-50 shadow-md shadow-blue-100'
+    : 'border-gray-200 bg-gray-50'} {isCompleted ? 'border-green-500 bg-green-50' : ''} {isFailed
+    ? 'border-red-500 bg-red-50'
     : ''} {getResponseStatusClass()}"
 >
   <div class="mb-2 flex items-start justify-between">

@@ -1256,7 +1256,7 @@ import {
       return result;
     }
     console.warn(`Parameter not found: ${parameterName}`);
-    return `{var:${parameterName}}`;
+    return `{param:${parameterName}}`;
   }
 
   // Function for adding debug logs about requests

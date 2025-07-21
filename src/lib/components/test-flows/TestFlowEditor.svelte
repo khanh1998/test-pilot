@@ -14,10 +14,10 @@
   export let endpoints: Endpoint[] = [];
 
   let isRunning = false;
-  let executionState: ExecutionState = {};
   let flowRunner: FlowRunner;
 
-  // Create a store to track execution state changes
+  // Create a store to track execution state changes - we'll use this directly
+  // instead of maintaining a separate executionState variable
   const executionStore = writable<ExecutionState>({});
 
   // Execution options panel
@@ -138,7 +138,6 @@
   function handleReset() {
     // Reset the execution state store
     executionStore.set({});
-    executionState = {};
     isRunning = false;
 
     // Dispatch reset event to parent
@@ -161,9 +160,8 @@
   function handleExecutionStateUpdate(event: CustomEvent) {
     // Update the execution state with the new state from FlowRunner
     // The execution state now uses stepId-endpointIndex as keys instead of endpoint_id-endpointIndex
-    executionState = event.detail;
     // Update the store to trigger reactivity across all components
-    executionStore.set(executionState);
+    executionStore.set(event.detail);
   }
 
   function handleLog(event: CustomEvent) {
@@ -174,7 +172,6 @@
   function runFlow() {
     if (flowRunner) {
       // Reset the execution state before starting a new run
-      executionState = {};
       executionStore.set({});
 
       flowRunner.runFlow().catch((err: unknown) => {
@@ -221,45 +218,11 @@
     return false;
   }
 
-  // Update the execution state for step headers
-  function getStepExecutionState(stepId: string): { status: string; count: number } {
-    // Subscribe once to get the current state and store the unsubscriber
-    const unsubscriber = executionStore.subscribe(() => {});
-    unsubscriber(); // Immediately unsubscribe
-    
-    // Use the current executionState which is already being kept updated by the main subscription
-    // Extract the relevant part of the state for the given stepId
-    const stepState = Object.keys(executionState).reduce(
-      (acc, key) => {
-        if (key.startsWith(stepId)) {
-          acc.push(executionState[key]);
-        }
-        return acc;
-      },
-      [] as EndpointExecutionState[]
-    );
-
-    // Determine the overall status for the step based on its endpoints' statuses
-    const status = stepState.length > 0 ? (stepState.some((s) => s.status === 'error') ? 'error' : 'success') : 'idle';
-
-    return {
-      status,
-      count: stepState.length
-    };
-  }
-
-  let unsubscribe: () => void;
-
-  onMount(() => {
-    unsubscribe = executionStore.subscribe((state) => {
-      // Create a new reference to ensure reactive updates
-      executionState = { ...state };
-    });
-  });
-
-  onDestroy(() => {
-    if (unsubscribe) unsubscribe();
-  });
+  // No longer needed - we use progress and currentStep directly from executionStore
+  // This function was previously calculating progress and current step
+  // but those values are already available in the executionStore
+  
+  // No need for manual subscription anymore as we're using the $ syntax directly
 </script>
 
 <div class="space-y-4">
@@ -298,7 +261,7 @@
               handleReset(); // Fallback to local reset
             }
           }}
-          disabled={isRunning || Object.keys(executionState).length === 0}
+          disabled={isRunning || Object.keys($executionStore).length === 0}
         >
           <svg class="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
@@ -387,12 +350,11 @@
         <div class="h-2 w-full rounded-full bg-gray-200">
           <div
             class="h-2 rounded-full bg-blue-600"
-            style="width: {flowRunner?.progress || 0}%"
+            style="width: {$executionStore.progress || 0}%"
           ></div>
         </div>
         <div class="mt-1 text-right text-xs text-gray-500">
-          Step {flowRunner?.currentStep !== undefined ? flowRunner.currentStep + 1 : 0} of {flowData
-            .steps.length}
+          Step {$executionStore.currentStep !== undefined ? $executionStore.currentStep + 1 : 1} of {flowData.steps.length}
         </div>
       </div>
     {/if}
@@ -479,7 +441,7 @@
       bind:this={flowRunner}
       {flowData}
       bind:isRunning
-      bind:executionState
+      executionState={$executionStore}
       bind:preferences
       bind:showParametersPanel
       showButtons={false}
