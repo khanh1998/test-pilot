@@ -603,16 +603,6 @@ import {
         `Stored response for endpoint: ${endpointId}`,
         `Response data type: ${responseData ? typeof responseData : 'undefined'}`
       );
-
-      // Also store with custom name if requested
-      if (endpoint.store_response_as) {
-        storedResponses[endpoint.store_response_as] = responseData;
-        addLog(
-          'info',
-          `Also stored response as: ${endpoint.store_response_as}`,
-          `This can be referenced in templates as: {{res:${endpoint.store_response_as}}}`
-        );
-      }
       
       // Debug log all stored responses
       addLog(

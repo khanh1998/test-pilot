@@ -43,7 +43,6 @@
     flowData.steps[stepIndex].endpoints.push({
       endpoint_id: selectedEndpoint.id,
       api_id: selectedEndpoint.apiId, // Include API ID for multi-API support
-      store_response_as: '',
       pathParams: {},
       queryParams: {}
     });

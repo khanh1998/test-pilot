@@ -24,7 +24,6 @@ export type Endpoint = {
 export type StepEndpoint = {
   endpoint_id: string | number;
   api_id: string | number; // API identifier that maps to the host in settings.api_hosts
-  store_response_as?: string;
   pathParams?: Record<string, string>;
   queryParams?: Record<string, string>;
   body?: unknown;
