@@ -113,10 +113,17 @@ export async function executeDirectEndpoint(
 
 	// Include cookies from cookieStore in the request if provided
 	let mergedHeaders = { ...headers };
-	if (cookieStore && cookieStore.size > 0 && endpointId) {
-		const cookieHeader = buildCookieHeaderFromStore(cookieStore);
+	if (cookieStore && cookieStore.size > 0) {
+		// Get the domain from the URL for domain-specific cookie filtering
+		const requestDomain = new URL(url).hostname;
+		console.log(`Building cookies for request to domain: ${requestDomain}`);
+		
+		const cookieHeader = buildCookieHeaderFromStore(cookieStore, requestDomain);
 		if (cookieHeader) {
+			console.log(`Adding Cookie header: ${cookieHeader}`);
 			mergedHeaders = { ...mergedHeaders, 'Cookie': cookieHeader };
+		} else {
+			console.log(`No matching cookies found for domain: ${requestDomain}`);
 		}
 	}
 
@@ -128,6 +135,14 @@ export async function executeDirectEndpoint(
 			// Dynamic import to avoid issues in browser environments
 			const { fetch: tauriFetch } = await import('@tauri-apps/plugin-http');
 			
+			// Log the request details
+			console.log(`[Tauri HTTP Request] ${endpointDef.method} ${url}`);
+			console.log('[Tauri HTTP Request Headers]', mergedHeaders);
+			if (body) {
+				console.log('[Tauri HTTP Request Body]', body);
+			}
+			
+			// For Tauri HTTP client with unsafe-headers enabled
 			response = await tauriFetch(url, {
 				method: endpointDef.method,
 				headers: mergedHeaders,
@@ -136,18 +151,49 @@ export async function executeDirectEndpoint(
 				credentials: 'include'
 			});
 
-			// Log all headers to help identify if cookies are present
-			console.log('Tauri Response Headers:');
+			// Log response details
+			console.log(`[Tauri HTTP Response] ${endpointDef.method} ${url} ${response.status}`);
+			console.log('[Tauri HTTP Response Status]', response.status, response.statusText);
+			
+			// Log all headers
+			console.log('[Tauri HTTP Response Headers]:');
 			response.headers.forEach((value, key) => {
 				console.log(`${key}: ${value}`);
 			});
 			
-			// Extract and store cookies from the response if cookieStore and endpointId are provided
-			if (cookieStore && endpointId) {
-				const extractedCookies = extractCookiesFromTauriResponse(response, new URL(url).hostname);
+			// Extract and store cookies from the response if cookieStore is provided
+			if (cookieStore) {
+				const requestDomain = new URL(url).hostname;
+				const extractedCookies = extractCookiesFromTauriResponse(response, requestDomain);
+				
 				if (extractedCookies.length > 0) {
-					cookieStore.set(endpointId, extractedCookies);
-					console.log(`Stored ${extractedCookies.length} cookies for endpoint ${endpointId}`, extractedCookies);
+					// Use endpoint ID as storage key if provided, otherwise use the domain
+					const storageKey = endpointId || `domain:${requestDomain}`;
+					
+					// Get existing cookies for this key
+					const existingCookies = cookieStore.get(storageKey) || [];
+					
+					// Merge cookies, replacing existing ones with the same name
+					const mergedCookies = [...existingCookies];
+					
+					for (const newCookie of extractedCookies) {
+						// Replace existing cookie with the same name if it exists
+						const existingIndex = mergedCookies.findIndex(c => 
+							c.name === newCookie.name && 
+							c.domain === newCookie.domain && 
+							(c.path === newCookie.path || (!c.path && !newCookie.path))
+						);
+						
+						if (existingIndex !== -1) {
+							mergedCookies[existingIndex] = newCookie;
+						} else {
+							mergedCookies.push(newCookie);
+						}
+					}
+					
+					cookieStore.set(storageKey, mergedCookies);
+					console.log(`Stored ${extractedCookies.length} cookies for ${endpointId ? `endpoint ${endpointId}` : `domain ${requestDomain}`}`);
+					console.log(`Cookie store now contains ${mergedCookies.length} cookies for this key`);
 				}
 			}
 		} catch (error) {
@@ -186,15 +232,20 @@ export async function executeDirectEndpoint(
  */
 function extractCookiesFromTauriResponse(response: Response, domain: string): RequestCookie[] {
 	const cookies: RequestCookie[] = [];
+	
+	console.log(`Extracting cookies for domain: ${domain}`);
 
 	// Check if the response has Set-Cookie headers
 	if (response.headers.has('set-cookie')) {
 		// Get all Set-Cookie headers (may be combined or separate)
 		const setCookieHeader = response.headers.get('set-cookie');
 		if (setCookieHeader) {
-			// Split by comma and semicolon to handle potential multiple cookies
-			// This is a simplified approach and might need refinement for complex cases
-			const rawCookies = setCookieHeader.split(',');
+			console.log(`Raw Set-Cookie header: ${setCookieHeader}`);
+			
+			// Split by comma followed by space and a word with an equals sign
+			// This better handles multiple Set-Cookie headers that might be concatenated
+			const rawCookies = setCookieHeader.split(/,(?=\s*[A-Za-z0-9_-]+=)/);
+			console.log(`Parsed ${rawCookies.length} cookies from header`);
 			
 			for (const rawCookie of rawCookies) {
 				// Parse each cookie
@@ -202,23 +253,46 @@ function extractCookiesFromTauriResponse(response: Response, domain: string): Re
 				const mainPart = parts[0].trim();
 				
 				// Get name and value from the first part
-				const [name, value] = mainPart.split('=').map(s => s.trim());
+				const nameValueSplit = mainPart.indexOf('=');
+				if (nameValueSplit === -1) continue; // Invalid cookie format
+				
+				const name = mainPart.slice(0, nameValueSplit).trim();
+				const value = mainPart.slice(nameValueSplit + 1).trim();
+				
+				if (!name) continue; // Skip invalid cookies
+				
+				// Extract cookie attributes
+				let cookieDomain = domain; // Default to request domain
+				let cookiePath: string | undefined = undefined;
+				
+				for (const part of parts.slice(1)) {
+					const partTrimmed = part.trim().toLowerCase();
+					if (partTrimmed.startsWith('domain=')) {
+						// Use the domain specified in the cookie if present
+						cookieDomain = part.split('=')[1].trim();
+						// Remove leading dot if present (implicit subdomain matching)
+						if (cookieDomain.startsWith('.')) {
+							cookieDomain = cookieDomain.slice(1);
+						}
+					} else if (partTrimmed.startsWith('path=')) {
+						cookiePath = part.split('=')[1].trim();
+					}
+				}
 				
 				// Create cookie object
 				const cookie: RequestCookie = {
 					name,
-					value: decodeURIComponent(value),
-					domain: domain,
+					value: value.startsWith('"') && value.endsWith('"') 
+						? decodeURIComponent(value.slice(1, -1)) 
+						: decodeURIComponent(value),
+					domain: cookieDomain
 				};
 				
-				// Check for path in the cookie parts
-				for (const part of parts.slice(1)) {
-					if (part.trim().toLowerCase().startsWith('path=')) {
-						cookie.path = part.split('=')[1].trim();
-						break;
-					}
+				if (cookiePath) {
+					cookie.path = cookiePath;
 				}
 				
+				console.log(`Extracted cookie: ${cookie.name}=${cookie.value}, domain=${cookie.domain}, path=${cookie.path || '/'}`);
 				cookies.push(cookie);
 			}
 		}
@@ -235,13 +309,22 @@ function extractCookiesFromTauriResponse(response: Response, domain: string): Re
 			console.log(`Found non-standard cookie header: ${key}=${value}`);
 			// Try to parse as cookie if possible
 			try {
-				const cookieParts = value.split('=');
-				if (cookieParts.length >= 2) {
-					cookies.push({
-						name: cookieParts[0].trim(),
-						value: cookieParts.slice(1).join('=').trim(),
-						domain: domain
-					});
+				const cookieParts = value.split(';');
+				for (const part of cookieParts) {
+					const nameValueSplit = part.indexOf('=');
+					if (nameValueSplit !== -1) {
+						const name = part.slice(0, nameValueSplit).trim();
+						const value = part.slice(nameValueSplit + 1).trim();
+						if (name) {
+							const cookie = {
+								name,
+								value,
+								domain: domain
+							};
+							console.log(`Extracted non-standard cookie: ${cookie.name}=${cookie.value}, domain=${cookie.domain}`);
+							cookies.push(cookie);
+						}
+					}
 				}
 			} catch (e) {
 				console.error('Error parsing non-standard cookie header:', e);
@@ -249,28 +332,66 @@ function extractCookiesFromTauriResponse(response: Response, domain: string): Re
 		}
 	}
 	
-	return cookies;
+	// Filter out empty/expired cookies (Max-Age=0 or empty value)
+	const validCookies = cookies.filter(cookie => cookie.value !== '');
+	
+	if (validCookies.length !== cookies.length) {
+		console.log(`Filtered out ${cookies.length - validCookies.length} expired or empty cookies`);
+	}
+	
+	return validCookies;
 }
 
 /**
  * Build a Cookie header value from the cookieStore
  * @param cookieStore The map of cookies by endpoint ID
+ * @param requestDomain Optional domain to filter cookies by
  * @returns Cookie header string or undefined if no cookies
  */
-function buildCookieHeaderFromStore(cookieStore: Map<string, Array<RequestCookie>>): string | undefined {
-	// Collect all cookies from the store
-	const allCookies: RequestCookie[] = [];
+function buildCookieHeaderFromStore(
+	cookieStore: Map<string, Array<RequestCookie>>, 
+	requestDomain?: string
+): string | undefined {
+	// Collect all cookies from the store that match the domain if specified
+	const matchedCookies: RequestCookie[] = [];
 	
 	for (const [_endpointId, cookies] of cookieStore.entries()) {
-		allCookies.push(...cookies);
+		if (requestDomain) {
+			// Filter cookies that match the request domain
+			const domainCookies = cookies.filter(cookie => {
+				// Direct domain match
+				if (cookie.domain === requestDomain) {
+					return true;
+				}
+				
+				// Check if cookie domain is a parent domain of the request domain
+				// For example, cookie for .example.com should match sub.example.com
+				if (requestDomain.endsWith(`.${cookie.domain}`)) {
+					return true;
+				}
+				
+				// Cookie domains without a dot prefix should match exactly
+				return false;
+			});
+			
+			// Also include cookies with domain 'localhost' as they might be relevant in development
+			const localCookies = cookies.filter(cookie => cookie.domain === 'localhost');
+			
+			matchedCookies.push(...domainCookies, ...localCookies);
+		} else {
+			// If no domain specified, include all cookies
+			matchedCookies.push(...cookies);
+		}
 	}
 	
-	if (allCookies.length === 0) {
+	if (matchedCookies.length === 0) {
 		return undefined;
 	}
 	
+	console.log(`Found ${matchedCookies.length} matching cookies for domain: ${requestDomain || 'any'}`);
+	
 	// Build the cookie header string
-	return allCookies.map(cookie => `${cookie.name}=${encodeURIComponent(cookie.value)}`).join('; ');
+	return matchedCookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ');
 }
 
 export async function executeProxiedEndpoint(
