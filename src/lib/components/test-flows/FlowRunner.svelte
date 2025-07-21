@@ -3,6 +3,7 @@
   import type { TestFlowData, FlowParameter, ExecutionState, FlowStep, StepEndpoint } from './types';
   // Import assertion types (will be used when typing the endpoint.assertions array)
   import type { Assertion } from '$lib/assertions/types';
+  import FlowParameterEditor from './FlowParameterEditor.svelte';
 
   // Props
   export let flowData: TestFlowData = {
@@ -15,11 +16,6 @@
   export let isRunning: boolean = false; // Whether the flow is currently running
   export let executionState: ExecutionState = {}; // Execution state for each endpoint
 
-  // Extended FlowParameter type with isNew property
-  interface ExtendedFlowParameter extends FlowParameter {
-    isNew?: boolean;
-  }
-
   // Parameter input modal state
   let showParameterInputModal = false;
   let parametersWithMissingValues: Array<FlowParameter> = [];
@@ -29,8 +25,6 @@
 
   // Control visibility of buttons - set to false when used by TestFlowEditor
   export let showButtons = true;
-
-  let editingParameter: null | ExtendedFlowParameter = null;
 
   // Computed Parameter values for template resolution
   let parameterValues: Record<string, unknown> = {};
@@ -1326,100 +1320,7 @@ import {
     executeFlowAfterParameterCheck();
   }
 
-  // Handle saving a Parameter from the form
-  function handleSaveParameter(parameter: ExtendedFlowParameter) {
-    console.log('Saving Parameter:', parameter);
-    console.log('Current parameters:', flowData.parameters);
-
-    // Ensure parameters array exists
-    if (!flowData.parameters) {
-      flowData.parameters = [];
-    }
-
-    // Check for duplicate name when adding a new Parameter
-    if (parameter.isNew && flowData.parameters.some((v) => v.name === parameter.name)) {
-      alert('A Parameter with this name already exists.');
-      return false;
-    }
-
-    // Remove old Parameter if editing
-    if (!parameter.isNew) {
-      flowData.parameters = flowData.parameters.filter((v) => v.name !== parameter.name);
-    }
-
-    // Add the new or updated Parameter
-    const newVar = {
-      name: parameter.name,
-      type: parameter.type || 'string',
-      // value: parameter.value,
-      defaultValue: parameter.defaultValue,
-      description: parameter.description,
-      required: parameter.required === true
-    };
-
-    // Create a new array to ensure reactivity
-    const newParameters = [...flowData.parameters, newVar];
-
-    // Update flowData with the new parameters array
-    flowData = {
-      ...flowData,
-      parameters: newParameters
-    };
-
-    console.log('Updated parameters:', flowData.parameters);
-
-    // Dispatch change event to notify parent components
-    dispatch('change', { flowData });
-
-    // Notify parent of parameters change
-    dispatch('change', { flowData });
-
-    // Return success
-    return true;
-  }
-
-  function editParameter(parameter: FlowParameter) {
-    // Convert the string values
-    const varValue = typeof parameter.value === 'string' ? parameter.value : '';
-    const varDefaultValue = typeof parameter.defaultValue === 'string' ? parameter.defaultValue : '';
-
-    newParameter = {
-      ...parameter,
-      value: varValue,
-      defaultValue: varDefaultValue,
-      description: parameter.description || ''
-    };
-    editingParameter = { ...parameter, isNew: false } as ExtendedFlowParameter;
-  }
-
-  function removeParameter(parameter: FlowParameter) {
-    console.log('Removing Parameter:', parameter);
-    console.log('Before removal:', flowData.parameters);
-
-    // Ensure the parameters array exists
-    if (!flowData.parameters) {
-      return;
-    }
-
-    // Create new array without the removed Parameter
-    const updatedParameters = flowData.parameters.filter((v) => v.name !== parameter.name);
-
-    // Update the whole flowData object to ensure reactivity
-    flowData = {
-      ...flowData,
-      parameters: updatedParameters
-    };
-
-    console.log('After removal:', flowData.parameters);
-
-    // Dispatch change event to notify parent components
-    dispatch('change', { flowData });
-
-    console.log('After removal:', flowData.parameters);
-
-    // Notify parent of parameters change
-    dispatch('change', { flowData });
-  }
+  // Parameters management has been moved to FlowParameterEditor.svelte
 
   // Update Parameter values when flowData.parameters change
   $: {
@@ -1549,219 +1450,48 @@ import {
   </div>
 {/if}
 
-<!-- Parameters Management Panel - Sliding panel for adding/editing parameters -->
+<!-- Parameters Management Panel -->
 {#if showParametersPanel}
-  <div
-    class="fixed top-0 right-0 bottom-0 z-50 h-full w-96 overflow-auto border-l border-gray-200 bg-white p-6 shadow-xl"
-  >
-    <div class="mb-4 flex items-center justify-between">
-      <h3 class="text-lg font-semibold">Flow Parameters</h3>
-      <button
-        class="rounded-full p-2 hover:bg-gray-200"
-        on:click={() => (showParametersPanel = false)}
-        aria-label="Close parameters panel"
-      >
-        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M6 18L18 6M6 6l12 12"
-          />
-        </svg>
-      </button>
-    </div>
-
-    <!-- Parameters List -->
-    <div class="mb-4">
-      <div class="mb-2 flex justify-between">
-        <h4 class="font-medium">Defined Parameters</h4>
-        <button
-          class="rounded bg-blue-600 px-2 py-1 text-sm text-white hover:bg-blue-700"
-          on:click={() => {
-            editingParameter = {
-              name: '',
-              type: 'string',
-              value: undefined,
-              defaultValue: undefined,
-              description: '',
-              required: false,
-              isNew: true
-            };
-          }}
-        >
-          Add Parameter
-        </button>
-      </div>
-
-      {#if flowData.parameters && flowData.parameters.length > 0}
-        {@const varCount = flowData.parameters.length}
-        <div class="mb-2 bg-blue-50 p-2 text-sm">
-          Found {varCount} parameter{varCount !== 1 ? 's' : ''}
-        </div>
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm">
-            <thead class="bg-gray-50 text-gray-600">
-              <tr>
-                <th class="px-2 py-1 text-left">Name</th>
-                <th class="px-2 py-1 text-left">Type</th>
-                <th class="px-2 py-1 text-left">Required</th>
-                <th class="px-2 py-1 text-left">Actions</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-200">
-              {#each flowData.parameters as parameter (parameter.name)}
-                <tr class="hover:bg-gray-50">
-                  <td class="px-2 py-2">{parameter.name}</td>
-                  <td class="px-2 py-2">{parameter.type || 'string'}</td>
-                  <td class="px-2 py-2">{parameter.required ? 'Yes' : 'No'}</td>
-                  <td class="space-x-1 px-2 py-2">
-                    <button
-                      class="rounded bg-gray-100 px-2 py-1 text-xs hover:bg-gray-200"
-                      on:click={() => editParameter(parameter)}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      class="rounded bg-red-100 px-2 py-1 text-xs text-red-700 hover:bg-red-200"
-                      on:click={() => removeParameter(parameter)}
-                    >
-                      Remove
-                    </button>
-                  </td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        </div>
-      {:else}
-        <div class="rounded-md border border-gray-200 bg-gray-50 p-4 text-center">
-          <p class="text-gray-500">No parameters defined yet. Add a parameter to get started.</p>
-        </div>
-      {/if}
-    </div>
-
-    <!-- Parameter Editor Form -->
-    {#if editingParameter !== null}
-      {@const parameter = editingParameter}
-      <div class="rounded-md border border-gray-200 bg-gray-50 p-4">
-        <h4 class="mb-2 font-medium">
-          {parameter.isNew ? 'Add New Parameter' : 'Edit Parameter'}
-        </h4>
-        <form
-          on:submit|preventDefault={() => {
-            if (handleSaveParameter(parameter)) {
-              editingParameter = null;
-            }
-          }}
-        >
-          <div class="mb-2">
-            <label for="var-name" class="mb-1 block text-sm font-medium">Name</label>
-            <input
-              id="var-name"
-              type="text"
-              class="input input-sm input-bordered w-full"
-              bind:value={parameter.name}
-              required
-            />
-          </div>
-
-          <div class="mb-2">
-            <label for="var-type" class="mb-1 block text-sm font-medium">Type</label>
-            <select
-              id="var-type"
-              class="select select-sm select-bordered w-full"
-              bind:value={parameter.type}
-            >
-              <option value="string">String</option>
-              <option value="number">Number</option>
-              <option value="boolean">Boolean</option>
-              <option value="object">Object</option>
-              <option value="array">Array</option>
-              <option value="null">Null</option>
-            </select>
-          </div>
-
-          <div class="mb-2">
-            <label for="var-default" class="mb-1 block text-sm font-medium">Default Value</label>
-            {#if parameter.type === 'string'}
-              <input
-                id="var-default"
-                type="text"
-                class="input input-sm input-bordered w-full"
-                bind:value={parameter.defaultValue}
-              />
-            {:else if parameter.type === 'number'}
-              <input
-                id="var-default"
-                type="number"
-                class="input input-sm input-bordered w-full"
-                bind:value={parameter.defaultValue}
-              />
-            {:else if parameter.type === 'boolean'}
-              <select
-                id="var-default"
-                class="select select-sm select-bordered w-full"
-                bind:value={parameter.defaultValue}
-              >
-                <option value={undefined}>No default</option>
-                <option value={true}>True</option>
-                <option value={false}>False</option>
-              </select>
-            {:else if parameter.type === 'object' || parameter.type === 'array'}
-              <textarea
-                id="var-default"
-                class="textarea textarea-sm textarea-bordered h-20 w-full"
-                placeholder="Enter valid JSON"
-                bind:value={parameter.defaultValue}
-              ></textarea>
-            {:else}
-              <input
-                id="var-default"
-                type="text"
-                class="input input-sm input-bordered w-full"
-                disabled
-                value="null"
-              />
-            {/if}
-          </div>
-
-          <div class="mb-2">
-            <label for="var-description" class="mb-1 block text-sm font-medium">Description</label>
-            <textarea
-              id="var-description"
-              class="textarea textarea-sm textarea-bordered w-full"
-              bind:value={parameter.description}
-            ></textarea>
-          </div>
-
-          <div class="mb-4">
-            <label class="flex items-center">
-              <input
-                type="checkbox"
-                class="checkbox checkbox-sm"
-                bind:checked={parameter.required}
-              />
-              <span class="ml-2 text-sm">Required</span>
-            </label>
-          </div>
-
-          <div class="flex justify-end space-x-2">
-            <button
-              type="button"
-              class="btn btn-sm btn-ghost"
-              on:click={() => {
-                editingParameter = null;
-              }}
-            >
-              Cancel
-            </button>
-            <button type="submit" class="btn btn-sm btn-primary">Save</button>
-          </div>
-        </form>
-      </div>
-    {/if}
-  </div>
+  <FlowParameterEditor
+    isOpen={showParametersPanel}
+    parameters={flowData.parameters || []}
+    on:save={(e) => {
+      // Handle saving a parameter
+      const parameter = e.detail;
+      
+      // Initialize parameters array if it doesn't exist
+      if (!flowData.parameters) {
+        flowData.parameters = [];
+      }
+      
+      // Check if this is a new parameter or existing one
+      if (parameter.isNew) {
+        // Remove the isNew flag
+        delete parameter.isNew;
+        // Add to parameters array
+        flowData.parameters = [...flowData.parameters, parameter];
+      } else {
+        // Update existing parameter
+        const index = flowData.parameters.findIndex(p => p.name === parameter.name);
+        if (index !== -1) {
+          flowData.parameters[index] = parameter;
+          flowData.parameters = [...flowData.parameters];
+        }
+      }
+      
+      // Dispatch change event to notify parent components
+      dispatch('change', { flowData });
+    }}
+    on:remove={(e) => {
+      // Handle removing a parameter
+      const parameter = e.detail;
+      flowData.parameters = flowData.parameters.filter(p => p.name !== parameter.name);
+      
+      // Dispatch change event to notify parent components
+      dispatch('change', { flowData });
+    }}
+    on:close={() => (showParametersPanel = false)}
+  />
 {/if}
 
 <!-- Only show these controls if showButtons is true (independent mode) -->
