@@ -1,0 +1,413 @@
+{
+  "steps": [
+    {
+      "label": "creator login",
+      "step_id": "step1",
+      "endpoints": [
+        {
+          "body": {
+            "password": "{{param:creator_password}}",
+            "username": "{{param:creator_username}}"
+          },
+          "api_id": 1,
+          "headers": [
+            {
+              "name": "Content-Type",
+              "value": "application/json",
+              "enabled": true
+            }
+          ],
+          "assertions": [
+            {
+              "id": "676f0c09-68b8-4c15-b200-3d53c39e5484",
+              "data_id": "$.user_id",
+              "enabled": true,
+              "operator": "greater_than",
+              "data_source": "response",
+              "assertion_type": "json_body",
+              "expected_value": 0,
+              "expected_value_type": "number"
+            },
+            {
+              "id": "d58829ba-da98-4f02-9537-267eb9519c2f",
+              "data_id": "$.username",
+              "enabled": true,
+              "operator": "exists",
+              "data_source": "response",
+              "assertion_type": "json_body",
+              "expected_value": "201",
+              "expected_value_type": "string"
+            },
+            {
+              "id": "57e58c2e-db1e-4d64-89fa-ed7f269ae12b",
+              "data_id": "status_code",
+              "enabled": true,
+              "operator": "between",
+              "data_source": "response",
+              "assertion_type": "status_code",
+              "expected_value": [
+                200,
+                299
+              ],
+              "expected_value_type": "number"
+            },
+            {
+              "id": "767438eb-0d91-43c3-847e-55adb66f2378",
+              "data_id": "status_code",
+              "enabled": true,
+              "operator": "not_between",
+              "data_source": "response",
+              "assertion_type": "status_code",
+              "expected_value": [
+                100,
+                199
+              ],
+              "expected_value_type": "number"
+            }
+          ],
+          "pathParams": {},
+          "endpoint_id": 25,
+          "queryParams": {},
+          "transformations": []
+        }
+      ]
+    },
+    {
+      "label": "get approval config",
+      "step_id": "step2",
+      "endpoints": [
+        {
+          "api_id": 1,
+          "headers": [],
+          "assertions": [
+            {
+              "id": "34aa5a68-3e82-4799-8ab8-088a8e16e8b2",
+              "data_id": "$.approver_count",
+              "enabled": true,
+              "operator": "greater_than",
+              "data_source": "transformed_data",
+              "assertion_type": "json_body",
+              "expected_value": 0,
+              "expected_value_type": "number"
+            }
+          ],
+          "pathParams": {},
+          "endpoint_id": 5,
+          "queryParams": {
+            "page": "1",
+            "limit": "50",
+            "is_total": "",
+            "organization_id": "{{param:org_id}}"
+          },
+          "transformations": [
+            {
+              "alias": "approver_ids",
+              "expression": "$.data[0].steps | map($.approvers[0].user_id)"
+            },
+            {
+              "alias": "approver_count",
+              "expression": "$.data[0].steps | count()"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "create payment request",
+      "step_id": "step3",
+      "endpoints": [
+        {
+          "body": {
+            "submit": true,
+            "invoices": [
+              {
+                "amount": "{{{func:randomInt(50, 100)}}}",
+                "remark": "Sample remark",
+                "bill_to": "fus",
+                "type_id": 1,
+                "class_id": 1,
+                "due_date": "{{func:formatDatePattern(yyyy-MM-dd, null)}}",
+                "bill_from": "aws",
+                "attachment": "Sample attachment",
+                "settlor_id": 1,
+                "description": "Sample description",
+                "location_id": 1,
+                "invoice_date": "{{func:formatDatePattern(yyyy-MM-dd, null)}}",
+                "department_id": 1,
+                "invoice_number": "{{func:uuid()}}",
+                "request_amount": "{{{func:randomInt(1, 49)}}}",
+                "shareholder_id": 1,
+                "attachment_hash": "Sample attachment_hash"
+              }
+            ],
+            "priority": "{{{func:randomInt(1,10)}}}",
+            "recurring": {
+              "type": "monthly",
+              "value": "{{{func:randomInt(1,31)}}}"
+            },
+            "currency_id": 1,
+            "request_amount": "{{{func:randomInt(20, 50)}}}",
+            "organization_id": "{{{param:org_id}}}",
+            "approver_user_ids": "{{{proc:step2-0.$.approver_ids}}}"
+          },
+          "api_id": 1,
+          "headers": [
+            {
+              "name": "Content-Type",
+              "value": "application/json",
+              "enabled": true
+            }
+          ],
+          "assertions": [
+            {
+              "id": "13392231-5f87-46e6-8267-75775f617b2c",
+              "data_id": "status_code",
+              "enabled": true,
+              "operator": "between",
+              "data_source": "response",
+              "assertion_type": "status_code",
+              "expected_value": [
+                200,
+                299
+              ],
+              "expected_value_type": "number"
+            },
+            {
+              "id": "ba28717e-92b2-4c0b-a18d-b5459f0b6664",
+              "data_id": "$.ref_id",
+              "enabled": true,
+              "operator": "exists",
+              "data_source": "response",
+              "assertion_type": "json_body",
+              "expected_value": null,
+              "expected_value_type": "string"
+            },
+            {
+              "id": "4bf1e806-5873-4a70-a572-c77c73603202",
+              "data_id": "$.recurring_id",
+              "enabled": true,
+              "operator": "greater_than",
+              "data_source": "response",
+              "assertion_type": "json_body",
+              "expected_value": 0,
+              "expected_value_type": "number"
+            }
+          ],
+          "pathParams": {},
+          "endpoint_id": 59,
+          "queryParams": {},
+          "transformations": []
+        }
+      ]
+    },
+    {
+      "label": "get payment request",
+      "step_id": "step4",
+      "endpoints": [
+        {
+          "api_id": 1,
+          "headers": [],
+          "assertions": [
+            {
+              "id": "30cf0fee-6a86-4982-aaa7-129ffe47cc13",
+              "data_id": "$.status",
+              "enabled": true,
+              "operator": "equals",
+              "data_source": "response",
+              "assertion_type": "json_body",
+              "expected_value": "submitted",
+              "expected_value_type": "string"
+            },
+            {
+              "id": "77b29608-ba2d-4b32-8e9a-aafbaea4e095",
+              "data_id": "$.invoices",
+              "enabled": true,
+              "operator": "length_greater_than",
+              "data_source": "response",
+              "assertion_type": "json_body",
+              "expected_value": 0,
+              "expected_value_type": "array"
+            }
+          ],
+          "pathParams": {
+            "ref_id": "{{res:step3-0.$.ref_id}}"
+          },
+          "endpoint_id": 61,
+          "queryParams": {}
+        }
+      ]
+    },
+    {
+      "label": "approver login",
+      "step_id": "step5",
+      "endpoints": [
+        {
+          "body": {
+            "password": "{{param:payer_password}}",
+            "username": "{{param:payer_username}}"
+          },
+          "api_id": 1,
+          "headers": [
+            {
+              "name": "Content-Type",
+              "value": "application/json",
+              "enabled": true
+            }
+          ],
+          "pathParams": {},
+          "endpoint_id": 25,
+          "queryParams": {}
+        }
+      ]
+    },
+    {
+      "label": "approve",
+      "step_id": "step6",
+      "endpoints": [
+        {
+          "body": {
+            "refID": "{{res:step3-0.$.ref_id}}",
+            "remark": "Sample remark",
+            "approve": true
+          },
+          "api_id": 1,
+          "headers": [
+            {
+              "name": "Content-Type",
+              "value": "application/json",
+              "enabled": true
+            }
+          ],
+          "pathParams": {
+            "ref_id": "{{res:step3-0.$.ref_id}}"
+          },
+          "endpoint_id": 74,
+          "queryParams": {}
+        }
+      ]
+    },
+    {
+      "label": "get detail",
+      "step_id": "step7",
+      "endpoints": [
+        {
+          "api_id": 1,
+          "headers": [],
+          "pathParams": {
+            "ref_id": "{{res:step3-0.$.ref_id}}"
+          },
+          "endpoint_id": 61,
+          "queryParams": {}
+        }
+      ]
+    },
+    {
+      "label": "Step 8",
+      "step_id": "step8",
+      "endpoints": [
+        {
+          "body": {
+            "batch_size": 50,
+            "simulated_time": "{{res:step7-0.$.recurring.next_payment_at}}"
+          },
+          "api_id": 1,
+          "headers": [
+            {
+              "name": "Content-Type",
+              "value": "application/json",
+              "enabled": true
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer cbqEtUmBZpFPpEs6UKPcZm7euPRoXdjx",
+              "enabled": true
+            }
+          ],
+          "assertions": [],
+          "pathParams": {},
+          "endpoint_id": 448,
+          "queryParams": {}
+        }
+      ]
+    },
+    {
+      "label": "Step 9",
+      "step_id": "step9",
+      "endpoints": [
+        {
+          "api_id": 1,
+          "headers": [],
+          "assertions": [],
+          "pathParams": {},
+          "endpoint_id": 58,
+          "queryParams": {
+            "page": "1",
+            "limit": "10",
+            "recurring": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "settings": {
+    "api_hosts": {
+      "1": {
+        "url": "https://admin.demeter-sit.url2fs.com/api",
+        "name": "demeter"
+      },
+      "3": {
+        "url": "https://admin.demeter-sit.url2fs.com/api",
+        "name": "test upload after refactoring"
+      }
+    }
+  },
+  "parameters": [
+    {
+      "name": "creator_password",
+      "type": "string",
+      "value": "m@_stEr@1_$2",
+      "required": true,
+      "description": "",
+      "defaultValue": "m@_stEr@1_$2"
+    },
+    {
+      "name": "org_id",
+      "type": "number",
+      "value": 1,
+      "required": true,
+      "description": "",
+      "defaultValue": 1
+    },
+    {
+      "name": "creator_username",
+      "type": "string",
+      "value": "khanh",
+      "required": true,
+      "description": "",
+      "defaultValue": "khanh"
+    },
+    {
+      "name": "payer_username",
+      "type": "string",
+      "value": "nampayer01",
+      "required": false,
+      "description": "",
+      "defaultValue": "nampayer01"
+    },
+    {
+      "name": "payer_password",
+      "type": "string",
+      "value": "P@ssword123",
+      "required": true,
+      "description": "",
+      "defaultValue": "P@ssword123"
+    },
+    {
+      "name": "ref_id",
+      "type": "string",
+      "required": false,
+      "description": "",
+      "defaultValue": ""
+    }
+  ]
+}
