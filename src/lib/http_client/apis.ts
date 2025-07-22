@@ -2,6 +2,7 @@ import { fetchWithAuth } from './util';
 import type {
 	DeleteApiResponse,
 	GetApiDetailsResponse,
+	GetApiEndpointsResponse,
 	GetApisResponse,
 	UpdateSwaggerResponse,
 	UploadSwaggerResponse
@@ -108,6 +109,21 @@ export async function getApiDetails(id: number): Promise<GetApiDetailsResponse |
 		}
 	} catch (error) {
 		console.error('Error fetching API details:', error);
+		return null;
+	}
+}
+
+export async function getApiEndpoints(apiId: number): Promise<GetApiEndpointsResponse | null> {
+	try {
+		const response = await fetchWithAuth(`/api/apis/${apiId}/endpoints`);
+		if (response.ok) {
+			return await response.json();
+		} else {
+			console.error(`Failed to fetch endpoints for API ${apiId}:`, response.statusText);
+			return null;
+		}
+	} catch (error) {
+		console.error(`Error fetching endpoints for API ${apiId}:`, error);
 		return null;
 	}
 }

@@ -13,10 +13,9 @@
   }[] = [];
   export let disabled: boolean = false;
   export let apiHosts: Record<string | number, { url: string; name?: string; description?: string }> = {};
+  export let showSelector: boolean = false; // Make this a component parameter with default false
 
   const dispatch = createEventDispatcher();
-
-  let showSelector = false;
   let searchTerm = '';
   let selectedTags: string[] = [];
   let selectedMethod = '';
@@ -69,7 +68,7 @@
 
   function selectEndpoint(endpoint: (typeof endpoints)[number]) {
     dispatch('select', endpoint);
-    showSelector = false;
+    // Keep selector open for continuous selection
     searchTerm = '';
   }
 
@@ -100,22 +99,9 @@
       Add Endpoint
     </button>
   {:else}
-    <div class="rounded-md border bg-white p-4 shadow-sm">
-      <div class="mb-4 flex items-center justify-between">
-        <h4 class="font-medium">Select an Endpoint</h4>
-        <button
-          class="text-gray-500 hover:text-gray-700"
-          on:click={() => (showSelector = false)}
-          aria-label="Close endpoint selector"
-        >
-          <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-            <path
-              fill-rule="evenodd"
-              d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-              clip-rule="evenodd"
-            ></path>
-          </svg>
-        </button>
+    <div class="rounded-md border bg-white p-3">
+      <div class="mb-3 flex items-center justify-between">
+        <h4 class="font-medium">Browse Endpoints</h4>
       </div>
 
       <div class="mb-4">

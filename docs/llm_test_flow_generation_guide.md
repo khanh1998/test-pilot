@@ -6,13 +6,11 @@ This guide provides instructions for Large Language Models (LLMs) like OpenAI GP
 
 A test flow JSON consists of three main sections:
 1. **Steps**: Sequence of API calls to execute
-2. **Settings**: API host configurations
-3. **Parameters**: User-configurable values used throughout the flow
+2. **Parameters**: User-configurable values used throughout the flow
 
 ```json
 {
   "steps": [...],
-  "settings": {...},
   "parameters": [...]
 }
 ```
@@ -200,21 +198,7 @@ Assertions validate response data against expected values:
 - Array: `has_length`, `length_greater_than`, `length_less_than`, `contains_all`, `contains_any`
 - Type: `is_type`, `is_null`, `is_not_null`
 
-## 5. Settings and Parameters
-
-### Settings
-Configure API hosts:
-
-```json
-"settings": {
-  "api_hosts": {
-    "1": {
-      "url": "https://api.example.com/v1",
-      "name": "Example API"
-    }
-  }
-}
-```
+## 5. Parameters
 
 ### Parameters
 Define user-configurable values:
@@ -269,7 +253,7 @@ When generating a test flow for the user's selected APIs and context:
 
 2. **Identify Dependencies**: Determine the correct sequence and dependencies between endpoints
 
-3. **Create Basic Flow Structure**: Define steps, settings, and parameters
+3. **Create Basic Flow Structure**: Define steps, and parameters
 
 4. **Add Request Details**: Configure headers, path parameters, query parameters, and request bodies
 
@@ -492,14 +476,6 @@ Here's a simple example of a test flow that:
       ]
     }
   ],
-  "settings": {
-    "api_hosts": {
-      "1": {
-        "url": "https://api.example.com/v1",
-        "name": "Example API"
-      }
-    }
-  },
   "parameters": [
     {
       "name": "username",

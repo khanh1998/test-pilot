@@ -3,6 +3,7 @@
   import { goto } from '$app/navigation';
   import * as testFlowClient from '$lib/http_client/test-flow';
   import * as apiClient from '$lib/http_client/apis';
+  import FlowGeneratorPanel from '$lib/components/test-flows/FlowGeneratorPanel.svelte';
 
   let testFlows: {
     id: number;
@@ -16,12 +17,13 @@
   let loading = true;
   let error: string | null = null;
   let showCreateModal = false;
+  let showGenerateFlowPanel = false;
 
   // Form data for creating a new test flow
   let newFlowName = '';
   let newFlowDescription = '';
   let selectedApiIds: number[] = [];
-
+  
   // Available APIs
   let availableApis: { id: number; name: string; host: string; selected?: boolean }[] = [];
 
@@ -158,6 +160,8 @@
       loading = false;
     }
   }
+
+
 </script>
 
 <div class="container mx-auto px-4 py-8">
@@ -167,12 +171,25 @@
 
   <div class="mb-8 flex items-center justify-between">
     <h1 class="text-2xl font-bold text-gray-800">Test Flows</h1>
-    <button
-      class="rounded-md bg-blue-600 px-4 py-2 text-white transition hover:bg-blue-700"
-      on:click={() => (showCreateModal = true)}
-    >
-      Create Test Flow
-    </button>
+    <div class="flex gap-3">
+      <button
+        class="rounded-md bg-emerald-600 px-4 py-2 text-white transition hover:bg-emerald-700"
+        on:click={() => (showGenerateFlowPanel = true)}
+      >
+        <div class="flex items-center">
+          <svg xmlns="http://www.w3.org/2000/svg" class="mr-1.5 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+          Generate Flow
+        </div>
+      </button>
+      <button
+        class="rounded-md bg-blue-600 px-4 py-2 text-white transition hover:bg-blue-700"
+        on:click={() => (showCreateModal = true)}
+      >
+        Create Test Flow
+      </button>
+    </div>
   </div>
 
   {#if error}
@@ -320,3 +337,14 @@
     </div>
   </div>
 {/if}
+
+<!-- Generate Flow Panel using our new component -->
+<FlowGeneratorPanel 
+  bind:isOpen={showGenerateFlowPanel}
+  on:close={() => showGenerateFlowPanel = false}
+  on:flowGenerated={(event) => {
+    showGenerateFlowPanel = false;
+    fetchTestFlows();
+  }}
+/>
+

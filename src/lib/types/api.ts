@@ -1,4 +1,4 @@
-import type { apiEndpoints, apis } from '$lib/server/db/schema';
+import { apiEndpoints, type apis } from '$lib/server/db/schema';
 
 export type Api = Omit<typeof apis.$inferSelect, 'specFormat' | 'specContent' | 'userId'> & {
 	endpointCount?: number;

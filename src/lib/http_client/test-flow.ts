@@ -40,6 +40,31 @@ export async function getTestFlow(testFlowId: string) {
 	}
 }
 
+export async function generateTestFlow(data: {
+  endpointIds: number[];
+  description: string;
+}) {
+  try {
+    const response = await fetchWithAuth('/api/test-flows/generate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || 'Failed to generate test flow');
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error generating test flow:', error);
+    throw error;
+  }
+}
+
 export async function updateTestFlow(testFlowId: string, data: any) {
 	try {
 		const response = await fetchWithAuth(`/api/test-flows/${testFlowId}`, {
