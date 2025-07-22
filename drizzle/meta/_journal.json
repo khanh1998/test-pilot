@@ -36,6 +36,27 @@
       "when": 1751796003373,
       "tag": "0004_first_imperial_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1753188033601,
+      "tag": "0005_skinny_hemingway",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1753188163342,
+      "tag": "0006_lowly_falcon",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1753193539942,
+      "tag": "0007_slippery_thanos",
+      "breakpoints": true
     }
   ]
 }

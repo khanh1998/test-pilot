@@ -1,4 +1,5 @@
-import { pgTable, text, serial, varchar, integer, timestamp, jsonb } from 'drizzle-orm/pg-core';
+import { pgTable, text, serial, varchar, integer, timestamp, jsonb, index, uniqueIndex } from 'drizzle-orm/pg-core';
+import { vector } from 'drizzle-orm/pg-core';
 
 // Example users table
 export const users = pgTable('users', {
@@ -61,3 +62,23 @@ export const testFlowApis = pgTable('test_flow_apis', {
     .references(() => apis.id)
   // Composite primary key is defined in relations.ts
 });
+
+// Endpoint embeddings table for vector similarity search
+export const endpointEmbeddings = pgTable(
+  'endpoint_embeddings',
+  {
+    id: serial('id').primaryKey(),
+    endpointId: integer('endpoint_id')
+      .notNull()
+      .references(() => apiEndpoints.id),
+    embedding: vector('embedding', { dimensions: 1536 }), // Dimension based on embedding model (e.g., OpenAI's ada-002)
+    processedText: text('processed_text'),
+    version: integer('version').default(1),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull()
+  },
+  (table) => [
+    index('embedding_idx').using('ivfflat', table.embedding.op('vector_cosine_ops')),
+    uniqueIndex('endpoint_id_unique_idx').on(table.endpointId)
+  ]
+);

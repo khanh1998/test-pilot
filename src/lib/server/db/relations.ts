@@ -1,5 +1,5 @@
 import { relations } from 'drizzle-orm';
-import { users, apis, apiEndpoints, testFlows, testFlowApis } from './schema';
+import { users, apis, apiEndpoints, testFlows, testFlowApis, endpointEmbeddings } from './schema';
 
 export const usersRelations = relations(users, ({ many }) => ({
   apis: many(apis),
@@ -15,11 +15,12 @@ export const apisRelations = relations(apis, ({ one, many }) => ({
   testFlowApis: many(testFlowApis)
 }));
 
-export const apiEndpointsRelations = relations(apiEndpoints, ({ one }) => ({
+export const apiEndpointsRelations = relations(apiEndpoints, ({ one, many }) => ({
   api: one(apis, {
     fields: [apiEndpoints.apiId],
     references: [apis.id]
-  })
+  }),
+  embeddings: many(endpointEmbeddings)
 }));
 
 export const testFlowsRelations = relations(testFlows, ({ one, many }) => ({
@@ -38,5 +39,12 @@ export const testFlowApisRelations = relations(testFlowApis, ({ one }) => ({
   api: one(apis, {
     fields: [testFlowApis.apiId],
     references: [apis.id]
+  })
+}));
+
+export const endpointEmbeddingsRelations = relations(endpointEmbeddings, ({ one }) => ({
+  endpoint: one(apiEndpoints, {
+    fields: [endpointEmbeddings.endpointId],
+    references: [apiEndpoints.id]
   })
 }));

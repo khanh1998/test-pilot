@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "endpoint_id_unique_idx" ON "endpoint_embeddings" USING btree ("endpoint_id");
