@@ -13,13 +13,14 @@ export async function createTestFlow(
   // Generate test flow using OpenAI
   const flowJson = await generateTestFlowFromSpec(endpoints, description);
   
-  // Create a name for the flow based on description
-  const name = generateFlowName(description);
+  // Use the name and description from the generated flow
+  const name = flowJson.name;
+  const flowDescription = flowJson.description;
   
   // Store the generated flow in database
   const [newFlow] = await db.insert(testFlows).values({
     name,
-    description,
+    description: flowDescription,
     flowJson,
     userId
   }).returning();
@@ -46,17 +47,11 @@ export async function createTestFlow(
   return {
     id: newFlow.id,
     name: newFlow.name,
-    description: newFlow.description || description,
+    description: newFlow.description || flowDescription,
     createdAt: newFlow.createdAt
   };
 }
 
-// Helper function to generate a flow name from description
-function generateFlowName(description: string): string {
-  // Take first 30 chars of description and capitalize first letter
-  const name = description.slice(0, 30);
-  return name.charAt(0).toUpperCase() + name.slice(1);
-}
 
 
 // Fetch API host information for settings

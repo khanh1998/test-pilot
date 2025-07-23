@@ -1,12 +1,14 @@
 import OpenAI from 'openai';
 import { v4 as uuidv4 } from 'uuid';
+import { zodTextFormat } from "openai/helpers/zod";
+
 import fs from 'fs';
 import path from 'path';
 
 
 // Import the JSON schema for test flow generation
-import { testFlowSchema } from './test-flow-schema';
 import type { TestFlowJson } from '$lib/types/test-flow';
+import { testFlowZodSchema, validateTestFlowSafe, type TestFlowGen } from './flow-zod-gen-schema';
 
 // Initialize OpenAI client
 const openai = new OpenAI({
@@ -41,7 +43,7 @@ interface ApiEndpoint {
 export async function generateTestFlowFromSpec(
   endpoints: ApiEndpoint[], 
   description: string
-): Promise<TestFlowJson> {
+): Promise<TestFlowGen> {
   // Load the test flow generation guide content
   const guideContent = loadTestFlowGuide();
   
@@ -53,6 +55,11 @@ that validates the given API endpoints according to the user's description.
 Please follow the detailed guide below for generating valid test flows for Test-Pilot:
 
 ${guideContent}
+
+Every test flow must include:
+1. A descriptive "name" field that clearly indicates the purpose of the test flow (max 50 characters)
+2. A detailed "description" field explaining what the test flow verifies and any important details
+3. Well-structured steps with appropriate assertions and transformations
 
 Remember to: follow API specs (request schema, response schema, parameters, path) strictly, otherwise the flow won't work.
 `;
@@ -79,28 +86,24 @@ ${JSON.stringify(endpointData, null, 2)}
 Flow description: ${description}
 
 Please generate a complete test flow JSON that follows the Test-Pilot structure according to the guide provided in the system message.
+Make sure to include a concise, descriptive "name" and a detailed "description" for the test flow that clearly explains what it tests and how.
 `;
 
   try {
     // Use OpenAI's structured output capability with JSON schema
-    const response = await openai.responses.create({
+    const response = await openai.responses.parse({
       model: "gpt-4o", // Using gpt-4o as it's the latest model
       input: [
         { role: "system", content: systemMessage },
         { role: "user", content: userMessage }
       ],
       text: {
-        format: {
-          type: "json_schema",
-          name: "test_flow",
-          schema: testFlowSchema,
-          strict: true
-        }
+        format: zodTextFormat(testFlowZodSchema, "test_flow"),
       }
     });
 
-    const flowJson = JSON.parse(response.output_text);
-    
+    const flowJson = response.output_parsed;
+
     if (!flowJson) {
       throw new Error('No content returned from OpenAI');
     }

@@ -3,6 +3,14 @@
 export const testFlowSchema = {
   type: "object",
   properties: {
+    name: {
+      type: "string",
+      description: "A descriptive name for the test flow that clearly indicates its purpose"
+    },
+    description: {
+      type: "string",
+      description: "A detailed description explaining what this test flow verifies and any important details about its execution"
+    },
     steps: {
       type: "array",
       description: "Sequence of steps containing API calls to execute in order",
@@ -257,6 +265,6 @@ export const testFlowSchema = {
       }
     }
   },
-  required: ["steps", "parameters"],
+  required: ["name", "description", "steps", "parameters"],
   additionalProperties: false
 };
