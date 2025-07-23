@@ -1,17 +1,19 @@
 import { relations } from "drizzle-orm/relations";
-import { users, posts, apis, apiEndpoints, testFlows, testFlowApis } from "./schema";
+import { apiEndpoints, endpointEmbeddings, users, apis, testFlows, testFlowApis } from "./schema";
 
-export const postsRelations = relations(posts, ({one}) => ({
-	user: one(users, {
-		fields: [posts.authorId],
-		references: [users.id]
+export const endpointEmbeddingsRelations = relations(endpointEmbeddings, ({one}) => ({
+	apiEndpoint: one(apiEndpoints, {
+		fields: [endpointEmbeddings.endpointId],
+		references: [apiEndpoints.id]
 	}),
 }));
 
-export const usersRelations = relations(users, ({many}) => ({
-	posts: many(posts),
-	apis: many(apis),
-	testFlows: many(testFlows),
+export const apiEndpointsRelations = relations(apiEndpoints, ({one, many}) => ({
+	endpointEmbeddings: many(endpointEmbeddings),
+	api: one(apis, {
+		fields: [apiEndpoints.apiId],
+		references: [apis.id]
+	}),
 }));
 
 export const apisRelations = relations(apis, ({one, many}) => ({
@@ -19,15 +21,13 @@ export const apisRelations = relations(apis, ({one, many}) => ({
 		fields: [apis.userId],
 		references: [users.id]
 	}),
-	endpoints: many(apiEndpoints),
+	apiEndpoints: many(apiEndpoints),
 	testFlowApis: many(testFlowApis),
 }));
 
-export const apiEndpointsRelations = relations(apiEndpoints, ({one}) => ({
-	api: one(apis, {
-		fields: [apiEndpoints.apiId],
-		references: [apis.id]
-	}),
+export const usersRelations = relations(users, ({many}) => ({
+	apis: many(apis),
+	testFlows: many(testFlows),
 }));
 
 export const testFlowsRelations = relations(testFlows, ({one, many}) => ({
@@ -39,12 +39,12 @@ export const testFlowsRelations = relations(testFlows, ({one, many}) => ({
 }));
 
 export const testFlowApisRelations = relations(testFlowApis, ({one}) => ({
-	testFlow: one(testFlows, {
-		fields: [testFlowApis.testFlowId],
-		references: [testFlows.id]
-	}),
 	api: one(apis, {
 		fields: [testFlowApis.apiId],
 		references: [apis.id]
+	}),
+	testFlow: one(testFlows, {
+		fields: [testFlowApis.testFlowId],
+		references: [testFlows.id]
 	}),
 }));

@@ -69,12 +69,14 @@ export class EndpointEmbeddingsRepository {
    * @param embedding - The vector embedding to compare with
    * @param limit - The maximum number of results to return (default: 10)
    * @param similarityThreshold - The minimum similarity score (default: 0.65)
+   * @param userId - The ID of the user to filter endpoints by (optional)
    * @returns An array of endpoints with similarity scores
    */
   async findSimilarEndpoints(
     embedding: number[],
     limit = 10,
-    similarityThreshold = 0.65
+    similarityThreshold = 0.65,
+    userId?: number
   ): Promise<Array<{ 
     id: number; 
     apiId: number; 
@@ -88,6 +90,14 @@ export class EndpointEmbeddingsRepository {
   }>> {
     // Calculate cosine similarity: 1 - cosine_distance
     const similarity = sql<number>`1 - (${cosineDistance(endpointEmbeddings.embedding, embedding)})`;
+    
+    // Build base condition for similarity threshold
+    const similarityCondition = gt(similarity, similarityThreshold);
+    
+    // Apply userId filter if provided
+    const whereCondition = userId !== undefined
+      ? and(similarityCondition, eq(endpointEmbeddings.userId, userId))
+      : similarityCondition;
     
     // Query similar endpoints
     const result = await db
@@ -104,7 +114,7 @@ export class EndpointEmbeddingsRepository {
       })
       .from(endpointEmbeddings)
       .innerJoin(apiEndpoints, eq(endpointEmbeddings.endpointId, apiEndpoints.id))
-      .where(gt(similarity, similarityThreshold))
+      .where(whereCondition)
       .orderBy((t) => desc(t.similarity))
       .limit(limit);
     
@@ -131,6 +141,8 @@ export class EndpointEmbeddingsRepository {
       .select({
         id: endpointEmbeddings.id,
         endpointId: endpointEmbeddings.endpointId,
+        userId: endpointEmbeddings.userId,
+        apiId: endpointEmbeddings.apiId,
         embedding: endpointEmbeddings.embedding,
         processedText: endpointEmbeddings.processedText,
         version: endpointEmbeddings.version,

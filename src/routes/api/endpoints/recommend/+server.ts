@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { EndpointEmbeddingsService } from '$lib/server/service/endpoint_embeddings/endpoint-embeddings';
+import { EndpointEmbeddingsService } from '$lib/server/service/endpoint_embeddings/main';
 
 export const POST: RequestHandler = async ({ request, locals }) => {
   // Check if user is authenticated
@@ -33,7 +33,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     const recommendations = await service.findSimilarEndpointsMultiSentence(
       sentences,
       limit || 10,
-      similarityThreshold
+      similarityThreshold,
+      userId // Pass the authenticated user's ID
     );
     
     return json({ endpoints: recommendations });

@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestEvent } from '@sveltejs/kit';
-import { EndpointEmbeddingsService } from '$lib/server/service/endpoint_embeddings/endpoint-embeddings';
+import { EndpointEmbeddingsService } from '$lib/server/service/endpoint_embeddings/main';
 
 /**
  * POST handler to generate and store an embedding for a specific endpoint
@@ -46,7 +46,8 @@ export async function POST({ params, locals }: RequestEvent) {
     const result = await embeddingService.processEndpoint(
       endpoint.endpoint,
       endpoint.api.name,
-      endpoint.api.description || undefined
+      endpoint.api.description || undefined,
+      locals.user.userId
     );
 
     return json({

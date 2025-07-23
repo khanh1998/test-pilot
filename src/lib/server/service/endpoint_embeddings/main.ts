@@ -19,12 +19,14 @@ export class EndpointEmbeddingsService {
    * @param endpoint - The API endpoint
    * @param apiName - The name of the API
    * @param apiDescription - The description of the API
+   * @param userId - The ID of the user who owns the API
    * @returns The created or updated endpoint embedding
    */
   async processEndpoint(
     endpoint: ApiEndpoint, 
     apiName: string,
-    apiDescription?: string
+    apiDescription?: string,
+    userId?: number
   ) {
     // 1. Create rich text representation
     const processedText = createEndpointText(endpoint, apiName, apiDescription);
@@ -35,6 +37,8 @@ export class EndpointEmbeddingsService {
     // 3. Store embedding in the database
     const newEmbedding: NewEndpointEmbedding = {
       endpointId: endpoint.id,
+      userId: userId,
+      apiId: endpoint.apiId,
       embedding,
       processedText
     };
@@ -48,12 +52,14 @@ export class EndpointEmbeddingsService {
    * @param endpoints - The API endpoints to process
    * @param apiName - The name of the API
    * @param apiDescription - The description of the API
+   * @param userId - The ID of the user who owns the API
    * @param batchSize - The number of endpoints to process in each batch
    */
   async batchProcessEndpoints(
     endpoints: ApiEndpoint[],
     apiName: string,
     apiDescription?: string,
+    userId?: number,
     batchSize = 10
   ) {
     console.log(`Processing ${endpoints.length} endpoints in batches of ${batchSize}`);
@@ -61,7 +67,7 @@ export class EndpointEmbeddingsService {
     for (let i = 0; i < endpoints.length; i += batchSize) {
       const batch = endpoints.slice(i, i + batchSize);
       const promises = batch.map(endpoint => 
-        this.processEndpoint(endpoint, apiName, apiDescription)
+        this.processEndpoint(endpoint, apiName, apiDescription, userId)
       );
       
       await Promise.all(promises);
@@ -75,14 +81,20 @@ export class EndpointEmbeddingsService {
    * @param description - The description to find similar endpoints for
    * @param limit - The maximum number of results to return
    * @param similarityThreshold - The minimum similarity threshold
+   * @param userId - The ID of the user to filter endpoints by (optional)
    * @returns Similar endpoints with similarity scores
    */
-  async findSimilarEndpoints(description: string, limit = 10, similarityThreshold = 0.65) {
+  async findSimilarEndpoints(
+    description: string, 
+    limit = 10, 
+    similarityThreshold = 0.65, 
+    userId?: number
+  ) {
     // Generate embedding for the query description
     const embedding = await generateEmbedding(description);
     
-    // Find similar endpoints
-    return this.repository.findSimilarEndpoints(embedding, limit, similarityThreshold);
+    // Find similar endpoints, filtering by user ID if provided
+    return this.repository.findSimilarEndpoints(embedding, limit, similarityThreshold, userId);
   }
   
   /**
@@ -138,17 +150,19 @@ export class EndpointEmbeddingsService {
   }
 
   /**
-   * Find similar endpoints for multiple sentences
+   * Find endpoints similar to multiple sentences
    * 
    * @param sentences - Array of sentences to find similar endpoints for
    * @param limit - The maximum number of results to return per sentence
    * @param similarityThreshold - The minimum similarity threshold
+   * @param userId - The ID of the user to filter endpoints by (optional)
    * @returns Array of unique similar endpoints with similarity scores
    */
   async findSimilarEndpointsMultiSentence(
     sentences: string[], 
     limit = 10, 
-    similarityThreshold = 0.8
+    similarityThreshold = 0.8,
+    userId?: number
   ) {
     // Generate embeddings for all sentences at once
     const embeddings = await generateEmbeddings(sentences);
@@ -158,7 +172,7 @@ export class EndpointEmbeddingsService {
     // Find similar endpoints for each embedding
     const allRecommendations = await Promise.all(
       embeddings.map(embedding => 
-        this.repository.findSimilarEndpoints(embedding, limit, similarityThreshold)
+        this.repository.findSimilarEndpoints(embedding, limit, similarityThreshold, userId)
       )
     );
     
