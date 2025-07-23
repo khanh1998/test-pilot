@@ -3,7 +3,6 @@
   import { goto } from '$app/navigation';
   import * as testFlowClient from '$lib/http_client/test-flow';
   import * as apiClient from '$lib/http_client/apis';
-  import FlowGeneratorPanel from '$lib/components/test-flows/FlowGeneratorPanel.svelte';
 
   let testFlows: {
     id: number;
@@ -17,7 +16,6 @@
   let loading = true;
   let error: string | null = null;
   let showCreateModal = false;
-  let showGenerateFlowPanel = false;
 
   // Form data for creating a new test flow
   let newFlowName = '';
@@ -174,7 +172,7 @@
     <div class="flex gap-3">
       <button
         class="rounded-md bg-emerald-600 px-4 py-2 text-white transition hover:bg-emerald-700"
-        on:click={() => (showGenerateFlowPanel = true)}
+        on:click={() => goto('/dashboard/test-flows/generate')}
       >
         <div class="flex items-center">
           <svg xmlns="http://www.w3.org/2000/svg" class="mr-1.5 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -338,13 +336,5 @@
   </div>
 {/if}
 
-<!-- Generate Flow Panel using our new component -->
-<FlowGeneratorPanel 
-  bind:isOpen={showGenerateFlowPanel}
-  on:close={() => showGenerateFlowPanel = false}
-  on:flowGenerated={(event) => {
-    showGenerateFlowPanel = false;
-    fetchTestFlows();
-  }}
-/>
+
 
