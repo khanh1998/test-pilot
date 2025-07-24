@@ -16,14 +16,18 @@ interface EndpointInfo {
 
 // Interface for enriched API info item
 interface EnrichedApiInfoItem {
+  id: string;
   apiSignature: string;
-  actions: string[];
+  transforms: string[];
+  assertions: string[];
   note: string | null;
+  dependsOn: string[];
   endpoint?: EndpointInfo;
 }
 
 // Interface for enriched step
 interface EnrichedStep {
+  id: string;
   apiInfoItems: EnrichedApiInfoItem[];
   description: string;
 }

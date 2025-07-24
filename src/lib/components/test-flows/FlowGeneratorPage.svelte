@@ -37,9 +37,6 @@
   // State for endpoint selector sliding window
   let isEndpointSelectorOpen = false;
   let isSelectorMounted = false;
-  let currentStepIndex: number | null = null;
-  let currentItemIndex: number | null = null;
-  let isReplacing = false;
   let currentAddEndpointStep: number | null = null;
   let replacingEndpointInfo: { stepIndex: number; itemIndex: number } | null = null;
   // This can be removed as we've added currentStepIndex and currentItemIndex above
@@ -188,10 +185,16 @@
     const step = updatedSteps[stepIndex];
 
     if (step) {
+      // Generate a unique ID for this API info item
+      const apiInfoItemId = `${step.id}-${step.apiInfoItems.length}`;
+      
       const newApiInfoItem = {
+        id: apiInfoItemId,
         apiSignature: endpoint.path,
-        actions: [],
+        transforms: [],
+        assertions: [],
         note: null,
+        dependsOn: [],
         endpoint: {
           id: endpoint.id,
           apiId: endpoint.apiId,
@@ -306,10 +309,15 @@
     const step = updatedSteps[stepIndex];
 
     if (step && step.apiInfoItems[itemIndex]) {
+      const currentItem = step.apiInfoItems[itemIndex];
+      
       const newApiInfoItem = {
+        id: currentItem.id, // Keep the same ID
         apiSignature: endpoint.path,
-        actions: [],
-        note: null,
+        transforms: currentItem.transforms || [], // Preserve existing transforms
+        assertions: currentItem.assertions || [], // Preserve existing assertions
+        note: currentItem.note,
+        dependsOn: currentItem.dependsOn || [], // Preserve existing dependencies
         endpoint: {
           id: endpoint.id,
           apiId: endpoint.apiId,
@@ -528,7 +536,14 @@
               <!-- Step Header -->
               <div class="flex items-center justify-between rounded-t-md bg-gray-100 px-4 py-3">
                 <div>
-                  <h3 class="font-medium">Step {stepIndex + 1}</h3>
+                  <div class="flex items-center gap-2">
+                    <h3 class="font-medium">Step {stepIndex + 1}</h3>
+                    {#if step.id}
+                      <span class="text-xs font-mono bg-purple-100 text-purple-800 px-1 py-0.5 rounded">
+                        {step.id}
+                      </span>
+                    {/if}
+                  </div>
                   <p class="text-sm text-gray-600">{step.description}</p>
                 </div>
                 <span class="rounded-full bg-blue-100 px-2 py-1 text-xs text-blue-800">
@@ -541,8 +556,9 @@
               <div class="p-3">
                 <div class="flex flex-wrap gap-2">
                   {#each step.apiInfoItems as apiInfoItem, itemIndex}
-                    <div class="flex-grow-0 rounded border bg-gray-50 p-2">
+                    <div class="flex-grow-0 rounded border bg-gray-50 p-2 min-w-[280px]">
                       {#if apiInfoItem.endpoint}
+                        <!-- Header with method and similarity -->
                         <div class="flex items-center justify-between">
                           <span
                             class={`rounded px-2 py-0.5 text-xs font-medium
@@ -565,6 +581,11 @@
                           </span>
                         </div>
 
+                        <!-- API ID and Path -->
+                        <div class="mt-1 text-xs text-purple-600 font-mono">
+                          ID: {apiInfoItem.id}
+                        </div>
+
                         <div
                           class="mt-1 max-w-[250px] truncate font-mono text-xs"
                           title={apiInfoItem.endpoint.path}
@@ -577,8 +598,60 @@
                             `API ${apiInfoItem.endpoint.apiId}`}
                         </div>
 
+                        <!-- Dependencies -->
+                        {#if apiInfoItem.dependsOn && apiInfoItem.dependsOn.length > 0}
+                          <div class="mt-1">
+                            <div class="text-xs text-gray-600 font-medium">Depends on:</div>
+                            <div class="flex flex-wrap gap-1 mt-1">
+                              {#each apiInfoItem.dependsOn as dependency}
+                                <span class="bg-orange-100 text-orange-800 text-xs px-1 py-0.5 rounded">
+                                  {dependency}
+                                </span>
+                              {/each}
+                            </div>
+                          </div>
+                        {/if}
+
+                        <!-- Transforms -->
+                        {#if apiInfoItem.transforms && apiInfoItem.transforms.length > 0}
+                          <div class="mt-1">
+                            <div class="text-xs text-gray-600 font-medium">Transforms:</div>
+                            <div class="mt-1 space-y-0.5">
+                              {#each apiInfoItem.transforms as transform}
+                                <div class="bg-blue-50 text-blue-800 text-xs px-1 py-0.5 rounded">
+                                  {transform}
+                                </div>
+                              {/each}
+                            </div>
+                          </div>
+                        {/if}
+
+                        <!-- Assertions -->
+                        {#if apiInfoItem.assertions && apiInfoItem.assertions.length > 0}
+                          <div class="mt-1">
+                            <div class="text-xs text-gray-600 font-medium">Assertions:</div>
+                            <div class="mt-1 space-y-0.5">
+                              {#each apiInfoItem.assertions as assertion}
+                                <div class="bg-green-50 text-green-800 text-xs px-1 py-0.5 rounded">
+                                  {assertion}
+                                </div>
+                              {/each}
+                            </div>
+                          </div>
+                        {/if}
+
+                        <!-- Note -->
+                        {#if apiInfoItem.note}
+                          <div class="mt-1">
+                            <div class="text-xs text-gray-600 font-medium">Note:</div>
+                            <div class="text-xs text-gray-700 italic mt-0.5">
+                              {apiInfoItem.note}
+                            </div>
+                          </div>
+                        {/if}
+
                         {#if isEditingMode}
-                          <div class="mt-1 flex space-x-1">
+                          <div class="mt-2 flex space-x-1">
                             <button
                               class="flex-1 rounded px-1 py-0.5 text-xs text-blue-600 hover:bg-blue-50"
                               on:click={() => startReplaceEndpoint(stepIndex, itemIndex)}
@@ -601,6 +674,26 @@
                           <span class="text-xs text-gray-500 italic"
                             >No matching endpoint found</span
                           >
+
+                          <!-- Show other info even without endpoint -->
+                          {#if apiInfoItem.id}
+                            <div class="mt-1 text-xs text-purple-600 font-mono">
+                              ID: {apiInfoItem.id}
+                            </div>
+                          {/if}
+
+                          {#if apiInfoItem.dependsOn && apiInfoItem.dependsOn.length > 0}
+                            <div class="mt-1">
+                              <div class="text-xs text-gray-600 font-medium">Depends on:</div>
+                              <div class="flex flex-wrap gap-1 mt-1">
+                                {#each apiInfoItem.dependsOn as dependency}
+                                  <span class="bg-orange-100 text-orange-800 text-xs px-1 py-0.5 rounded">
+                                    {dependency}
+                                  </span>
+                                {/each}
+                              </div>
+                            </div>
+                          {/if}
 
                           {#if isEditingMode}
                             <button

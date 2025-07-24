@@ -9,12 +9,16 @@ const openai = new OpenAI({
 
 // Define the Zod schema for skeleton test flow
 export const ApiInfoItemSchema = z.object({
+  id: z.string().describe("a unique name to identify a step in step. eg, step1-0, step1-1, step2-0"),
   apiSignature: z.string().describe("Text used for searching APIs, like 'login', 'create user', etc."),
-  actions: z.array(z.string()).describe("Actions to perform with the response like transform or assertion"),
-  note: z.string().nullable().describe("Optional note about this API step")
+  transforms: z.array(z.string()).describe("transformations on api response"),
+  assertions: z.array(z.string()).describe("assertions on api response"),
+  note: z.string().nullable().describe("Optional note about this API step"),
+  dependsOn: z.array(z.string()).describe("Which previous step endpoint ids does it depends on?"),
 });
 
 export const StepSchema = z.object({
+  id: z.string().describe("a unique name to identify a step in flow. eg, step1, step2, step3"),
   apiInfoItems: z.array(ApiInfoItemSchema).describe("List of API info items for this step"),
   description: z.string().describe("Description of the test flow step. Describe what does this step do."),
 });
@@ -69,15 +73,19 @@ For now, focus only on creating the high-level skeleton that outlines:
    - Optional notes if clarification is needed
 
 2. Each step should contain:
+   - A unique step ID (e.g., 'step1', 'step2', 'step3')
    - A clear description of what this step does in the test flow
-   - A list of API info items with:
-     - API signatures: Keywords that would be used to search for relevant APIs (e.g., 'login', 'create user', 'get products', etc.)
-     - Actions: What to do with the response (e.g., 'extract token', 'validate status code', 'check response contains user data')
-     - Optional notes
+   - A list of API info items, each with:
+     - A unique ID within the step (e.g., 'step1-0', 'step1-1', 'step2-0')
+     - API signature: Keywords that would be used to search for relevant APIs (e.g., 'login', 'create user', 'get products', etc.)
+     - Transforms: List of transformations to apply on the API response (e.g., ['extract user.id as userId', 'save token'])
+     - Assertions: List of assertions to validate the API response (e.g., ['status equals 200', 'response contains user.email'])
+     - Dependencies: Which previous step endpoint IDs this API call depends on (e.g., ['step1-0'] for token dependency)
+     - Optional notes for clarification
 
 3. Flow parameters should include:
    - Name: A unique identifier for the parameter (e.g., 'username', 'password', 'itemCount', 'maxPrice')
-   - Type: The data type ('string', 'number', 'boolean', etc.)
+   - Type: The data type ('string', 'number', 'boolean', 'null', 'array', 'object')
    - Required: Whether the parameter is mandatory for the flow to work
    
    Flow parameters are external inputs provided by users when running the test flow. They are like function parameters - values that users pass into the flow from outside, not values that are generated within the flow or extracted from responses.
@@ -86,9 +94,11 @@ For now, focus only on creating the high-level skeleton that outlines:
 - Analyze the logical sequence and dependencies between API calls
 - Include all necessary steps for a complete test scenario
 - Use clear and searchable API signatures that will help match with actual endpoints
-- Identify key data dependencies between steps (what data from step 1 is needed in step 2, etc.)
+- Identify key data dependencies between steps using the dependsOn field to reference previous step IDs
 - Consider authentication, data creation, verification, and cleanup steps
-- Be specific about the actions needed for each API response
+- Be specific about transforms needed to extract data from responses
+- Include meaningful assertions to validate expected outcomes
+- Use consistent ID naming convention (step1, step2, etc. for steps; step1-0, step1-1, etc. for API info items)
 `
       },
       {
