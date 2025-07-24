@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, onMount, afterUpdate } from 'svelte';
   import { goto } from '$app/navigation';
   import * as apiClient from '$lib/http_client/apis';
   import * as testFlowClient from '$lib/http_client/test-flow';
   import * as assistantClient from '$lib/http_client/assistant';
   import EndpointSelector from './EndpointSelector.svelte';
   import type { EnrichedSkeletonTestFlow } from '$lib/http_client/assistant';
+  import FlowEditor from './FlowEditor.svelte';
 
   const dispatch = createEventDispatcher();
 
@@ -356,16 +357,10 @@
     <h2 class="mb-4 text-lg font-semibold text-gray-800">Describe Your Test Flow</h2>
 
     <div>
-      <label for="flow-description" class="mb-2 block text-sm font-medium text-gray-700"
-        >Test Flow Description</label
-      >
-      <textarea
-        id="flow-description"
-        class="focus:ring-opacity-50 w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-500"
-        rows="6"
-        placeholder="Describe your test scenario in detail. For example: 'Create a new user with email and password, then authenticate with the created credentials, then fetch the user profile, update the user's name, and finally verify the updated profile information.'"
-        bind:value={description}
-      ></textarea>
+      <label for="flow-description" class="mb-2 block text-sm font-medium text-gray-700">
+        Test Flow Description
+      </label>
+      <FlowEditor bind:description={description}/>
 
       <div class="mt-4 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <p class="text-sm text-gray-500">
@@ -707,6 +702,7 @@
     </section>
   {/if}
 </div>
+
 
 <!-- Endpoint Selector Sliding Window -->
 {#if isEndpointSelectorOpen || isSelectorMounted}
