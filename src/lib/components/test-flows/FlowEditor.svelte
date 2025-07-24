@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createEventDispatcher, onMount, afterUpdate } from 'svelte';
+  import { createEventDispatcher, onMount, afterUpdate, onDestroy } from 'svelte';
 
   // Props
   export let description = '';
@@ -16,11 +16,81 @@
     { bg: 'bg-indigo-500', bgLight: 'bg-indigo-100', text: 'text-indigo-800', textLight: 'text-indigo-600', border: '#6366f1' },
     { bg: 'bg-teal-500', bgLight: 'bg-teal-100', text: 'text-teal-800', textLight: 'text-teal-600', border: '#14b8a6' },
     { bg: 'bg-red-500', bgLight: 'bg-red-100', text: 'text-red-800', textLight: 'text-red-600', border: '#ef4444' }
-  ];
+  ] as const;
 
-  function getStepColor(stepIndex: number) {
+  type StepColor = typeof stepColors[number];
+
+  interface AnnotationData {
+    line: string;
+    isEmptyLine: boolean;
+    stepIndex: number;
+    endpointIndex: number;
+    isFirstLineOfStep: boolean;
+    stepColor: StepColor;
+  }
+
+  // Cleanup functions for event listeners
+  let cleanupFunctions: (() => void)[] = [];
+
+  function getStepColor(stepIndex: number): StepColor {
     return stepColors[(stepIndex - 1) % stepColors.length];
   }
+
+  // Helper functions for annotation calculations
+  function calculateStepIndex(lines: string[], currentIndex: number): number {
+    let stepCount = 1;
+    for (let j = 0; j < currentIndex; j++) {
+      // Only increment step count if current line is empty AND previous line was not empty
+      // This ensures consecutive empty lines don't create multiple steps
+      if (!lines[j].trim() && (j === 0 || lines[j - 1].trim())) {
+        stepCount++;
+      }
+    }
+    return stepCount;
+  }
+
+  function calculateEndpointIndex(lines: string[], currentIndex: number): number {
+    const isEmptyLine = !lines[currentIndex].trim();
+    if (isEmptyLine) return 0; // Don't count empty lines as endpoints
+
+    // Find the start of the current step
+    let stepStartIndex = currentIndex;
+    for (let j = currentIndex - 1; j >= 0; j--) {
+      if (!lines[j].trim()) {
+        stepStartIndex = j + 1;
+        break;
+      }
+      if (j === 0) stepStartIndex = 0;
+    }
+
+    // Count only non-empty lines from step start to current line
+    let endpointCount = 0;
+    for (let j = stepStartIndex; j <= currentIndex; j++) {
+      if (lines[j].trim()) endpointCount++;
+    }
+
+    return endpointCount;
+  }
+
+  function calculateIsFirstLineOfStep(lines: string[], currentIndex: number): boolean {
+    const isEmptyLine = !lines[currentIndex].trim();
+    if (isEmptyLine) return false; // Don't show step badge on empty lines
+    if (currentIndex === 0) return true;
+    
+    // Check if previous line was empty (indicates start of new step)
+    return currentIndex > 0 && !lines[currentIndex - 1].trim();
+  }
+
+  // Pre-computed annotation data to avoid recalculation
+  $: lines = description.split('\n');
+  $: annotationData = lines.map((line, i) => ({
+    line,
+    isEmptyLine: !line.trim(),
+    stepIndex: calculateStepIndex(lines, i),
+    endpointIndex: calculateEndpointIndex(lines, i),
+    isFirstLineOfStep: calculateIsFirstLineOfStep(lines, i),
+    stepColor: getStepColor(calculateStepIndex(lines, i))
+  })) satisfies AnnotationData[];
 
   // Functions to handle line annotations
   function updateAnnotations() {
@@ -56,17 +126,23 @@
   function setupHoverEffects() {
     if (typeof window === 'undefined') return;
     
+    // Clear previous event listeners
+    cleanupFunctions.forEach(cleanup => cleanup());
+    cleanupFunctions = [];
+    
     const container = document.getElementById('flow-description-container');
     if (!container) return;
     
     const endpointAnnotations = container.querySelectorAll('.endpoint-annotation-line');
     const textarea = document.getElementById('flow-description') as HTMLTextAreaElement;
+    if (!textarea) return;
     
     endpointAnnotations.forEach((annotation) => {
-      annotation.addEventListener('mouseenter', () => {
-        const htmlAnnotation = annotation as HTMLElement;
-        const lineIndex = parseInt(htmlAnnotation.getAttribute('data-line-index') || '0');
-        const stepIndex = parseInt(htmlAnnotation.getAttribute('data-step') || '1');
+      const mouseEnterHandler = () => {
+        if (!(annotation instanceof HTMLElement)) return;
+        
+        const lineIndex = parseInt(annotation.getAttribute('data-line-index') || '0');
+        const stepIndex = parseInt(annotation.getAttribute('data-step') || '1');
         const stepColor = getStepColor(stepIndex);
         
         // Update textarea selection colors to match step color (lighter version)
@@ -85,23 +161,23 @@
           }
           
           // Apply hover styles with step color
-          htmlAnnotation.style.backgroundColor = stepColor.border + '20';
-          htmlAnnotation.style.borderLeftColor = stepColor.border;
+          annotation.style.backgroundColor = stepColor.border + '20';
+          annotation.style.borderLeftColor = stepColor.border;
           
           // Enhance endpoint badge
-          const endpointBadgeEl = annotation.querySelector('.endpoint-badge') as HTMLElement;
-          if (endpointBadgeEl) {
+          const endpointBadgeEl = annotation.querySelector('.endpoint-badge');
+          if (endpointBadgeEl instanceof HTMLElement) {
             endpointBadgeEl.style.color = stepColor.border;
             endpointBadgeEl.style.fontWeight = 'bold';
             endpointBadgeEl.style.transform = 'scale(1.1)';
           }
         }
-      });
+      };
       
-      annotation.addEventListener('mouseleave', () => {
-        const htmlAnnotation = annotation as HTMLElement;
-        const lineIndex = parseInt(htmlAnnotation.getAttribute('data-line-index') || '0');
-        const stepIndex = parseInt(htmlAnnotation.getAttribute('data-step') || '1');
+      const mouseLeaveHandler = () => {
+        if (!(annotation instanceof HTMLElement)) return;
+        
+        const stepIndex = parseInt(annotation.getAttribute('data-step') || '1');
         const stepColor = getStepColor(stepIndex);
         
         // Reset textarea selection colors to default
@@ -115,16 +191,25 @@
         textarea.blur();
         
         // Remove hover styles
-        htmlAnnotation.style.backgroundColor = '';
-        htmlAnnotation.style.borderLeftColor = stepColor.border + '40';
+        annotation.style.backgroundColor = '';
+        annotation.style.borderLeftColor = stepColor.border + '40';
         
         // Reset endpoint badge
-        const endpointBadgeEl = annotation.querySelector('.endpoint-badge') as HTMLElement;
-        if (endpointBadgeEl) {
+        const endpointBadgeEl = annotation.querySelector('.endpoint-badge');
+        if (endpointBadgeEl instanceof HTMLElement) {
           endpointBadgeEl.style.color = '';
           endpointBadgeEl.style.fontWeight = '';
           endpointBadgeEl.style.transform = '';
         }
+      };
+      
+      annotation.addEventListener('mouseenter', mouseEnterHandler);
+      annotation.addEventListener('mouseleave', mouseLeaveHandler);
+      
+      // Store cleanup functions
+      cleanupFunctions.push(() => {
+        annotation.removeEventListener('mouseenter', mouseEnterHandler);
+        annotation.removeEventListener('mouseleave', mouseLeaveHandler);
       });
     });
   }
@@ -150,24 +235,41 @@
     const sidebar = document.querySelector('.annotations-sidebar') as HTMLElement;
     
     if (textarea && sidebar) {
-      textarea.addEventListener('scroll', () => {
+      const scrollHandler = () => {
         if (sidebar) {
           sidebar.scrollTop = textarea.scrollTop;
         }
-      });
+      };
       
-      // Also handle input events to update annotations when text changes
-      textarea.addEventListener('input', () => {
+      const inputHandler = () => {
         setTimeout(() => {
           updateAnnotations();
           setupHoverEffects();
         }, 0);
-      });
+      };
       
-      // Handle resize events on the textarea
-      textarea.addEventListener('mouseup', updateAnnotations);
-      window.addEventListener('resize', updateAnnotations);
+      const resizeHandler = () => {
+        updateAnnotations();
+      };
+      
+      textarea.addEventListener('scroll', scrollHandler);
+      textarea.addEventListener('input', inputHandler);
+      textarea.addEventListener('mouseup', resizeHandler);
+      window.addEventListener('resize', resizeHandler);
+      
+      // Store cleanup functions for these listeners too
+      cleanupFunctions.push(
+        () => textarea.removeEventListener('scroll', scrollHandler),
+        () => textarea.removeEventListener('input', inputHandler),
+        () => textarea.removeEventListener('mouseup', resizeHandler),
+        () => window.removeEventListener('resize', resizeHandler)
+      );
     }
+  });
+
+  onDestroy(() => {
+    // Clean up all event listeners
+    cleanupFunctions.forEach(cleanup => cleanup());
   });
 </script>
 
@@ -190,38 +292,11 @@
             </div>
           </div>
         {:else}
-          {#each description.split('\n') as line, i}
-            {@const lines = description.split('\n')}
-            {@const isEmptyLine = !line.trim()}
-            
-            <!-- Calculate step index -->
-            {@const currentStepIndex = (() => {
-              let stepCount = 1;
-              for (let j = 0; j < i; j++) {
-                // Only increment step count if current line is empty AND previous line was not empty
-                // This ensures consecutive empty lines don't create multiple steps
-                if (!lines[j].trim() && (j === 0 || lines[j - 1].trim())) {
-                  stepCount++;
-                }
-              }
-              return stepCount;
-            })()}
-
-            <!-- Check if this is the first line of a step -->
-            {@const isFirstLineOfStep = (() => {
-              if (isEmptyLine) return false; // Don't show step badge on empty lines
-              if (i === 0) return true;
-              
-              // Check if previous line was empty (indicates start of new step)
-              return i > 0 && !lines[i - 1].trim();
-            })()}
-
-            {@const stepColor = getStepColor(currentStepIndex)}
-
+          {#each annotationData as data, i}
             <div class="step-annotation-line text-xs">
-              {#if isFirstLineOfStep}
-                <div class="step-badge rounded-full px-2 py-0.5 text-xs font-medium {stepColor.bgLight} {stepColor.text}">
-                  Step {currentStepIndex}
+              {#if data.isFirstLineOfStep}
+                <div class="step-badge rounded-full px-2 py-0.5 text-xs font-medium {data.stepColor.bgLight} {data.stepColor.text}">
+                  Step {data.stepIndex}
                 </div>
               {/if}
             </div>
@@ -246,59 +321,18 @@
             </div>
           </div>
         {:else}
-          {#each description.split('\n') as line, i}
-            {@const lines = description.split('\n')}
-            {@const isEmptyLine = !line.trim()}
-
-            <!-- Calculate step index -->
-            {@const currentStepIndex = (() => {
-              let stepCount = 1;
-              for (let j = 0; j < i; j++) {
-                // Only increment step count if current line is empty AND previous line was not empty
-                // This ensures consecutive empty lines don't create multiple steps
-                if (!lines[j].trim() && (j === 0 || lines[j - 1].trim())) {
-                  stepCount++;
-                }
-              }
-              return stepCount;
-            })()}
-
-            <!-- Calculate endpoint index within current step -->
-            {@const currentEndpointIndex = (() => {
-              if (isEmptyLine) return 0; // Don't count empty lines as endpoints
-
-              // Find the start of the current step
-              let stepStartIndex = i;
-              for (let j = i - 1; j >= 0; j--) {
-                if (!lines[j].trim()) {
-                  stepStartIndex = j + 1;
-                  break;
-                }
-                if (j === 0) stepStartIndex = 0;
-              }
-
-              // Count only non-empty lines from step start to current line
-              let endpointCount = 0;
-              for (let j = stepStartIndex; j <= i; j++) {
-                if (lines[j].trim()) endpointCount++;
-              }
-
-              return endpointCount;
-            })()}
-
-            {@const stepColor = getStepColor(currentStepIndex)}
-
+          {#each annotationData as data, i}
             <div
               class="endpoint-annotation-line text-xs cursor-pointer transition-all duration-200"
-              class:hover-highlight={!isEmptyLine}
-              data-step={currentStepIndex}
-              data-endpoint={currentEndpointIndex}
+              class:hover-highlight={!data.isEmptyLine}
+              data-step={data.stepIndex}
+              data-endpoint={data.endpointIndex}
               data-line-index={i}
-              style="border-left: 3px solid {isEmptyLine ? 'transparent' : stepColor.border + '40'};"
+              style="border-left: 3px solid {data.isEmptyLine ? 'transparent' : data.stepColor.border + '40'};"
             >
-              {#if !isEmptyLine}
-                <div class="endpoint-badge font-medium {stepColor.textLight}">
-                  {currentEndpointIndex}
+              {#if !data.isEmptyLine}
+                <div class="endpoint-badge font-medium {data.stepColor.textLight}">
+                  {data.endpointIndex}
                 </div>
               {/if}
             </div>
@@ -312,6 +346,8 @@
       id="flow-description"
       class="flex-1 border-0 p-3 focus:ring-0 focus:outline-none"
       rows="10"
+      aria-label="Test flow description"
+      aria-describedby="flow-helper-text"
       placeholder="Describe your test scenario, with one API endpoint per line.
 
 For example:
@@ -349,9 +385,9 @@ Verify the updated profile information
   </div>
 
   <!-- Helper text -->
-  <div class="border-t border-gray-200 bg-gray-50 p-2 text-xs text-gray-500">
+  <div id="flow-helper-text" class="border-t border-gray-200 bg-gray-50 p-2 text-xs text-gray-500">
     <strong>Tip:</strong> Write one endpoint per line. Use empty lines to create new steps. Each step
-    can contain multiple endpoints.
+    can contain multiple endpoints. Press <kbd>Ctrl+Enter</kbd> to quickly create a new step.
   </div>
 </div>
 
@@ -441,5 +477,15 @@ Verify the updated profile information
     display: flex;
     flex-direction: column;
     overflow: hidden;
+  }
+  
+  /* Style keyboard shortcuts */
+  kbd {
+    background-color: #f3f4f6;
+    border: 1px solid #d1d5db;
+    border-radius: 3px;
+    padding: 1px 4px;
+    font-size: 0.75rem;
+    font-family: monospace;
   }
 </style>
