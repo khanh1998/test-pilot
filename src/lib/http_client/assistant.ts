@@ -59,3 +59,26 @@ export async function generateSkeletonTestFlow(description: string): Promise<Enr
     return null;
   }
 }
+
+export async function generateTestFlowFromSkeleton(skeleton: EnrichedSkeletonTestFlow): Promise<any | null> {
+  try {
+    const response = await fetchWithAuth('/api/assistant/skeleton-to-flow', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ skeleton })
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      return data.testFlow;
+    } else {
+      console.error('Failed to generate test flow from skeleton:', response.statusText);
+      return null;
+    }
+  } catch (error) {
+    console.error('Error generating test flow from skeleton:', error);
+    return null;
+  }
+}

@@ -1,0 +1,211 @@
+{
+  "type": "object",
+  "required": [
+    "currency_id",
+    "invoices",
+    "organization_id"
+  ],
+  "properties": {
+    "submit": {
+      "type": "boolean"
+    },
+    "invoices": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "amount",
+          "attachment",
+          "bill_from",
+          "bill_to",
+          "invoice_date",
+          "invoice_number",
+          "request_amount",
+          "type_id"
+        ],
+        "properties": {
+          "amount": {
+            "type": "number"
+          },
+          "remark": {
+            "type": "string"
+          },
+          "bill_to": {
+            "type": "string"
+          },
+          "type_id": {
+            "enum": [
+              1,
+              1
+            ],
+            "type": "integer",
+            "x-enum-varnames": [
+              "AdminUserID",
+              "AdminRoleID"
+            ]
+          },
+          "class_id": {
+            "enum": [
+              1,
+              1
+            ],
+            "type": "integer",
+            "x-enum-varnames": [
+              "AdminUserID",
+              "AdminRoleID"
+            ]
+          },
+          "due_date": {
+            "type": "string"
+          },
+          "bill_from": {
+            "type": "string"
+          },
+          "attachment": {
+            "type": "string"
+          },
+          "settlor_id": {
+            "enum": [
+              1,
+              1
+            ],
+            "type": "integer",
+            "x-enum-varnames": [
+              "AdminUserID",
+              "AdminRoleID"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "location_id": {
+            "enum": [
+              1,
+              1
+            ],
+            "type": "integer",
+            "x-enum-varnames": [
+              "AdminUserID",
+              "AdminRoleID"
+            ]
+          },
+          "invoice_date": {
+            "type": "string"
+          },
+          "department_id": {
+            "enum": [
+              1,
+              1
+            ],
+            "type": "integer",
+            "x-enum-varnames": [
+              "AdminUserID",
+              "AdminRoleID"
+            ]
+          },
+          "invoice_number": {
+            "type": "string"
+          },
+          "request_amount": {
+            "type": "number"
+          },
+          "shareholder_id": {
+            "enum": [
+              1,
+              1
+            ],
+            "type": "integer",
+            "x-enum-varnames": [
+              "AdminUserID",
+              "AdminRoleID"
+            ]
+          },
+          "attachment_hash": {
+            "type": "string"
+          }
+        }
+      },
+      "minItems": 1
+    },
+    "priority": {
+      "type": "integer",
+      "maximum": 10,
+      "minimum": 0
+    },
+    "recurring": {
+      "allOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "enum": [
+                "monthly"
+              ],
+              "allOf": [
+                {
+                  "enum": [
+                    "daily",
+                    "weekly",
+                    "monthly",
+                    "yearly"
+                  ],
+                  "type": "string",
+                  "x-enum-varnames": [
+                    "RecurringIntervalTypeDaily",
+                    "RecurringIntervalTypeWeekly",
+                    "RecurringIntervalTypeMonthly",
+                    "RecurringIntervalTypeYearly"
+                  ]
+                }
+              ]
+            },
+            "value": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      ],
+      "description": "Recurring payment configuration fields"
+    },
+    "currency_id": {
+      "enum": [
+        1,
+        1
+      ],
+      "type": "integer",
+      "x-enum-varnames": [
+        "AdminUserID",
+        "AdminRoleID"
+      ]
+    },
+    "description": {
+      "type": "string"
+    },
+    "organization_id": {
+      "enum": [
+        1,
+        1
+      ],
+      "type": "integer",
+      "x-enum-varnames": [
+        "AdminUserID",
+        "AdminRoleID"
+      ]
+    },
+    "approver_user_ids": {
+      "type": "array",
+      "items": {
+        "enum": [
+          1,
+          1
+        ],
+        "type": "integer",
+        "x-enum-varnames": [
+          "AdminUserID",
+          "AdminRoleID"
+        ]
+      }
+    }
+  }
+}

@@ -24,9 +24,9 @@ export const StepSchema = z.object({
 });
 
 export const FlowParameter = z.object({
-    name: z.string().describe("unique name for the parameter"),
-    required: z.boolean().describe("whether the parameter is required by the flow"),
-    type: z.enum(["number", "string", "boolean", "null", "array", "object"]).describe("data type of parameter"),
+  name: z.string().describe("unique name for the parameter"),
+  required: z.boolean().describe("whether the parameter is required by the flow"),
+  type: z.enum(["number", "string", "boolean", "null", "array", "object"]).describe("data type of parameter"),
 })
 
 export const SkeletonTestFlowSchema = z.object({
@@ -107,8 +107,8 @@ For now, focus only on creating the high-level skeleton that outlines:
       }
     ],
     text: {
-        format: zodTextFormat(SkeletonTestFlowSchema, "skeleton_test_flow"),
-      }
+      format: zodTextFormat(SkeletonTestFlowSchema, "skeleton_test_flow"),
+    }
   });
 
   const skeletonTestFlow = response.output_parsed as SkeletonTestFlow;

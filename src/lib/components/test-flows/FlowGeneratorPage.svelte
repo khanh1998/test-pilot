@@ -125,19 +125,18 @@
       return;
     }
 
-    // Collect all endpoint IDs from the skeleton test flow
-    const endpointIds: number[] = [];
-
+    // Validate that all endpoints are properly assigned
+    let hasValidEndpoints = false;
     skeletonTestFlow.steps.forEach((step) => {
       step.apiInfoItems.forEach((item) => {
         if (item.endpoint?.id) {
-          endpointIds.push(item.endpoint.id);
+          hasValidEndpoints = true;
         }
       });
     });
 
-    if (endpointIds.length === 0) {
-      error = 'No valid endpoints found in the skeleton flow';
+    if (!hasValidEndpoints) {
+      error = 'Please assign endpoints to all steps in the skeleton flow before generating';
       return;
     }
 
@@ -146,10 +145,8 @@
       error = null;
       success = false;
 
-      const result = await testFlowClient.generateTestFlow({
-        endpointIds: endpointIds,
-        description: description
-      });
+      // Use the new skeleton-to-flow API
+      const result = await assistantClient.generateTestFlowFromSkeleton(skeletonTestFlow);
 
       if (result) {
         success = true;
@@ -496,7 +493,7 @@
                 <div
                   class="mr-1 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
                 ></div>
-                <span>Generating...</span>
+                <span>Generating Complete Flow...</span>
               {:else}
                 <svg
                   xmlns="http://www.w3.org/2000/svg"

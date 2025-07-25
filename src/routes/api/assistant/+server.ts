@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { generateSkeletonTestFlowService } from '$lib/server/service/assistant/main';
+import { generateSkeletonTestFlowService } from '$lib/server/service/assistant/skeleton';
 
 export const POST: RequestHandler = async ({ request, locals }) => {
   try {
