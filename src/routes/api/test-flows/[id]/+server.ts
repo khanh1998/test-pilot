@@ -1,9 +1,9 @@
 import { json } from '@sveltejs/kit';
 import { db } from '$lib/server/db/drizzle';
-import { testFlows, testFlowApis, apis, apiEndpoints } from '$lib/server/db/schema';
+import { testFlows, testFlowApis, apis } from '$lib/server/db/schema';
 import { eq, and, inArray } from 'drizzle-orm';
 import type { RequestEvent } from '@sveltejs/kit';
-import type { Endpoint, Parameter } from '$lib/components/test-flows';
+import { getTestFlow } from '$lib/server/service/test_flows/test_flow';
 
 // Get a specific test flow by ID
 export async function GET({ params, locals }: RequestEvent) {
@@ -25,13 +25,10 @@ export async function GET({ params, locals }: RequestEvent) {
       });
     }
 
-    // Get the test flow
-    const [testFlow] = await db
-      .select()
-      .from(testFlows)
-      .where(and(eq(testFlows.id, id), eq(testFlows.userId, locals.user.userId)));
+    // Get the test flow using the service
+    const result = await getTestFlow(id, locals.user.userId);
 
-    if (!testFlow) {
+    if (!result) {
       return new Response(
         JSON.stringify({ error: 'Test flow not found or does not belong to the user' }),
         {
@@ -41,61 +38,7 @@ export async function GET({ params, locals }: RequestEvent) {
       );
     }
 
-    // Get associated APIs
-    const associatedApis = await db
-      .select({
-        id: apis.id,
-        name: apis.name
-      })
-      .from(testFlowApis)
-      .innerJoin(apis, eq(testFlowApis.apiId, apis.id))
-      .where(eq(testFlowApis.testFlowId, id));
-
-    // Get all endpoints for these APIs
-    const apiIds = associatedApis.map((api) => api.id);
-
-    let endpoints: Endpoint[] = [];
-    if (apiIds.length > 0) {
-      const dbEndpoints = await db
-        .select({
-          id: apiEndpoints.id,
-          apiId: apiEndpoints.apiId,
-          path: apiEndpoints.path,
-          method: apiEndpoints.method,
-          operationId: apiEndpoints.operationId,
-          summary: apiEndpoints.summary,
-          description: apiEndpoints.description,
-          parameters: apiEndpoints.parameters,
-          requestSchema: apiEndpoints.requestSchema,
-          responseSchema: apiEndpoints.responseSchema,
-          tags: apiEndpoints.tags
-        })
-        .from(apiEndpoints)
-        .where(inArray(apiEndpoints.apiId, apiIds));
-
-      // Map the database results to match the expected Endpoint type
-      endpoints = dbEndpoints.map((endpoint) => ({
-        id: endpoint.id,
-        apiId: endpoint.apiId,
-        path: endpoint.path,
-        method: endpoint.method,
-        operationId: endpoint.operationId || undefined, // Convert null to undefined
-        summary: endpoint.summary || undefined,
-        description: endpoint.description || undefined,
-        parameters: endpoint.parameters as Parameter[] | undefined, // Type assertion for parameters
-        requestSchema: endpoint.requestSchema,
-        responseSchema: endpoint.responseSchema,
-        tags: endpoint.tags || undefined
-      }));
-    }
-
-    return json({
-      testFlow: {
-        ...testFlow,
-        apis: associatedApis,
-        endpoints
-      }
-    });
+    return json(result);
   } catch (error) {
     console.error('Error fetching test flow:', error);
     return new Response(JSON.stringify({ error: 'Failed to fetch test flow' }), {
