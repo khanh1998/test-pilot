@@ -81,9 +81,8 @@ export async function updateSwaggerFile(id: string, file: File): Promise<UpdateS
 
 export async function deleteApi(id: number): Promise<DeleteApiResponse | null> {
 	try {
-		const response = await fetchWithAuth('/api/apis', {
+		const response = await fetchWithAuth(`/api/apis/${id}`, {
 			method: 'DELETE',
-			body: JSON.stringify({ id })
 		});
 		
 		if (response.ok) {

@@ -83,22 +83,20 @@
         "description": "Query parameters for the request"
       },
       "body": {
-        "anyOf": [
-          {
-            "type": "object",
-            "additionalProperties": {
-              "type": [
-                "string",
-                "number",
-                "boolean",
-                "null"
-              ]
-            }
+        "type": "object",
+        "properties": {
+          "password": {
+            "type": "string"
           },
-          {
-            "type": "null"
+          "username": {
+            "type": "string"
           }
-        ]
+        },
+        "required": [
+          "password",
+          "username"
+        ],
+        "additionalProperties": false
       },
       "assertions": {
         "anyOf": [

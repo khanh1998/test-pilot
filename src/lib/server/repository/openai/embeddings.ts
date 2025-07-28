@@ -86,7 +86,7 @@ export function createEndpointText(
   if (resource) text += `\nResource: ${resource}`;
   
   // Add alternative phrasings for better matching
-  text += generateAlternativePhrasings(resource, endpoint.method, endpoint.path);
+  // text += generateAlternativePhrasings(resource, endpoint.method, endpoint.path);
   
   return text;
 }

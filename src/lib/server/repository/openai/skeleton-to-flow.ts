@@ -454,14 +454,14 @@ ${dependentEndpoints.length > 0 ? JSON.stringify(dependentEndpoints, null, 2) : 
 - Note: ${apiInfoItem.note || 'None'}`;
 
   // store the `userPrompt` to md file, no need to do any convert, just store the raw string to file, i want to see how do it look
-  const promptOutputPath = join(process.cwd(), 'enrich-endpoint-prompt.md');
-  await writeFile(promptOutputPath, userPrompt, 'utf8');
+  // const promptOutputPath = join(process.cwd(), 'enrich-endpoint-prompt.md');
+  // await writeFile(promptOutputPath, userPrompt, 'utf8');
 
   const expectedSchema = zodTextFormat(enrichedEndpointSchema, "enriched_endpoint");
   
-  // Write the expected schema to file for debugging
-  const schemaOutputPath = join(process.cwd(), 'expected-schema.json');
-  await writeFile(schemaOutputPath, JSON.stringify(expectedSchema, null, 2), 'utf8');
+  // // Write the expected schema to file for debugging
+  // const schemaOutputPath = join(process.cwd(), 'expected-schema.json');
+  // await writeFile(schemaOutputPath, JSON.stringify(expectedSchema, null, 2), 'utf8');
 
   try {
     const response = await openai.responses.parse({

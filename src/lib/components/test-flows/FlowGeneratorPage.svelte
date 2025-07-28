@@ -41,9 +41,6 @@
   let replacingEndpointInfo: { stepIndex: number; itemIndex: number } | null = null;
   // This can be removed as we've added currentStepIndex and currentItemIndex above
 
-  function navigateBack() {
-    dispatch('back');
-  }
 
   async function loadEndpoints() {
     try {

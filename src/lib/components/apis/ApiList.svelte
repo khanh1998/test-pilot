@@ -43,7 +43,7 @@
         deleteApiId = apiId;
         deleteError = null;
 
-        await deleteApiStore(apiId.toString()); // Use the deleteApi from the store
+        await deleteApiStore(apiId); // Use the deleteApi from the store
 
         // Reload the API list
         await loadApis();
