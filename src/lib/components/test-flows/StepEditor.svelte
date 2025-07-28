@@ -454,9 +454,17 @@
     </div>
 
     {#if step.endpoints.length === 0}
-      <p class="text-sm text-gray-400 italic">No endpoints in this step yet</p>
-    {:else}
+      <!-- When no endpoints, show selector and message side by side -->
       <div class="flex flex-row gap-3 overflow-x-auto pb-2">
+        <slot name="endpoint-selector"></slot>
+        <div class="flex items-center text-sm text-gray-400 italic">
+          No endpoints in this step yet
+        </div>
+      </div>
+    {:else}
+      <!-- Show selector on the left, then all endpoint cards -->
+      <div class="flex flex-row gap-3 overflow-x-auto pb-2">
+        <slot name="endpoint-selector"></slot>
         {#each step.endpoints as stepEndpoint, endpointIndex (stepEndpoint.endpoint_id + '-' + endpointIndex)}
           {@const endpoint = findEndpoint(stepEndpoint.endpoint_id)}
           {@const duplicateCount = step.endpoints.filter(
@@ -488,10 +496,7 @@
     {/if}
   </div>
 
-  <!-- Add endpoint button -->
-  <div>
-    <slot name="endpoint-selector"></slot>
-  </div>
+  <!-- Remove the separate endpoint selector section -->
 </div>
 
 <!-- Parameter Editor Slide-out Panel -->
