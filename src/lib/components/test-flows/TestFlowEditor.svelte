@@ -1,6 +1,6 @@
 <script lang="ts">
   import StepEditor from './StepEditor.svelte';
-  import EndpointSelector from './EndpointSelector.svelte';
+  import SmartEndpointSelector from './SmartEndpointSelector.svelte';
   import FlowRunner from './FlowRunner.svelte';
   import { fade } from 'svelte/transition';
   import type { TestFlowData, Endpoint, ExecutionState, EndpointExecutionState } from './types';
@@ -476,7 +476,7 @@
   <!-- Existing Steps -->
   {#if flowData && flowData.steps && flowData.steps.length > 0}
     {#each flowData.steps as step, stepIndex (step.step_id)}
-      <div class="mb-4">
+            <div class="mb-4">
         <StepEditor
           {step}
           {endpoints}
@@ -493,8 +493,7 @@
           on:runStep={executeStep}
         >
           <div slot="endpoint-selector">
-            <EndpointSelector
-              {endpoints}
+            <SmartEndpointSelector
               apiHosts={flowData?.settings?.api_hosts || {}}
               on:select={(e) => handleEndpointSelected(e, stepIndex)}
               disabled={isRunning}

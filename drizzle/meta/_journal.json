@@ -71,6 +71,20 @@
       "when": 1753246143657,
       "tag": "0009_add-user-api-to-embeddings",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1753687401666,
+      "tag": "0010_conscious_marten_broadcloak",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1753687425955,
+      "tag": "0011_full-text-search-tsvector",
+      "breakpoints": true
     }
   ]
 }

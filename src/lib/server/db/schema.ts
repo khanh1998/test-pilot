@@ -1,5 +1,12 @@
-import { pgTable, text, serial, varchar, integer, timestamp, jsonb, index, uniqueIndex } from 'drizzle-orm/pg-core';
+import { pgTable, text, serial, varchar, integer, timestamp, jsonb, index, uniqueIndex, customType } from 'drizzle-orm/pg-core';
 import { vector } from 'drizzle-orm/pg-core';
+
+// Define a custom tsvector type
+const tsvector = customType<{ data: string }>({
+  dataType() {
+    return 'tsvector';
+  },
+});
 
 // Example users table
 export const users = pgTable('users', {
@@ -74,6 +81,7 @@ export const endpointEmbeddings = pgTable(
     userId: integer('user_id'), // Added for direct user filtering
     apiId: integer('api_id'),   // Added for optional API filtering
     embedding: vector('embedding', { dimensions: 1536 }), // Dimension based on embedding model (e.g., OpenAI's ada-002)
+    searchVector: tsvector('search_vector'),
     processedText: text('processed_text'),
     version: integer('version').default(1),
     createdAt: timestamp('created_at').defaultNow().notNull(),
@@ -82,6 +90,7 @@ export const endpointEmbeddings = pgTable(
   (table) => [
     index('embedding_idx').using('ivfflat', table.embedding.op('vector_cosine_ops')),
     uniqueIndex('endpoint_id_unique_idx').on(table.endpointId),
-    index('user_api_idx').on(table.userId, table.apiId) // Compound index for filtering by user and optionally API
+    index('user_api_idx').on(table.userId, table.apiId), // Compound index for filtering by user and optionally API
+    index('fts_idx').using('gin', table.searchVector)
   ]
 );

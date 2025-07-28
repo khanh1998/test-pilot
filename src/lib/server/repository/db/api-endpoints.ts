@@ -1,6 +1,6 @@
 import { db } from '$lib/server/db';
-import { apiEndpoints, apis } from '$lib/server/db/schema';
-import { eq, and, inArray } from 'drizzle-orm';
+import { apiEndpoints, apis, endpointEmbeddings } from '$lib/server/db/schema';
+import { eq, and, inArray, sql } from 'drizzle-orm';
 
 export async function getApiEndpointById(endpointId: number, userId?: number) {
   const query = db
@@ -55,4 +55,49 @@ export async function getApiEndpointsByIds(endpointIds: number[], userId?: numbe
     );
 
   return await query;
+}
+
+// search endpoints by using `search_vector` in `endpoint_embeddings`
+interface SearchByTsVectorParams  {
+  query: string,
+  userId: number,
+  apiId?: number, // optional
+  limit: number,
+}
+
+export async function searchByTsVector(params: SearchByTsVectorParams) {
+  const { query, userId, apiId } = params;
+  
+  let whereConditions = and(
+    eq(endpointEmbeddings.userId, userId),
+    sql`${endpointEmbeddings.searchVector} @@ plainto_tsquery('english',${query})`
+  );
+
+  if (apiId) {
+    whereConditions = and(
+      whereConditions,
+      eq(endpointEmbeddings.apiId, apiId)
+    );
+  }
+
+  const results = await db
+    .select({
+      id: apiEndpoints.id,
+      apiId: apiEndpoints.apiId,
+      path: apiEndpoints.path,
+      method: apiEndpoints.method,
+      operationId: apiEndpoints.operationId,
+      summary: apiEndpoints.summary,
+      description: apiEndpoints.description,
+      tags: apiEndpoints.tags,
+      createdAt: apiEndpoints.createdAt,
+      rank: sql<number>`ts_rank(${endpointEmbeddings.searchVector}, plainto_tsquery(${query}))`
+    })
+    .from(apiEndpoints)
+    .innerJoin(endpointEmbeddings, eq(apiEndpoints.id, endpointEmbeddings.endpointId))
+    .where(whereConditions)
+    .orderBy(sql`ts_rank(${endpointEmbeddings.searchVector}, plainto_tsquery(${query})) DESC`)
+    .limit(params.limit);
+
+  return results;
 }

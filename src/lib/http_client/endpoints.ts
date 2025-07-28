@@ -6,6 +6,81 @@ export interface EndpointRecommendationParams {
   similarityThreshold?: number;
 }
 
+export interface SearchEndpointsParams {
+  query: string;
+  apiId?: number;
+  limit?: number;
+}
+
+export interface SearchEndpointResult {
+  id: number;
+  apiId: number;
+  path: string;
+  method: string;
+  operationId?: string;
+  summary?: string;
+  description?: string;
+  tags?: string[];
+  createdAt: string;
+  relevanceScore: number;
+}
+
+export interface SearchEndpointsResponse {
+  success: boolean;
+  data: SearchEndpointResult[];
+  count: number;
+}
+
+export async function searchEndpoints(params: SearchEndpointsParams): Promise<SearchEndpointsResponse> {
+  try {
+    const searchParams = new URLSearchParams({
+      query: params.query
+    });
+    
+    if (params.apiId) {
+      searchParams.append('apiId', params.apiId.toString());
+    }
+    
+    if (params.limit) {
+      searchParams.append('limit', params.limit.toString());
+    }
+
+    const response = await fetchWithAuth(`/api/endpoints/search?${searchParams.toString()}`, {
+      method: 'GET',
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      return data;
+    } else {
+      const errorData = await response.json();
+      throw new Error(errorData.error || `Failed to search endpoints (${response.status})`);
+    }
+  } catch (error) {
+    console.error('Error searching endpoints:', error);
+    throw error;
+  }
+}
+
+export async function getEndpointById(endpointId: number): Promise<SearchEndpointResult> {
+  try {
+    const response = await fetchWithAuth(`/api/endpoints/${endpointId}`, {
+      method: 'GET',
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      return data.data;
+    } else {
+      const errorData = await response.json();
+      throw new Error(errorData.error || `Failed to fetch endpoint (${response.status})`);
+    }
+  } catch (error) {
+    console.error('Error fetching endpoint:', error);
+    throw error;
+  }
+}
+
 export async function getRecommendedEndpoints(params: EndpointRecommendationParams) {
   try {
     const response = await fetchWithAuth('/api/endpoints/recommend', {

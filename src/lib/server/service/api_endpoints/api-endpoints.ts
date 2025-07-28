@@ -23,3 +23,16 @@ export async function fetchApiEndpoints(endpointIds: number[]) {
 
   return endpoints;
 }
+
+// search endpoints by using `search_vector` in `endpoint_embeddings`
+interface SearchByTsVectorParams  {
+  query: string,
+  userId: number,
+  apiId?: number, // optional
+}
+
+export async function searchByTsVector(params: SearchByTsVectorParams) {
+  // This function has been moved to the search_endpoints.ts service
+  // and implemented in the repository layer
+  throw new Error('Use searchEndpointsByDescription from search_endpoints.ts instead');
+}
