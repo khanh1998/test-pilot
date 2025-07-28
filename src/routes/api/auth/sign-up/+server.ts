@@ -1,21 +1,6 @@
 import { json, error } from '@sveltejs/kit';
-import { db } from '$lib/server/db/drizzle';
-import { users } from '$lib/server/db/schema';
-import { createClient } from '@supabase/supabase-js';
 import type { RequestEvent } from '@sveltejs/kit';
-import { generateToken } from '$lib/server/auth/auth';
-
-// Create a Supabase admin client for server-side operations
-const supabaseAdmin = createClient(
-  process.env.SUPABASE_URL || '',
-  process.env.SUPABASE_SERVICE_KEY || '', // Use SERVICE KEY, not anon key for server-side
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    }
-  }
-);
+import { signUpUser, type SignUpData } from '$lib/server/service/auth/authentication';
 
 export async function POST({ request }: RequestEvent) {
   try {
@@ -26,44 +11,19 @@ export async function POST({ request }: RequestEvent) {
       throw error(400, 'Email, password, and name are required');
     }
 
-    // 1. Register user with Supabase Auth
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true // Auto-confirm for simplicity, remove in production
-    });
-
-    if (authError) {
-      console.error('Supabase auth error:', authError);
-      throw error(400, authError.message);
+    // Validate input
+    if (!email.includes('@')) {
+      throw error(400, 'Invalid email format');
     }
 
-    // 2. Add user to our database with reference to Supabase auth ID
-    const newUser = await db
-      .insert(users)
-      .values({
-        name,
-        email,
-        supabaseAuthId: authData.user.id
-      })
-      .returning();
+    if (password.length < 6) {
+      throw error(400, 'Password must be at least 6 characters long');
+    }
 
-    // Create user data object
-    const userData = {
-      id: newUser[0].id,
-      name: newUser[0].name,
-      email: newUser[0].email
-    };
+    const signUpData: SignUpData = { name, email, password };
+    const result = await signUpUser(signUpData);
 
-    // Generate JWT token
-    const token = generateToken(userData);
-
-    return json({
-      message: 'User registered successfully',
-      user: userData,
-      token,
-      session: authData.user // Include Supabase session for compatibility
-    });
+    return json(result);
   } catch (err: unknown) {
     console.error('Error during sign up:', err);
 
@@ -71,6 +31,16 @@ export async function POST({ request }: RequestEvent) {
     if (err && typeof err === 'object' && 'status' in err && 'body' in err) {
       const knownErr = err as { status: number; body: { message: string } };
       throw error(knownErr.status, knownErr.body.message);
+    }
+
+    // Handle service layer errors
+    if (err instanceof Error) {
+      if (err.message.includes('User with this email already exists')) {
+        throw error(409, err.message);
+      }
+      if (err.message.includes('Supabase auth error')) {
+        throw error(400, err.message);
+      }
     }
 
     throw error(500, 'An error occurred during registration');

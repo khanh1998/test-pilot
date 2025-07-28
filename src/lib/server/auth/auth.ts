@@ -1,27 +1,12 @@
-import { createClient } from '@supabase/supabase-js';
 import type { RequestEvent } from '@sveltejs/kit';
 import { error } from '@sveltejs/kit';
-import { db } from '$lib/server/db/drizzle';
-import { users } from '$lib/server/db/schema';
-import { eq } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 import { JWT_SECRET, JWT_EXPIRY } from '$env/static/private';
+import { verifyAuthToken, verifySupabaseAuthToken } from '$lib/server/service/auth/authentication';
 
 // JWT Secret key - from environment variables (with fallbacks for static builds)
 const jwtSecretKey = JWT_SECRET || 'test-pilot-secret-key-replace-in-production';
 const jwtExpiry = JWT_EXPIRY || '24h'; // Token expiry time from env or default to 24 hours
-
-// Create a Supabase admin client for server-side operations
-const supabaseAdmin = createClient(
-  process.env.SUPABASE_URL || '',
-  process.env.SUPABASE_SERVICE_KEY || '', // Use SERVICE KEY, not anon key for server-side
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    }
-  }
-);
 
 /**
  * Generate a JWT token for a user
@@ -78,24 +63,22 @@ export async function authenticateRequest(event: RequestEvent) {
   const token = authHeader.split('Bearer ')[1];
 
   try {
-    // First verify our custom JWT
+    // First try to verify our custom JWT
     const decoded = verifyToken(token);
-    if (!decoded || typeof decoded !== 'object' || !('userId' in decoded)) {
-      // If our JWT fails, try Supabase token as fallback
-      return authenticateWithSupabase(token);
+    if (decoded && typeof decoded === 'object' && 'userId' in decoded) {
+      // Use service layer to verify and get user
+      const { user } = await verifyAuthToken(token);
+      return {
+        user,
+        token
+      };
     }
 
-    // Get user from our database
-    const userRecord = await db.select().from(users).where(eq(users.id, decoded.userId)).limit(1);
-
-    if (!userRecord || userRecord.length === 0) {
-      throw error(404, 'User not found in database');
-    }
-
-    // Return the authenticated user
+    // If our JWT fails, try Supabase token as fallback
+    const { user, supabaseUser } = await verifySupabaseAuthToken(token);
     return {
-      user: userRecord[0],
-      token
+      user,
+      supabaseUser
     };
   } catch (err: unknown) {
     console.error('Authentication error:', err);
@@ -104,38 +87,16 @@ export async function authenticateRequest(event: RequestEvent) {
       throw err; // Re-throw SvelteKit error
     }
 
+    // Convert service errors to appropriate HTTP errors
+    if (err instanceof Error) {
+      if (err.message.includes('Invalid or expired token') || err.message.includes('Invalid Supabase token')) {
+        throw error(401, 'Unauthorized: Invalid token');
+      }
+      if (err.message.includes('User not found')) {
+        throw error(404, 'User not found in database');
+      }
+    }
+
     throw error(500, 'Authentication error');
   }
-}
-
-/**
- * Fallback authentication with Supabase token
- */
-async function authenticateWithSupabase(token: string) {
-  // Verify the token with Supabase
-  const {
-    data: { user },
-    error: authError
-  } = await supabaseAdmin.auth.getUser(token);
-
-  if (authError || !user) {
-    throw error(401, 'Unauthorized: Invalid token');
-  }
-
-  // Get user from our database
-  const userRecord = await db
-    .select()
-    .from(users)
-    .where(eq(users.supabaseAuthId, user.id))
-    .limit(1);
-
-  if (!userRecord || userRecord.length === 0) {
-    throw error(404, 'User not found in database');
-  }
-
-  // Return the authenticated user
-  return {
-    user: userRecord[0],
-    supabaseUser: user
-  };
 }
