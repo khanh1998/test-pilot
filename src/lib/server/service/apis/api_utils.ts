@@ -1,39 +1,18 @@
 import * as apiRepo from '$lib/server/repository/db/api';
 
-interface ValidateApiAccessParams {
+interface GetBasicApiInfoParams {
   apiId: number;
   userId: number;
 }
 
-export async function validateApiAccess(params: ValidateApiAccessParams): Promise<boolean> {
+export async function getBasicApiInfo(params: GetBasicApiInfoParams) {
   const { apiId, userId } = params;
 
-  // Reuse the repository function for ownership verification
-  return await apiRepo.verifyApiOwnership(apiId, userId);
-}
-
-interface GetBasicApiInfoParams {
-  apiId: number;
-  requireOwnership?: boolean;
-  userId?: number;
-}
-
-export async function getBasicApiInfo(params: GetBasicApiInfoParams) {
-  const { apiId, requireOwnership = false, userId } = params;
-
-  if (requireOwnership && !userId) {
-    throw new Error('User ID is required when ownership verification is needed');
-  }
-
-  // Reuse the repository function with conditional user filtering
-  const api = await apiRepo.getApiById(apiId, requireOwnership ? userId : undefined);
+  // Always verify ownership by requiring userId
+  const api = await apiRepo.getApiById(apiId, userId);
 
   if (!api) {
-    throw new Error('API not found');
-  }
-
-  if (requireOwnership && api.userId !== userId) {
-    throw new Error('Unauthorized to access this API');
+    throw new Error('API not found or access denied');
   }
 
   return {
