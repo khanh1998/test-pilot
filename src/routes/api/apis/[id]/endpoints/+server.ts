@@ -1,7 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { db } from '$lib/server/db/drizzle';
-import { apis, apiEndpoints } from '$lib/server/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { getApiEndpoints } from '$lib/server/service/api_endpoints/get_api_endpoints';
 import type { RequestEvent } from '@sveltejs/kit';
 
 export async function GET({ params, locals }: RequestEvent) {
@@ -23,41 +21,21 @@ export async function GET({ params, locals }: RequestEvent) {
       });
     }
 
-    // Get the API and check if it belongs to the user
-    const api = await db
-      .select()
-      .from(apis)
-      .where(and(eq(apis.id, apiId), eq(apis.userId, locals.user.userId)))
-      .limit(1)
-      .then((results) => results[0] || null);
+    const result = await getApiEndpoints({
+      apiId,
+      userId: locals.user.userId
+    });
 
-    if (!api) {
-      return new Response(JSON.stringify({ error: 'API not found or access denied' }), {
+    return json(result);
+  } catch (error) {
+    console.error('Error retrieving API endpoints:', error);
+    
+    if (error instanceof Error && error.message === 'API not found or access denied') {
+      return new Response(JSON.stringify({ error: error.message }), {
         status: 404,
         headers: { 'Content-Type': 'application/json' }
       });
     }
-
-    // Get all endpoints for the API
-    const endpoints = await db
-      .select()
-      .from(apiEndpoints)
-      .where(eq(apiEndpoints.apiId, apiId))
-      .orderBy(apiEndpoints.path, apiEndpoints.method);
-
-    return json({
-      api: {
-        id: api.id,
-        name: api.name,
-        description: api.description,
-        host: api.host,
-        createdAt: api.createdAt,
-        updatedAt: api.updatedAt
-      },
-      endpoints
-    });
-  } catch (error) {
-    console.error('Error retrieving API endpoints:', error);
     return new Response(
       JSON.stringify({
         error: 'Failed to retrieve API endpoints',

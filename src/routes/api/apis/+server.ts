@@ -1,7 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { db } from '$lib/server/db/drizzle';
-import { apis, apiEndpoints } from '$lib/server/db/schema';
-import { eq, sql, inArray } from 'drizzle-orm';
+import { listUserApis } from '$lib/server/service/apis/list_apis';
 import type { RequestEvent } from '@sveltejs/kit';
 
 export async function GET({ locals }: RequestEvent) {
@@ -14,46 +12,11 @@ export async function GET({ locals }: RequestEvent) {
       });
     }
 
-    // Get all APIs for the current user
-    const userApis = await db
-      .select()
-      .from(apis)
-      .where(eq(apis.userId, locals.user.userId))
-      .orderBy(apis.createdAt);
+    const result = await listUserApis({
+      userId: locals.user.userId
+    });
 
-    // Get counts using a separate query with a join to count endpoints
-    const countByApiId: Record<number, number> = {};
-
-    if (userApis.length > 0) {
-      // Use Drizzle's inArray operator for proper parameter binding
-      const apiIds = userApis.map((api) => api.id);
-      const endpointCounts = await db
-        .select({
-          apiId: apiEndpoints.apiId,
-          count: sql<number>`count(*)::int`
-        })
-        .from(apiEndpoints)
-        .where(inArray(apiEndpoints.apiId, apiIds))
-        .groupBy(apiEndpoints.apiId);
-
-      // Create a map of API ID to endpoint count
-      endpointCounts.forEach((count) => {
-        countByApiId[count.apiId] = count.count;
-      });
-    }
-
-    // Format the response
-    const formattedApis = userApis.map((api) => ({
-      id: api.id,
-      name: api.name,
-      description: api.description,
-      host: api.host,
-      createdAt: api.createdAt,
-      updatedAt: api.updatedAt,
-      endpointCount: countByApiId[api.id] || 0
-    }));
-
-    return json({ apis: formattedApis });
+    return json(result);
   } catch (error) {
     console.error('Error retrieving APIs:', error);
     return new Response(

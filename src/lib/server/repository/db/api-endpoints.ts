@@ -30,6 +30,27 @@ export async function getApiEndpointById(endpointId: number, userId?: number) {
   return results.length > 0 ? results[0] : null;
 }
 
+export async function getApiEndpointsByApiId(apiId: number) {
+  return await db
+    .select({
+      id: apiEndpoints.id,
+      apiId: apiEndpoints.apiId,
+      path: apiEndpoints.path,
+      method: apiEndpoints.method,
+      operationId: apiEndpoints.operationId,
+      summary: apiEndpoints.summary,
+      description: apiEndpoints.description,
+      requestSchema: apiEndpoints.requestSchema,
+      responseSchema: apiEndpoints.responseSchema,
+      parameters: apiEndpoints.parameters,
+      tags: apiEndpoints.tags,
+      createdAt: apiEndpoints.createdAt
+    })
+    .from(apiEndpoints)
+    .where(eq(apiEndpoints.apiId, apiId))
+    .orderBy(apiEndpoints.path, apiEndpoints.method);
+}
+
 export async function getApiEndpointsByIds(endpointIds: number[], userId?: number) {
   const query = db
     .select({

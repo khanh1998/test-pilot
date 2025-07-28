@@ -1,7 +1,6 @@
 import { json } from '@sveltejs/kit';
-import { db } from '$lib/server/db/drizzle';
-import { apis, apiEndpoints } from '$lib/server/db/schema';
-import { eq, sql } from 'drizzle-orm';
+import { getApiDetails } from '$lib/server/service/apis/get_api_details';
+import { deleteApi } from '$lib/server/service/apis/delete_api';
 import type { RequestEvent } from '@sveltejs/kit';
 
 export async function GET({ params, locals }: RequestEvent) {
@@ -23,44 +22,30 @@ export async function GET({ params, locals }: RequestEvent) {
       });
     }
 
-    // Get the API by ID
-    const apiData = await db.select().from(apis).where(eq(apis.id, apiId)).limit(1);
+    const result = await getApiDetails({
+      apiId,
+      userId: locals.user.userId
+    });
 
-    if (apiData.length === 0) {
-      return new Response(JSON.stringify({ error: 'API not found' }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-
-    // Verify ownership
-    if (apiData[0].userId !== locals.user.userId) {
-      return new Response(JSON.stringify({ error: 'Unauthorized to access this API' }), {
-        status: 403,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-
-    // Get endpoint count
-    const endpointCount = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(apiEndpoints)
-      .where(eq(apiEndpoints.apiId, apiId));
-
-    // Format the response
-    const formattedApi = {
-      id: apiData[0].id,
-      name: apiData[0].name,
-      description: apiData[0].description,
-      host: apiData[0].host,
-      createdAt: apiData[0].createdAt,
-      updatedAt: apiData[0].updatedAt,
-      endpointCount: endpointCount[0].count
-    };
-
-    return json({ api: formattedApi });
+    return json(result);
   } catch (error) {
     console.error('Error retrieving API:', error);
+    
+    if (error instanceof Error) {
+      if (error.message === 'API not found') {
+        return new Response(JSON.stringify({ error: error.message }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      
+      if (error.message === 'Unauthorized to access this API') {
+        return new Response(JSON.stringify({ error: error.message }), {
+          status: 403,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+    }
     return new Response(
       JSON.stringify({
         error: 'Failed to retrieve API',
@@ -93,32 +78,31 @@ export async function DELETE({ params, locals }: RequestEvent) {
       });
     }
 
-    // Verify that the API belongs to the current user
-    const apiToDelete = await db.select().from(apis).where(eq(apis.id, apiId)).limit(1);
+    const result = await deleteApi({
+      apiId,
+      userId: locals.user.userId
+    });
 
-    if (apiToDelete.length === 0) {
-      return new Response(JSON.stringify({ error: 'API not found' }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-
-    if (apiToDelete[0].userId !== locals.user.userId) {
-      return new Response(JSON.stringify({ error: 'Unauthorized to delete this API' }), {
-        status: 403,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-
-    // Delete related endpoints first
-    await db.delete(apiEndpoints).where(eq(apiEndpoints.apiId, apiId));
-
-    // Then delete the API itself
-    await db.delete(apis).where(eq(apis.id, apiId));
-
-    return json({ success: true, message: 'API and all its endpoints deleted successfully' });
+    return json(result);
   } catch (error) {
     console.error('Error deleting API:', error);
+    
+    if (error instanceof Error) {
+      if (error.message === 'API not found') {
+        return new Response(JSON.stringify({ error: error.message }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      
+      if (error.message === 'Unauthorized to delete this API') {
+        return new Response(JSON.stringify({ error: error.message }), {
+          status: 403,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
     return new Response(
       JSON.stringify({
         error: 'Failed to delete API',
