@@ -1,7 +1,6 @@
 import { json } from '@sveltejs/kit';
-import { db } from '$lib/server/db/drizzle';
-import { apis, apiEndpoints } from '$lib/server/db/schema';
-import { parseSwaggerSpec, extractEndpoints, extractHost } from '$lib/server/swagger/parser';
+import { uploadSwagger } from '$lib/server/service/apis/upload_swagger';
+import { processSwaggerFile } from '$lib/server/service/apis/swagger_file_processor';
 import type { RequestEvent } from '@sveltejs/kit';
 
 export async function POST({ request, locals }: RequestEvent) {
@@ -28,73 +27,23 @@ export async function POST({ request, locals }: RequestEvent) {
       });
     }
 
-    // Determine the format based on file extension or content type
-    const fileName = file.name.toLowerCase();
-    const isYaml = fileName.endsWith('.yaml') || fileName.endsWith('.yml');
-    const format = isYaml ? 'yaml' : 'json';
-
-    // Read the file content
-    const content = await file.text();
-
-    // Parse the Swagger/OpenAPI spec
-    const api = await parseSwaggerSpec(content, format);
-
-    // Extract host information from the spec
-    let hostValue = extractHost(api);
-
-    // If no host in spec but user provided one, use that
-    if (!hostValue && userProvidedHost) {
-      hostValue = userProvidedHost;
-    }
-
-    // Insert the API into the database
-    const [createdApi] = await db
-      .insert(apis)
-      .values({
-        name,
-        description,
-        specFormat: format,
-        specContent: content,
-        host: hostValue,
-        userId: locals.user.userId
-      })
-      .returning();
-
-    if (!createdApi) {
-      throw new Error('Failed to create API record');
-    }
-
-    // Extract the endpoints from the spec
-    const endpoints = extractEndpoints(api);
-
-    // Insert the endpoints into the database
-    if (endpoints.length > 0) {
-      const endpointValues = endpoints.map((endpoint) => ({
-        apiId: createdApi.id,
-        path: endpoint.path,
-        method: endpoint.method,
-        operationId: endpoint.operationId || null,
-        summary: endpoint.summary || null,
-        description: endpoint.description || null,
-        requestSchema: endpoint.requestSchema,
-        responseSchema: endpoint.responseSchema,
-        parameters: endpoint.parameters,
-        tags: endpoint.tags
-      }));
-
-      await db.insert(apiEndpoints).values(endpointValues);
-    }
-
-    return json({
-      success: true,
-      api: {
-        id: createdApi.id,
-        name: createdApi.name,
-        description: createdApi.description,
-        host: createdApi.host,
-        endpointCount: endpoints.length
-      }
+    // Process the swagger file
+    const { content, format } = await processSwaggerFile({
+      file,
+      userProvidedHost
     });
+
+    // Upload the swagger specification
+    const result = await uploadSwagger({
+      name,
+      description,
+      content,
+      format,
+      userProvidedHost,
+      userId: locals.user.userId
+    });
+
+    return json(result);
   } catch (error) {
     console.error('Error uploading Swagger/OpenAPI spec:', error);
     return new Response(

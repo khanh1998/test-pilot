@@ -1,5 +1,5 @@
 // Database repositories
-export * from './db/user';
+export * from './db/users';
 
 // External service repositories  
 export * from './supabase/auth';

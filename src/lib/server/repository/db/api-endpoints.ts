@@ -78,6 +78,75 @@ export async function getApiEndpointsByIds(endpointIds: number[], userId?: numbe
   return await query;
 }
 
+export interface CreateEndpointParams {
+  path: string;
+  method: string;
+  operationId?: string;
+  summary?: string;
+  description?: string;
+  requestSchema: any;
+  responseSchema: any;
+  parameters: any;
+  tags: string[];
+}
+
+export interface UpdateEndpointParams {
+  id: number;
+  operationId?: string;
+  summary?: string;
+  description?: string;
+  requestSchema: any;
+  responseSchema: any;
+  parameters: any;
+  tags: string[];
+}
+
+export async function createApiEndpoints(apiId: number, endpoints: CreateEndpointParams[]) {
+  if (endpoints.length === 0) {
+    return [];
+  }
+
+  const endpointValues = endpoints.map((endpoint) => ({
+    apiId,
+    path: endpoint.path,
+    method: endpoint.method,
+    operationId: endpoint.operationId || null,
+    summary: endpoint.summary || null,
+    description: endpoint.description || null,
+    requestSchema: endpoint.requestSchema,
+    responseSchema: endpoint.responseSchema,
+    parameters: endpoint.parameters,
+    tags: endpoint.tags
+  }));
+
+  return await db.insert(apiEndpoints).values(endpointValues).returning();
+}
+
+export async function updateApiEndpoint(params: UpdateEndpointParams) {
+  await db
+    .update(apiEndpoints)
+    .set({
+      operationId: params.operationId || null,
+      summary: params.summary || null,
+      description: params.description || null,
+      requestSchema: params.requestSchema,
+      responseSchema: params.responseSchema,
+      parameters: params.parameters,
+      tags: params.tags
+    })
+    .where(eq(apiEndpoints.id, params.id));
+}
+
+export async function deleteApiEndpoints(endpointIds: number[]) {
+  if (endpointIds.length === 0) {
+    return;
+  }
+  
+  await db
+    .delete(apiEndpoints)
+    .where(inArray(apiEndpoints.id, endpointIds));
+}
+
 // search endpoints by using `search_vector` in `endpoint_embeddings`
 interface SearchByTsVectorParams  {
   query: string,

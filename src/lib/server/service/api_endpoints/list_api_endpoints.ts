@@ -1,4 +1,4 @@
-import * as apiRepo from '$lib/server/repository/db/api';
+import * as apiRepo from '$lib/server/repository/db/apis';
 import * as apiEndpointsRepo from '$lib/server/repository/db/api-endpoints';
 
 interface GetApiEndpointsParams {

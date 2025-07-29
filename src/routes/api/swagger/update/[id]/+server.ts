@@ -1,8 +1,6 @@
 import { json } from '@sveltejs/kit';
-import { db } from '$lib/server/db/drizzle';
-import { apis, apiEndpoints } from '$lib/server/db/schema';
-import { parseSwaggerSpec, extractEndpoints, extractHost } from '$lib/server/swagger/parser';
-import { eq, and, sql, inArray } from 'drizzle-orm';
+import { updateSwagger } from '$lib/server/service/apis/update_swagger';
+import { processSwaggerFile } from '$lib/server/service/apis/swagger_file_processor';
 import type { RequestEvent } from '@sveltejs/kit';
 
 export async function POST({ request, locals, params }: RequestEvent) {
@@ -24,21 +22,6 @@ export async function POST({ request, locals, params }: RequestEvent) {
 
     const apiId = parseInt(params.id);
 
-    // Check if the API exists and belongs to the user
-    const existingApi = await db.query.apis.findFirst({
-      where: and(eq(apis.id, apiId), eq(apis.userId, locals.user.userId))
-    });
-
-    if (!existingApi) {
-      return new Response(
-        JSON.stringify({ error: 'API not found or you do not have permission to update it' }),
-        {
-          status: 404,
-          headers: { 'Content-Type': 'application/json' }
-        }
-      );
-    }
-
     // Parse the multipart form data
     const formData = await request.formData();
     const file = formData.get('swaggerFile') as File | null;
@@ -51,124 +34,43 @@ export async function POST({ request, locals, params }: RequestEvent) {
       });
     }
 
-    // Determine the format based on file extension or content type
-    const fileName = file.name.toLowerCase();
-    const isYaml = fileName.endsWith('.yaml') || fileName.endsWith('.yml');
-    const format = isYaml ? 'yaml' : 'json';
-
-    // Read the file content
-    const content = await file.text();
-
-    // Parse the Swagger/OpenAPI spec
-    const api = await parseSwaggerSpec(content, format);
-
-    // Extract host information from the spec
-    let hostValue = extractHost(api);
-
-    // If no host in spec but user provided one, use that
-    if (!hostValue && userProvidedHost) {
-      hostValue = userProvidedHost;
-    }
-
-    // Update the API in the database
-    await db
-      .update(apis)
-      .set({
-        specFormat: format,
-        specContent: content,
-        host: hostValue,
-        updatedAt: new Date()
-      })
-      .where(eq(apis.id, apiId));
-
-    // Extract the endpoints from the spec
-    const newEndpoints = extractEndpoints(api);
-
-    // Get existing endpoints for this API
-    const existingEndpoints = await db.query.apiEndpoints.findMany({
-      where: eq(apiEndpoints.apiId, apiId)
+    // Process the swagger file
+    const { content, format } = await processSwaggerFile({
+      file,
+      userProvidedHost
     });
 
-    // Create a map of existing endpoints for quick lookup
-    const existingEndpointMap = new Map(
-      existingEndpoints.map((endpoint) => [`${endpoint.method}:${endpoint.path}`, endpoint])
-    );
-
-    // Track which endpoints are processed to determine which ones to delete
-    const processedEndpoints = new Set();
-
-    // Process each endpoint from the new spec
-    for (const endpoint of newEndpoints) {
-      const endpointKey = `${endpoint.method}:${endpoint.path}`;
-      processedEndpoints.add(endpointKey);
-
-      const existingEndpoint = existingEndpointMap.get(endpointKey);
-
-      if (existingEndpoint) {
-        // Update existing endpoint
-        await db
-          .update(apiEndpoints)
-          .set({
-            operationId: endpoint.operationId || null,
-            summary: endpoint.summary || null,
-            description: endpoint.description || null,
-            requestSchema: endpoint.requestSchema,
-            responseSchema: endpoint.responseSchema,
-            parameters: endpoint.parameters,
-            tags: endpoint.tags
-          })
-          .where(eq(apiEndpoints.id, existingEndpoint.id));
-      } else {
-        // Insert new endpoint
-        await db.insert(apiEndpoints).values({
-          apiId,
-          path: endpoint.path,
-          method: endpoint.method,
-          operationId: endpoint.operationId || null,
-          summary: endpoint.summary || null,
-          description: endpoint.description || null,
-          requestSchema: endpoint.requestSchema,
-          responseSchema: endpoint.responseSchema,
-          parameters: endpoint.parameters,
-          tags: endpoint.tags
-        });
-      }
-    }
-
-    // Delete endpoints that no longer exist in the spec
-    const endpointsToDelete = existingEndpoints.filter(
-      (endpoint) => !processedEndpoints.has(`${endpoint.method}:${endpoint.path}`)
-    );
-
-    if (endpointsToDelete.length > 0) {
-      // Use individual parameters for each ID rather than a comma-joined string
-      const idsToDelete = endpointsToDelete.map((e) => e.id);
-      await db
-        .delete(apiEndpoints)
-        .where(inArray(apiEndpoints.id, idsToDelete));
-    }
-
-    return json({
-      success: true,
-      api: {
-        id: apiId,
-        name: existingApi.name,
-        description: existingApi.description,
-        host: hostValue,
-        endpointCount: newEndpoints.length,
-        updated: true,
-        addedEndpoints: newEndpoints.length - existingEndpoints.length + endpointsToDelete.length,
-        removedEndpoints: endpointsToDelete.length
-      }
+    // Update the swagger specification
+    const result = await updateSwagger({
+      apiId,
+      content,
+      format,
+      userProvidedHost,
+      userId: locals.user.userId
     });
+
+    return json(result);
   } catch (error) {
     console.error('Error updating API from Swagger/OpenAPI spec:', error);
+    
+    // Handle specific error types with appropriate status codes
+    if (error instanceof Error) {
+      if (error.message.includes('not found') || error.message.includes('permission')) {
+        return new Response(JSON.stringify({ error: error.message }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      
+      return new Response(JSON.stringify({ error: error.message }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    
     return new Response(
       JSON.stringify({
-        error:
-          error instanceof Error
-            ? error.message
-            : 'An unexpected error occurred while processing the API specification'
+        error: 'An unexpected error occurred while processing the API specification'
       }),
       {
         status: 500,

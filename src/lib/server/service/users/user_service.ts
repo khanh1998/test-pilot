@@ -8,7 +8,7 @@ import {
   type UserData,
   type UserPublicData,
   type CreateUserData
-} from '$lib/server/repository/db/user';
+} from '$lib/server/repository/db/users';
 
 /**
  * Get user by email (returns public data only)
