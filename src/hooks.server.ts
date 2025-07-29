@@ -1,4 +1,4 @@
-import { verifyToken } from '$lib/server/auth/auth';
+import { verifyToken } from '$lib/server/middleware/auth';
 import { error, type Handle } from '@sveltejs/kit';
 
 /**

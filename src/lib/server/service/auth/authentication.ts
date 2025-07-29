@@ -1,4 +1,4 @@
-import { generateToken, verifyToken, type JWTPayload } from '$lib/server/auth/auth';
+import { generateToken, verifyToken, type JWTPayload } from '$lib/server/middleware/auth';
 import {
   findUserByEmail,
   findUserById,

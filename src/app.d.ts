@@ -1,6 +1,6 @@
 // See https://svelte.dev/docs/kit/types#app.d.ts
 // for information about these interfaces
-import type { JWTPayload } from '$lib/server/auth/auth';
+import type { JWTPayload } from '$lib/server/middleware/auth';
 
 declare global {
   namespace App {
