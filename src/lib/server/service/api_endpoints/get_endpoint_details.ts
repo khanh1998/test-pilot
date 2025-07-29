@@ -20,6 +20,21 @@ export async function getEndpointDetails(params: GetEndpointDetailsParams) {
   return endpoint;
 }
 
+/**
+ * Get summary for a single API endpoint (excluding heavy schema fields for performance)
+ */
+export async function getEndpointSummary(params: GetEndpointDetailsParams) {
+  const { endpointId, userId } = params;
+
+  const endpoint = await apiEndpointsRepo.getApiEndpointSummaryById(endpointId, userId);
+
+  if (!endpoint) {
+    throw new Error('Endpoint not found or access denied');
+  }
+
+  return endpoint;
+}
+
 interface GetMultipleEndpointsParams {
   endpointIds: number[];
   userId?: number;

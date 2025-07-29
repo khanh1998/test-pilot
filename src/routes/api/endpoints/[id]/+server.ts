@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { getApiEndpointById } from '$lib/server/repository/db/api-endpoints';
+import { getEndpointSummary } from '$lib/server/service/api_endpoints/get_endpoint_details';
 
 export const GET: RequestHandler = async ({ locals, params }) => {
   try {
@@ -20,31 +20,26 @@ export const GET: RequestHandler = async ({ locals, params }) => {
       return json({ error: 'Invalid endpoint ID' }, { status: 400 });
     }
 
-    // Fetch endpoint by ID
-    const endpoint = await getApiEndpointById(endpointId, userId);
-    
-    if (!endpoint) {
-      return json({ error: 'Endpoint not found' }, { status: 404 });
-    }
+    // Fetch endpoint summary via service layer
+    const endpoint = await getEndpointSummary({
+      endpointId,
+      userId
+    });
 
-    // Return basic endpoint info (excluding heavy schema fields for performance)
+    // Return endpoint summary
     return json({
       success: true,
-      data: {
-        id: endpoint.id,
-        apiId: endpoint.apiId,
-        path: endpoint.path,
-        method: endpoint.method,
-        operationId: endpoint.operationId,
-        summary: endpoint.summary,
-        description: endpoint.description,
-        tags: endpoint.tags,
-        createdAt: endpoint.createdAt
-      }
+      data: endpoint
     });
 
   } catch (error) {
     console.error('Error fetching endpoint:', error);
+    
+    // Handle specific service errors
+    if (error instanceof Error && error.message === 'Endpoint not found or access denied') {
+      return json({ error: 'Endpoint not found' }, { status: 404 });
+    }
+    
     return json(
       { error: 'Failed to fetch endpoint' },
       { status: 500 }

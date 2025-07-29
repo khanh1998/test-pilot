@@ -30,6 +30,31 @@ export async function getApiEndpointById(endpointId: number, userId?: number) {
   return results.length > 0 ? results[0] : null;
 }
 
+export async function getApiEndpointSummaryById(endpointId: number, userId?: number) {
+  const query = db
+    .select({
+      id: apiEndpoints.id,
+      apiId: apiEndpoints.apiId,
+      path: apiEndpoints.path,
+      method: apiEndpoints.method,
+      operationId: apiEndpoints.operationId,
+      summary: apiEndpoints.summary,
+      description: apiEndpoints.description,
+      tags: apiEndpoints.tags,
+      createdAt: apiEndpoints.createdAt
+    })
+    .from(apiEndpoints)
+    .leftJoin(apis, eq(apiEndpoints.apiId, apis.id))
+    .where(
+      userId 
+        ? and(eq(apiEndpoints.id, endpointId), eq(apis.userId, userId))
+        : eq(apiEndpoints.id, endpointId)
+    );
+
+  const results = await query;
+  return results.length > 0 ? results[0] : null;
+}
+
 export async function getApiEndpointsByApiId(apiId: number) {
   return await db
     .select({
