@@ -1,86 +1,64 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
-  import { goto } from '$app/navigation';
-  import { authStore } from '$lib/store/auth';
-  import type { User } from '$lib/store/auth';
-
-  // State
-  let loading = false;
-  let error: string | null = null;
-
-  // Get current user from auth store
-  let user: User | null = null;
-
-  // Subscribe to the auth store
-  const unsubscribe = authStore.subscribe((state) => {
-    user = state.user;
-  });
-
-  // Unsubscribe when component is destroyed
-  onDestroy(() => {
-    unsubscribe();
-  });
-
-  // Handle sign out
-  async function handleSignOut() {
-    try {
-      await authStore.signOut();
-      goto('/');
-    } catch (err: any) {
-      error = err?.message || 'An error occurred during sign out';
-    }
-  }
-
-  onMount(() => {
-    // Component initialization
-  });
+  // This page is now wrapped by the DashboardLayout via +layout.svelte
+  // All the navigation and layout logic is handled in the layout
 </script>
 
-<div class="bg-white">
-  <!-- Header -->
-  <header class="bg-white shadow">
-    <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-6 sm:px-6 lg:px-8">
-      <div>
-        <h1 class="text-3xl font-bold tracking-tight text-gray-900">Dashboard</h1>
-        <nav class="mt-2">
-          <ul class="flex space-x-6">
-            <li>
-              <a href="/dashboard" class="text-sm text-gray-700 hover:text-blue-600">Home</a>
-            </li>
-            <li>
-              <a href="/dashboard/apis" class="text-sm text-gray-700 hover:text-blue-600">APIs</a>
-            </li>
-            <li>
-              <a href="/dashboard/test-flows" class="text-sm text-gray-700 hover:text-blue-600"
-                >Test Flows</a
-              >
-            </li>
-          </ul>
-        </nav>
-      </div>
-      <div class="flex items-center space-x-4">
-        {#if user}
-          <span class="text-sm text-gray-700">
-            {user.email || 'User'}
-          </span>
-        {/if}
-        <button
-          type="button"
-          on:click={handleSignOut}
-          class="rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600"
-        >
-          Sign out
-        </button>
-      </div>
+<!-- Dashboard Home Content -->
+<div class="flex h-full items-center justify-center">
+  <div class="text-center">
+    <div class="mx-auto h-24 w-24 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+      <svg class="h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2-2V7a2 2 0 012-2h2a2 2 0 002 2v2a2 2 0 002 2h6a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2-2V3a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 002 2h2a2 2 0 012 2v2a2 2 0 00-2 2h-6a2 2 0 00-2 2v6a2 2 0 01-2 2H9a2 2 0 01-2-2z" />
+      </svg>
     </div>
-  </header>
+    <h2 class="text-2xl font-bold text-gray-900 mb-2">Welcome to Test Pilot</h2>
+    <p class="text-gray-600 mb-8 max-w-md">
+      Your smart API testing companion. Import OpenAPI specs, generate test flows, and validate your APIs with ease.
+    </p>
+    
+    <!-- Quick action cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl mx-auto">
+      <a
+        href="/dashboard/apis"
+        class="group relative rounded-lg border border-gray-300 bg-white px-6 py-4 shadow-sm hover:shadow-md transition-shadow duration-200 hover:border-gray-400"
+      >
+        <div class="flex items-center">
+          <div class="flex-shrink-0">
+            <svg class="h-8 w-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-2m-4-1v8m0 0l3-3m-3 3L9 8" />
+            </svg>
+          </div>
+          <div class="ml-4 text-left">
+            <h3 class="text-lg font-medium text-gray-900 group-hover:text-blue-600">
+              Manage APIs
+            </h3>
+            <p class="text-sm text-gray-500">
+              Import and manage your OpenAPI specifications
+            </p>
+          </div>
+        </div>
+      </a>
 
-  <!-- Main content -->
-  <main>
-    <div class="mx-auto max-w-7xl py-6 sm:px-6 lg:px-8">
-      <div class="px-4 py-6 sm:px-0">
-        <!-- Add any main content here if needed in the future -->
-      </div>
+      <a
+        href="/dashboard/test-flows"
+        class="group relative rounded-lg border border-gray-300 bg-white px-6 py-4 shadow-sm hover:shadow-md transition-shadow duration-200 hover:border-gray-400"
+      >
+        <div class="flex items-center">
+          <div class="flex-shrink-0">
+            <svg class="h-8 w-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+            </svg>
+          </div>
+          <div class="ml-4 text-left">
+            <h3 class="text-lg font-medium text-gray-900 group-hover:text-green-600">
+              Test Flows
+            </h3>
+            <p class="text-sm text-gray-500">
+              Create and execute API test sequences
+            </p>
+          </div>
+        </div>
+      </a>
     </div>
-  </main>
+  </div>
 </div>

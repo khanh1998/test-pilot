@@ -2,9 +2,12 @@
   import ApiList from '$lib/components/apis/ApiList.svelte';
 </script>
 
-<div class="container mx-auto px-4 py-8">
+<div class="p-6">
   <div class="mb-6">
-    <a href="/dashboard" class="text-sm text-blue-500 hover:text-blue-600"> ← Back to Dashboard </a>
+    <h1 class="text-2xl font-bold text-gray-900">API Management</h1>
+    <p class="mt-1 text-sm text-gray-600">
+      Manage your OpenAPI specifications and endpoints
+    </p>
   </div>
 
   <ApiList />

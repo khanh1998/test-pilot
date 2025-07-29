@@ -162,13 +162,14 @@
 
 </script>
 
-<div class="container mx-auto px-4 py-8">
-  <div class="mb-6">
-    <a href="/dashboard" class="text-sm text-blue-500 hover:text-blue-600"> ← Back to Dashboard </a>
-  </div>
-
+<div class="p-6">
   <div class="mb-8 flex items-center justify-between">
-    <h1 class="text-2xl font-bold text-gray-800">Test Flows</h1>
+    <div>
+      <h1 class="text-2xl font-bold text-gray-900">Test Flows</h1>
+      <p class="mt-1 text-sm text-gray-600">
+        Create and manage API test sequences
+      </p>
+    </div>
     <div class="flex gap-3">
       <button
         class="rounded-md bg-emerald-600 px-4 py-2 text-white transition hover:bg-emerald-700"
