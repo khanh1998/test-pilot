@@ -95,3 +95,98 @@ export async function getEndpointsByIds(endpointIds: number[]): Promise<Endpoint
     tags: endpoint.tags || undefined
   }));
 }
+
+/**
+ * Get API associations for a test flow
+ * @param testFlowId - The test flow ID
+ * @returns Array of associated APIs
+ */
+export async function getTestFlowApiAssociations(testFlowId: number): Promise<Array<{ id: number; name: string }>> {
+  return db
+    .select({
+      id: apis.id,
+      name: apis.name
+    })
+    .from(testFlowApis)
+    .innerJoin(apis, eq(testFlowApis.apiId, apis.id))
+    .where(eq(testFlowApis.testFlowId, testFlowId));
+}
+
+/**
+ * Check if a test flow exists and belongs to a user
+ * @param testFlowId - The test flow ID
+ * @param userId - The user ID
+ * @returns True if the test flow exists and belongs to the user
+ */
+export async function testFlowExistsForUser(testFlowId: number, userId: number): Promise<boolean> {
+  const [result] = await db
+    .select({ id: testFlows.id })
+    .from(testFlows)
+    .where(and(eq(testFlows.id, testFlowId), eq(testFlows.userId, userId)))
+    .limit(1);
+  
+  return !!result;
+}
+
+/**
+ * Validate that APIs exist and belong to a user
+ * @param apiIds - Array of API IDs to validate
+ * @param userId - The user ID
+ * @returns Array of valid API IDs that exist and belong to the user
+ */
+export async function validateUserApis(apiIds: number[], userId: number): Promise<number[]> {
+  if (apiIds.length === 0) {
+    return [];
+  }
+
+  const userApis = await db
+    .select({ id: apis.id })
+    .from(apis)
+    .where(and(eq(apis.userId, userId), inArray(apis.id, apiIds)));
+
+  return userApis.map(api => api.id);
+}
+
+/**
+ * Update API associations for a test flow
+ * @param testFlowId - The test flow ID
+ * @param apiIds - Array of API IDs to associate with the test flow
+ */
+export async function updateTestFlowApis(testFlowId: number, apiIds: number[]): Promise<void> {
+  // Delete existing associations
+  await db.delete(testFlowApis).where(eq(testFlowApis.testFlowId, testFlowId));
+
+  // Insert new associations
+  if (apiIds.length > 0) {
+    await db.insert(testFlowApis).values(
+      apiIds.map((apiId) => ({
+        testFlowId,
+        apiId
+      }))
+    );
+  }
+}
+
+/**
+ * Delete all API associations for a test flow
+ * @param testFlowId - The test flow ID
+ */
+export async function deleteTestFlowApis(testFlowId: number): Promise<void> {
+  await db.delete(testFlowApis).where(eq(testFlowApis.testFlowId, testFlowId));
+}
+
+/**
+ * Create API associations for a test flow
+ * @param testFlowId - The test flow ID
+ * @param apiIds - Array of API IDs to associate with the test flow
+ */
+export async function createTestFlowApis(testFlowId: number, apiIds: number[]): Promise<void> {
+  if (apiIds.length > 0) {
+    await db.insert(testFlowApis).values(
+      apiIds.map((apiId) => ({
+        testFlowId,
+        apiId
+      }))
+    );
+  }
+}

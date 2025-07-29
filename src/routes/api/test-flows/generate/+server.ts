@@ -1,7 +1,6 @@
 import { json } from '@sveltejs/kit';
-import { fetchApiEndpoints } from '$lib/server/service/api_endpoints/api-endpoints';
 import { error } from '@sveltejs/kit';
-import { createTestFlow } from '$lib/server/service/test_flows/test_flow';
+import { generateTestFlow } from '$lib/server/service/test_flows/test-flow-generation';
 
 interface RequestLocals {
   getUserId: () => string | null;
@@ -31,27 +30,8 @@ export const POST = async ({ request, locals }: { request: Request; locals: Requ
   }
 
   try {
-    // Fetch API endpoint specifications from database
-    const endpoints = await fetchApiEndpoints(endpointIds);
-    
-    if (endpoints.length === 0) {
-      throw error(404, 'No valid endpoints found');
-    }
-    
-    // Convert nullable fields to undefined for compatibility with ApiEndpoint type
-    const formattedEndpoints = endpoints.map(endpoint => ({
-      ...endpoint,
-      operationId: endpoint.operationId || undefined,
-      summary: endpoint.summary || undefined,
-      description: endpoint.description || undefined,
-      parameters: endpoint.parameters || undefined,
-      requestSchema: endpoint.requestSchema || undefined,
-      responseSchema: endpoint.responseSchema || undefined,
-      method: endpoint.method as 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'OPTIONS' | 'HEAD'
-    }));
-    
-    // Generate test flow using OpenAI and save to database with settings and mappings
-    const newFlow = await createTestFlow(formattedEndpoints, description, Number(userId));
+    // Generate test flow using the merged service that handles both endpoint fetching and flow creation
+    const newFlow = await generateTestFlow(endpointIds, description, Number(userId));
     
     return json({
       success: true,
@@ -60,6 +40,9 @@ export const POST = async ({ request, locals }: { request: Request; locals: Requ
   } catch (err: unknown) {
     console.error('Error generating test flow:', err);
     if (err instanceof Error) {
+      if (err.message === 'No valid endpoints found for the given IDs') {
+        throw error(404, 'No valid endpoints found');
+      }
       throw error(500, `Failed to generate test flow: ${err.message}`);
     } else {
       throw error(500, 'Failed to generate test flow: Unknown error');

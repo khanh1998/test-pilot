@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { getApiEndpoints } from '$lib/server/service/api_endpoints/get_api_endpoints';
+import { getApiEndpoints } from '$lib/server/service/api_endpoints/list_api_endpoints';
 import type { RequestEvent } from '@sveltejs/kit';
 
 export async function GET({ params, locals }: RequestEvent) {

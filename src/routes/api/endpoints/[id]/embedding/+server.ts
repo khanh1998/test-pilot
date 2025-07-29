@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestEvent } from '@sveltejs/kit';
-import { EndpointEmbeddingsService } from '$lib/server/service/endpoint_embeddings/main';
+import { EndpointEmbeddingsService } from '$lib/server/service/endpoint_embeddings/create_embedding';
 
 /**
  * POST handler to generate and store an embedding for a specific endpoint

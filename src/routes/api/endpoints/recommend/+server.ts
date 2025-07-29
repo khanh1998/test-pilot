@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { EndpointEmbeddingsService } from '$lib/server/service/endpoint_embeddings/main';
+import { EndpointEmbeddingsService } from '$lib/server/service/endpoint_embeddings/create_embedding';
 
 export const POST: RequestHandler = async ({ request, locals }) => {
   // Check if user is authenticated

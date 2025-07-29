@@ -1,8 +1,8 @@
 import { json } from '@sveltejs/kit';
-import { db } from '$lib/server/db/drizzle';
-import { testFlows, testFlowApis, apis } from '$lib/server/db/schema';
-import { eq, and, inArray } from 'drizzle-orm';
 import type { RequestEvent } from '@sveltejs/kit';
+import { deleteTestFlow } from '$lib/server/service/test_flows/delete_test_flow';
+import { createBasicTestFlow } from '$lib/server/service/test_flows/create_test_flow';
+import { getTestFlowsForUser } from '$lib/server/service/test_flows/list_test_flows';
 
 // Get all test flows for the authenticated user
 export async function GET({ locals }: RequestEvent) {
@@ -15,57 +15,10 @@ export async function GET({ locals }: RequestEvent) {
       });
     }
 
-    // Get all test flows for the authenticated user
-    const userTestFlows = await db
-      .select({
-        id: testFlows.id,
-        name: testFlows.name,
-        description: testFlows.description,
-        createdAt: testFlows.createdAt,
-        updatedAt: testFlows.updatedAt
-      })
-      .from(testFlows)
-      .where(eq(testFlows.userId, locals.user.userId));
+    // Use the service to get test flows
+    const testFlows = await getTestFlowsForUser(locals.user.userId);
 
-    // Get associated APIs for each test flow
-    const testFlowIds = userTestFlows.map((flow) => flow.id);
-
-    if (testFlowIds.length === 0) {
-      return json({ testFlows: [] });
-    }
-
-    const testFlowApiAssociations = await db
-      .select({
-        testFlowId: testFlowApis.testFlowId,
-        apiId: testFlowApis.apiId,
-        apiName: apis.name
-      })
-      .from(testFlowApis)
-      .innerJoin(apis, eq(testFlowApis.apiId, apis.id))
-      .where(inArray(testFlowApis.testFlowId, testFlowIds));
-
-    // Group APIs by test flow
-    const testFlowApisMap = testFlowApiAssociations.reduce(
-      (acc, item) => {
-        if (!acc[item.testFlowId]) {
-          acc[item.testFlowId] = [];
-        }
-        acc[item.testFlowId].push({
-          id: item.apiId,
-          name: item.apiName
-        });
-        return acc;
-      },
-      {} as Record<number, { id: number; name: string }[]>
-    );
-
-    // Add APIs to each test flow
-    const testFlowsWithApis = userTestFlows.map((flow) => ({
-      ...flow,
-      apis: testFlowApisMap[flow.id] || []
-    }));
-
-    return json({ testFlows: testFlowsWithApis });
+    return json({ testFlows });
   } catch (error) {
     console.error('Error fetching test flows:', error);
     return new Response(JSON.stringify({ error: 'Failed to fetch test flows' }), {
@@ -97,57 +50,26 @@ export async function POST({ request, locals }: RequestEvent) {
       });
     }
 
-    // Verify all APIs exist and belong to the user
-    const userApis = await db
-      .select({ id: apis.id })
-      .from(apis)
-      .where(and(eq(apis.userId, locals.user.userId), inArray(apis.id, apiIds)));
-
-    if (userApis.length !== apiIds.length) {
-      return new Response(
-        JSON.stringify({ error: 'One or more APIs not found or do not belong to the user' }),
-        {
-          status: 400,
-          headers: { 'Content-Type': 'application/json' }
-        }
-      );
-    }
-
-    // Create default flow JSON structure if not provided
-    const defaultFlowJson = {
-      settings: { api_hosts: {} },
-      steps: [],
-    };
-
-    // Insert the test flow
-    const [newTestFlow] = await db
-      .insert(testFlows)
-      .values({
-        name,
-        description,
-        userId: locals.user.userId,
-        flowJson: flowJson || defaultFlowJson
-      })
-      .returning();
-
-    // Insert API associations
-    if (newTestFlow) {
-      await db.insert(testFlowApis).values(
-        apiIds.map((apiId) => ({
-          testFlowId: newTestFlow.id,
-          apiId
-        }))
-      );
-    }
-
-    return json({
-      testFlow: {
-        ...newTestFlow,
-        apis: apiIds.map((id) => ({ id }))
-      }
+    // Use the service to create the test flow
+    const result = await createBasicTestFlow(locals.user.userId, {
+      name,
+      description,
+      apiIds,
+      flowJson
     });
+
+    return json(result);
   } catch (error) {
     console.error('Error creating test flow:', error);
+    
+    // Handle specific service errors
+    if (error instanceof Error && error.message.includes('APIs not found')) {
+      return new Response(JSON.stringify({ error: error.message }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
     return new Response(JSON.stringify({ error: 'Failed to create test flow' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
@@ -176,13 +98,10 @@ export async function DELETE({ request, locals }: RequestEvent) {
       });
     }
 
-    // Check if the test flow exists and belongs to the user
-    const [existingTestFlow] = await db
-      .select()
-      .from(testFlows)
-      .where(and(eq(testFlows.id, id), eq(testFlows.userId, locals.user.userId)));
+    // Use the service to delete the test flow
+    const deleted = await deleteTestFlow(id, locals.user.userId);
 
-    if (!existingTestFlow) {
+    if (!deleted) {
       return new Response(
         JSON.stringify({ error: 'Test flow not found or does not belong to the user' }),
         {
@@ -191,12 +110,6 @@ export async function DELETE({ request, locals }: RequestEvent) {
         }
       );
     }
-
-    // Delete test flow API associations first (due to foreign key constraints)
-    await db.delete(testFlowApis).where(eq(testFlowApis.testFlowId, id));
-
-    // Delete the test flow
-    await db.delete(testFlows).where(eq(testFlows.id, id));
 
     return json({ success: true, id });
   } catch (error) {

@@ -1,9 +1,7 @@
 import { json } from '@sveltejs/kit';
-import { db } from '$lib/server/db/drizzle';
-import { testFlows, testFlowApis, apis } from '$lib/server/db/schema';
-import { eq, and, inArray } from 'drizzle-orm';
 import type { RequestEvent } from '@sveltejs/kit';
-import { getTestFlow } from '$lib/server/service/test_flows/test_flow';
+import { getTestFlow } from '$lib/server/service/test_flows/get_test_flow';
+import { updateTestFlow } from '$lib/server/service/test_flows/update_test_flow';
 
 // Get a specific test flow by ID
 export async function GET({ params, locals }: RequestEvent) {
@@ -68,22 +66,6 @@ export async function PUT({ params, request, locals }: RequestEvent) {
       });
     }
 
-    // Check if the test flow exists and belongs to the user
-    const [existingTestFlow] = await db
-      .select()
-      .from(testFlows)
-      .where(and(eq(testFlows.id, id), eq(testFlows.userId, locals.user.userId)));
-
-    if (!existingTestFlow) {
-      return new Response(
-        JSON.stringify({ error: 'Test flow not found or does not belong to the user' }),
-        {
-          status: 404,
-          headers: { 'Content-Type': 'application/json' }
-        }
-      );
-    }
-
     const body = await request.json();
     const { name, description, apiIds, flowJson } = body;
 
@@ -95,72 +77,36 @@ export async function PUT({ params, request, locals }: RequestEvent) {
       });
     }
 
-    // Update the test flow
-    const [updatedTestFlow] = await db
-      .update(testFlows)
-      .set({
-        name,
-        description,
-        flowJson: flowJson || existingTestFlow.flowJson,
-        updatedAt: new Date()
-      })
-      .where(eq(testFlows.id, id))
-      .returning();
+    // Use the service to update the test flow
+    const result = await updateTestFlow(id, locals.user.userId, {
+      name,
+      description,
+      apiIds,
+      flowJson
+    });
 
-    // Update API associations if provided
-    if (apiIds && Array.isArray(apiIds)) {
-      // Verify all APIs exist and belong to the user
-      const userApis = await db
-        .select({ id: apis.id })
-        .from(apis)
-        .where(and(eq(apis.userId, locals.user.userId), inArray(apis.id, apiIds)));
-
-      if (userApis.length !== apiIds.length) {
-        return new Response(
-          JSON.stringify({ error: 'One or more APIs not found or do not belong to the user' }),
-          {
-            status: 400,
-            headers: { 'Content-Type': 'application/json' }
-          }
-        );
-      }
-
-      // Delete existing associations
-      await db.delete(testFlowApis).where(eq(testFlowApis.testFlowId, id));
-
-      // Insert new associations
-      if (apiIds.length > 0) {
-        await db.insert(testFlowApis).values(
-          apiIds.map((apiId) => ({
-            testFlowId: id,
-            apiId
-          }))
-        );
-      }
-
-      // Get the updated API associations
-      const updatedApis = await db
-        .select({
-          id: apis.id,
-          name: apis.name
-        })
-        .from(testFlowApis)
-        .innerJoin(apis, eq(testFlowApis.apiId, apis.id))
-        .where(eq(testFlowApis.testFlowId, id));
-
-      return json({
-        testFlow: {
-          ...updatedTestFlow,
-          apis: updatedApis
+    if (!result) {
+      return new Response(
+        JSON.stringify({ error: 'Test flow not found or does not belong to the user' }),
+        {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' }
         }
+      );
+    }
+
+    return json(result);
+  } catch (error) {
+    console.error('Error updating test flow:', error);
+    
+    // Handle specific service errors
+    if (error instanceof Error && error.message.includes('APIs not found')) {
+      return new Response(JSON.stringify({ error: error.message }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
       });
     }
 
-    return json({
-      testFlow: updatedTestFlow
-    });
-  } catch (error) {
-    console.error('Error updating test flow:', error);
     return new Response(JSON.stringify({ error: 'Failed to update test flow' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }

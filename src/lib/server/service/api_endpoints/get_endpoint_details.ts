@@ -5,6 +5,9 @@ interface GetEndpointDetailsParams {
   userId?: number;
 }
 
+/**
+ * Get details for a single API endpoint
+ */
 export async function getEndpointDetails(params: GetEndpointDetailsParams) {
   const { endpointId, userId } = params;
 
@@ -22,6 +25,10 @@ interface GetMultipleEndpointsParams {
   userId?: number;
 }
 
+/**
+ * Get details for multiple API endpoints
+ * This function is maintained for backward compatibility but now directly uses the repository
+ */
 export async function getMultipleEndpoints(params: GetMultipleEndpointsParams) {
   const { endpointIds, userId } = params;
 
