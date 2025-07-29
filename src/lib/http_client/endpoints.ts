@@ -25,6 +25,21 @@ export interface SearchEndpointResult {
   relevanceScore: number;
 }
 
+export interface EndpointDetails {
+  id: number;
+  apiId: number;
+  path: string;
+  method: string;
+  operationId?: string;
+  summary?: string;
+  description?: string;
+  tags?: string[];
+  requestSchema?: unknown; // JSON schema for request body
+  responseSchema?: unknown; // JSON schema for response body
+  parameters?: unknown; // Parameters definition (path, query, header params)
+  createdAt: string;
+}
+
 export interface SearchEndpointsResponse {
   success: boolean;
   data: SearchEndpointResult[];
@@ -62,7 +77,7 @@ export async function searchEndpoints(params: SearchEndpointsParams): Promise<Se
   }
 }
 
-export async function getEndpointById(endpointId: number): Promise<SearchEndpointResult> {
+export async function getEndpointById(endpointId: number): Promise<EndpointDetails> {
   try {
     const response = await fetchWithAuth(`/api/endpoints/${endpointId}`, {
       method: 'GET',

@@ -3,7 +3,8 @@
   import SmartEndpointSelector from './SmartEndpointSelector.svelte';
   import FlowRunner from './FlowRunner.svelte';
   import { fade } from 'svelte/transition';
-  import type { TestFlowData, Endpoint, ExecutionState, EndpointExecutionState } from './types';
+  import type { TestFlowData, Endpoint, ExecutionState, EndpointExecutionState, Parameter } from './types';
+  import { getEndpointById, type EndpointDetails } from '$lib/http_client/endpoints';
 
   import { writable } from 'svelte/store';
   import { onMount, onDestroy } from 'svelte';
@@ -15,6 +16,7 @@
 
   let isRunning = false;
   let flowRunner: FlowRunner;
+  let isLoadingEndpointDetails = false; // Add loading state for endpoint fetching
 
   // Create a store to track execution state changes - we'll use this directly
   // instead of maintaining a separate executionState variable
@@ -36,19 +38,86 @@
   };
 
   // Function to handle endpoint selection for a specific step
-  function handleEndpointSelected(event: CustomEvent<Endpoint>, stepIndex: number) {
+  async function handleEndpointSelected(event: CustomEvent<Endpoint>, stepIndex: number) {
     const selectedEndpoint = event.detail;
 
-    // Add endpoint to the step
-    flowData.steps[stepIndex].endpoints.push({
-      endpoint_id: selectedEndpoint.id,
-      api_id: selectedEndpoint.apiId, // Include API ID for multi-API support
-      pathParams: {},
-      queryParams: {}
-    });
+    // Set loading state
+    isLoadingEndpointDetails = true;
 
-    // Trigger change event to save
-    handleChange();
+    try {
+      // Fetch detailed endpoint information from the API
+      console.log(`Fetching details for endpoint ${selectedEndpoint.id}...`);
+      const endpointDetails = await getEndpointById(selectedEndpoint.id);
+      console.log('Endpoint details fetched successfully:', endpointDetails);
+      
+      // Add endpoint to the step with the fetched details
+      flowData.steps[stepIndex].endpoints.push({
+        endpoint_id: selectedEndpoint.id,
+        api_id: selectedEndpoint.apiId, // Include API ID for multi-API support
+        pathParams: {},
+        queryParams: {}
+      });
+
+      // Store the detailed endpoint information in the flowData.endpoints array
+      // This ensures the endpoint details are available for other components
+      if (!flowData.endpoints) {
+        flowData.endpoints = [];
+      }
+      
+      // Check if endpoint already exists in the array to avoid duplicates
+      const existingEndpointIndex = flowData.endpoints.findIndex(ep => ep.id === selectedEndpoint.id);
+      if (existingEndpointIndex === -1) {
+        // Convert the API response (EndpointDetails) to match our Endpoint type
+        const endpointData: Endpoint = {
+          id: endpointDetails.id,
+          apiId: endpointDetails.apiId,
+          path: endpointDetails.path,
+          method: endpointDetails.method,
+          operationId: endpointDetails.operationId,
+          summary: endpointDetails.summary,
+          description: endpointDetails.description,
+          tags: endpointDetails.tags,
+          // Include the detailed schema and parameter information
+          requestSchema: endpointDetails.requestSchema,
+          responseSchema: endpointDetails.responseSchema,
+          parameters: endpointDetails.parameters as Parameter[] | undefined
+        };
+        flowData.endpoints.push(endpointData);
+        console.log('Full endpoint details stored in flowData.endpoints:', {
+          id: endpointData.id,
+          path: endpointData.path,
+          method: endpointData.method,
+          hasRequestSchema: !!endpointData.requestSchema,
+          hasResponseSchema: !!endpointData.responseSchema,
+          hasParameters: !!endpointData.parameters
+        });
+      } else {
+        console.log('Endpoint already exists in flowData.endpoints, skipping duplicate');
+      }
+
+      // Trigger change event to save
+      handleChange();
+    } catch (error) {
+      console.error('Failed to fetch endpoint details:', error);
+      // Still add the endpoint to the step with basic information
+      // This ensures the UI doesn't break if the API call fails
+      flowData.steps[stepIndex].endpoints.push({
+        endpoint_id: selectedEndpoint.id,
+        api_id: selectedEndpoint.apiId,
+        pathParams: {},
+        queryParams: {}
+      });
+      
+      // Trigger change event to save even with partial data
+      handleChange();
+      
+      // You could add a toast notification here to inform the user
+      // For now, we'll just log the error and continue
+      console.warn('Continuing with basic endpoint information due to API error');
+    } finally {
+      // Clear loading state
+      isLoadingEndpointDetails = false;
+    }
   }
 
   const dispatch = createEventDispatcher();
@@ -496,8 +565,17 @@
             <SmartEndpointSelector
               apiHosts={flowData?.settings?.api_hosts || {}}
               on:select={(e) => handleEndpointSelected(e, stepIndex)}
-              disabled={isRunning}
+              disabled={isRunning || isLoadingEndpointDetails}
             />
+            {#if isLoadingEndpointDetails}
+              <div class="mt-2 flex items-center text-sm text-blue-600">
+                <svg class="mr-2 h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Loading endpoint details...
+              </div>
+            {/if}
           </div>
         </StepEditor>
       </div>

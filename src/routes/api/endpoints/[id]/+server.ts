@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { getEndpointSummary } from '$lib/server/service/api_endpoints/get_endpoint_details';
+import { getEndpointDetails } from '$lib/server/service/api_endpoints/get_endpoint_details';
 
 export const GET: RequestHandler = async ({ locals, params }) => {
   try {
@@ -20,13 +20,13 @@ export const GET: RequestHandler = async ({ locals, params }) => {
       return json({ error: 'Invalid endpoint ID' }, { status: 400 });
     }
 
-    // Fetch endpoint summary via service layer
-    const endpoint = await getEndpointSummary({
+    // Fetch endpoint details via service layer (including schemas and parameters)
+    const endpoint = await getEndpointDetails({
       endpointId,
       userId
     });
 
-    // Return endpoint summary
+    // Return full endpoint details
     return json({
       success: true,
       data: endpoint
