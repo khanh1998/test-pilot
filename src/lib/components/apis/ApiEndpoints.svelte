@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getApiDetails } from '$lib/http_client/apis';
-  import { getApiEndpoints } from '$lib/http_client/api-endpoints';
+  import { getApiDetails, getApiEndpoints } from '$lib/http_client/apis';
   import type { Api, ApiEndpoint } from '$lib/types/api';
+  import EndpointDetails from './EndpointDetails.svelte';
 
   export let apiId: number;
 
@@ -32,6 +32,10 @@
   let selectedTag: string = '';
   let searchQuery = '';
 
+  // Endpoint details state
+  let showEndpointDetails = false;
+  let selectedEndpoint: ApiEndpoint | null = null;
+
   // Filter endpoints by tag and search query
   $: filteredEndpointPaths = Object.keys(groupedEndpoints).filter((path) => {
     const endpointsForPath = groupedEndpoints[path];
@@ -55,12 +59,12 @@
 
   onMount(async () => {
     try {
-      const apiDetails = await getApiDetails(apiId.toString());
+      const apiDetails = await getApiDetails(apiId);
       if (apiDetails) {
         api = apiDetails.api;
       }
 
-      const apiEndpoints = await getApiEndpoints(apiId.toString());
+      const apiEndpoints = await getApiEndpoints(apiId);
       if (apiEndpoints) {
         endpoints = apiEndpoints.endpoints;
       }
@@ -85,6 +89,16 @@
   function resetFilters() {
     selectedTag = '';
     searchQuery = '';
+  }
+
+  function showEndpointDetail(endpoint: ApiEndpoint) {
+    selectedEndpoint = endpoint;
+    showEndpointDetails = true;
+  }
+
+  function closeEndpointDetails() {
+    showEndpointDetails = false;
+    selectedEndpoint = null;
   }
 </script>
 
@@ -173,7 +187,13 @@
             <div>
               {#each groupedEndpoints[path] as endpoint (endpoint.id)}
                 <div class="border-t border-gray-200 first:border-t-0">
-                  <div class="px-4 py-4 hover:bg-gray-50">
+                  <div 
+                    class="cursor-pointer px-4 py-4 transition-colors hover:bg-blue-50"
+                    on:click={() => showEndpointDetail(endpoint)}
+                    on:keydown={(e) => e.key === 'Enter' && showEndpointDetail(endpoint)}
+                    role="button"
+                    tabindex="0"
+                  >
                     <div class="flex items-start">
                       <span
                         class="mr-3 inline-flex rounded-md px-2 py-1 text-xs font-semibold {getMethodColor(
@@ -199,8 +219,8 @@
                             {#each endpoint.tags as tag (tag)}
                               <span
                                 class="inline-flex cursor-pointer items-center rounded bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 hover:bg-blue-200"
-                                on:click={() => (selectedTag = tag)}
-                                on:keydown={(e) => e.key === 'Enter' && (selectedTag = tag)}
+                                on:click|stopPropagation={() => (selectedTag = tag)}
+                                on:keydown|stopPropagation={(e) => e.key === 'Enter' && (selectedTag = tag)}
                                 tabindex="0"
                                 role="button"
                               >
@@ -209,6 +229,11 @@
                             {/each}
                           </div>
                         {/if}
+                      </div>
+                      <div class="ml-4 flex-shrink-0">
+                        <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                        </svg>
                       </div>
                     </div>
                   </div>
@@ -221,3 +246,10 @@
     {/if}
   {/if}
 </div>
+
+<!-- Endpoint Details Panel -->
+<EndpointDetails
+  bind:isOpen={showEndpointDetails}
+  endpoint={selectedEndpoint}
+  on:close={closeEndpointDetails}
+/>
