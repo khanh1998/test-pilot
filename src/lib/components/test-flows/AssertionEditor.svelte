@@ -783,9 +783,12 @@
                       {:else if assertion.expected_value_type === 'boolean' || getDefaultValueType(assertion.assertion_type) === 'boolean'}
                         <select 
                           id="expected-value-{i}" 
-                          bind:value={assertion.expected_value} 
+                          value={String(assertion.expected_value)}
                           class="w-full rounded border px-1.5 py-0.5 text-xs"
-                          on:change={handleAssertionChange}
+                          on:change={(e) => {
+                            assertion.expected_value = e.currentTarget.value === 'true';
+                            handleAssertionChange();
+                          }}
                         >
                           <option value="true">true</option>
                           <option value="false">false</option>
@@ -1033,8 +1036,11 @@
               {:else if newAssertion.expected_value_type === 'boolean'}
                 <select 
                   id="new-expected-value"
-                  bind:value={newAssertion.expected_value}
+                  value={String(newAssertion.expected_value)}
                   class="w-full rounded border px-1.5 py-0.5 text-xs"
+                  on:change={(e) => {
+                    newAssertion.expected_value = e.currentTarget.value === 'true';
+                  }}
                 >
                   <option value="true">true</option>
                   <option value="false">false</option>
