@@ -27,6 +27,7 @@
     expected_value: unknown;
     expected_value_type?: ExpectedValueType;
     enabled: boolean;
+    is_template_expression?: boolean; // Add template expression support
   }> = [];
   
   // Value types for assertion expected values
@@ -42,6 +43,7 @@
     expected_value: unknown;
     expected_value_type?: ExpectedValueType;
     enabled: boolean;
+    is_template_expression?: boolean; // Add template expression support
   } = {
     id: crypto.randomUUID(),
     data_source: 'response' as AssertionDataSource,
@@ -50,7 +52,8 @@
     operator: 'equals' as AssertionOperator,
     expected_value: 200,
     expected_value_type: 'number',
-    enabled: true
+    enabled: true,
+    is_template_expression: false
   };
   
   // Define available operators for each assertion type
@@ -315,7 +318,8 @@
       operator: 'equals' as AssertionOperator,
       expected_value: 200,
       expected_value_type: 'number',
-      enabled: true
+      enabled: true,
+      is_template_expression: false
     };
   }
   
@@ -587,15 +591,22 @@
                 <div class="text-xs text-gray-700 mb-2">
                   <span class="font-semibold">{assertion.data_id}</span>
                   <span class="mx-1">{getOperatorDisplayName(assertion.operator)}</span>
-                  <span class="font-mono bg-gray-100 px-1 py-0.5 rounded">
-                    {#if Array.isArray(assertion.expected_value)}
-                      {JSON.stringify(assertion.expected_value)}
-                    {:else if typeof assertion.expected_value === 'object' && assertion.expected_value !== null}
-                      {JSON.stringify(assertion.expected_value)}
-                    {:else}
+                  {#if assertion.is_template_expression}
+                    <span class="font-mono bg-yellow-100 px-1 py-0.5 rounded text-amber-800 border border-yellow-200">
                       {assertion.expected_value}
-                    {/if}
-                  </span>
+                    </span>
+                    <span class="ml-1 text-xs bg-amber-100 text-amber-700 px-1 py-0.5 rounded">template</span>
+                  {:else}
+                    <span class="font-mono bg-gray-100 px-1 py-0.5 rounded">
+                      {#if Array.isArray(assertion.expected_value)}
+                        {JSON.stringify(assertion.expected_value)}
+                      {:else if typeof assertion.expected_value === 'object' && assertion.expected_value !== null}
+                        {JSON.stringify(assertion.expected_value)}
+                      {:else}
+                        {assertion.expected_value}
+                      {/if}
+                    </span>
+                  {/if}
                 </div>                <div class="grid grid-cols-2 gap-x-3 gap-y-2">
                   <div>
                     <label for="data-source-{i}" class="block text-xs font-medium text-gray-500">
@@ -676,30 +687,72 @@
 
                   {#if assertion.operator !== 'exists'}
                     <div>
-                      <div class="flex items-center justify-between">
+                      <div class="flex items-center justify-between mb-1">
                         <label for="expected-value-{i}" class="block text-xs font-medium text-gray-500">
                           Expected Value:
                         </label>
                         
-                        {#if assertion.assertion_type === 'json_body'}
-                          <div class="flex items-center">
-                            <span class="text-xs text-gray-500 mr-1">Type:</span>
-                            <select
-                              class="text-xs border rounded px-1 py-0 bg-gray-50"
-                              value={assertion.expected_value_type || getDefaultValueType(assertion.assertion_type)}
-                              on:change={(e) => handleExpectedValueTypeChange(assertion, (e.target as HTMLSelectElement).value as ExpectedValueType)}
-                            >
-                              <option value="string">String</option>
-                              <option value="number">Number</option>
-                              <option value="boolean">Boolean</option>
-                              <option value="object">Object</option>
-                              <option value="array">Array</option>
-                            </select>
-                          </div>
-                        {/if}
+                        <!-- Template Expression Toggle -->
+                        <div class="flex items-center gap-2">
+                          <label class="flex items-center text-xs text-gray-600">
+                            <input
+                              type="checkbox"
+                              bind:checked={assertion.is_template_expression}
+                              class="mr-1 rounded border-gray-300"
+                              on:change={() => {
+                                // Reset expected value when toggling template mode
+                                if (assertion.is_template_expression) {
+                                  assertion.expected_value = '';
+                                } else {
+                                  // Set appropriate default based on type
+                                  if (assertion.expected_value_type === 'number') {
+                                    assertion.expected_value = 0;
+                                  } else if (assertion.expected_value_type === 'boolean') {
+                                    assertion.expected_value = false;
+                                  } else {
+                                    assertion.expected_value = '';
+                                  }
+                                }
+                                handleAssertionChange();
+                              }}
+                            />
+                            Use Template
+                          </label>
+                          
+                          {#if assertion.assertion_type === 'json_body' && !assertion.is_template_expression}
+                            <div class="flex items-center">
+                              <span class="text-xs text-gray-500 mr-1">Type:</span>
+                              <select
+                                class="text-xs border rounded px-1 py-0 bg-gray-50"
+                                value={assertion.expected_value_type || getDefaultValueType(assertion.assertion_type)}
+                                on:change={(e) => handleExpectedValueTypeChange(assertion, (e.target as HTMLSelectElement).value as ExpectedValueType)}
+                              >
+                                <option value="string">String</option>
+                                <option value="number">Number</option>
+                                <option value="boolean">Boolean</option>
+                                <option value="object">Object</option>
+                                <option value="array">Array</option>
+                              </select>
+                            </div>
+                          {/if}
+                        </div>
                       </div>
                       
-                      {#if isRangeOperator(assertion.operator)}
+                      {#if assertion.is_template_expression}
+                        <!-- Template Expression Input -->
+                        <div>
+                          <textarea
+                            id="expected-value-{i}"
+                            bind:value={assertion.expected_value}
+                            class="w-full rounded border px-1.5 py-0.5 text-xs font-mono bg-yellow-50 border-yellow-200"
+                            rows="2"
+                            placeholder="{`{{res:step1-0.$.data.id}} or {{{res:step1-0.$.user.active}}}`}"
+                            on:change={handleAssertionChange}
+                          ></textarea>
+                        </div>
+                      {:else}
+                        <!-- Existing fixed value inputs -->
+                        {#if isRangeOperator(assertion.operator)}
                         <!-- Special handling for between/not_between which need array of two numbers -->
                         <div class="flex items-center gap-2">
                           {#if true}
@@ -813,6 +866,7 @@
                           on:change={handleAssertionChange}
                         />
                       {/if}
+                      {/if}
                     </div>
                   {/if}
                 </div>
@@ -908,55 +962,95 @@
 
           {#if newAssertion.operator !== 'exists'}
             <div>
-              <div class="flex items-center justify-between">
+              <div class="flex items-center justify-between mb-1">
                 <label for="new-expected-value" class="block text-xs font-medium text-gray-500">
                   Expected Value:
                 </label>
                 
-                {#if newAssertion.assertion_type === 'json_body'}
-                  <div class="flex items-center">
-                    <span class="text-xs text-gray-500 mr-1">Type:</span>
-                    <select
-                      class="text-xs border rounded px-1 py-0 bg-gray-50"
-                      bind:value={newAssertion.expected_value_type}
-                      on:change={(e) => {
-                        if (e.target && 'value' in e.target) {
-                          const newType = e.target.value as ExpectedValueType;
-                          
-                          // Reset the expected value based on the new type
-                          if (newType === 'number') {
+                <!-- Template Expression Toggle -->
+                <div class="flex items-center gap-2">
+                  <label class="flex items-center text-xs text-gray-600">
+                    <input
+                      type="checkbox"
+                      bind:checked={newAssertion.is_template_expression}
+                      class="mr-1 rounded border-gray-300"
+                      on:change={() => {
+                        // Reset expected value when toggling template mode
+                        if (newAssertion.is_template_expression) {
+                          newAssertion.expected_value = '';
+                        } else {
+                          // Set appropriate default based on type
+                          if (newAssertion.expected_value_type === 'number') {
                             newAssertion.expected_value = 0;
-                          } else if (newType === 'boolean') {
-                            newAssertion.expected_value = true;
-                          } else if (newType === 'object') {
-                            newAssertion.expected_value = '{}';
-                          } else if (newType === 'array') {
-                            newAssertion.expected_value = '[]';
+                          } else if (newAssertion.expected_value_type === 'boolean') {
+                            newAssertion.expected_value = false;
                           } else {
                             newAssertion.expected_value = '';
                           }
-                          
-                          // Check if the current operator is compatible with the new type
-                          const validOperators = getOperatorsForType(newAssertion.assertion_type, newType);
-                          
-                          // If the current operator isn't valid for the new type, select a compatible one
-                          if (!validOperators.includes(newAssertion.operator)) {
-                            newAssertion.operator = validOperators[0];
-                          }
                         }
                       }}
-                    >
-                      <option value="string">String</option>
-                      <option value="number">Number</option>
-                      <option value="boolean">Boolean</option>
-                      <option value="object">Object</option>
-                      <option value="array">Array</option>
-                    </select>
-                  </div>
-                {/if}
+                    />
+                    Use Template
+                  </label>
+                  
+                  {#if newAssertion.assertion_type === 'json_body' && !newAssertion.is_template_expression}
+                    <div class="flex items-center">
+                      <span class="text-xs text-gray-500 mr-1">Type:</span>
+                      <select
+                        class="text-xs border rounded px-1 py-0 bg-gray-50"
+                        bind:value={newAssertion.expected_value_type}
+                        on:change={(e) => {
+                          if (e.target && 'value' in e.target) {
+                            const newType = e.target.value as ExpectedValueType;
+                            
+                            // Reset the expected value based on the new type
+                            if (newType === 'number') {
+                              newAssertion.expected_value = 0;
+                            } else if (newType === 'boolean') {
+                              newAssertion.expected_value = true;
+                            } else if (newType === 'object') {
+                              newAssertion.expected_value = '{}';
+                            } else if (newType === 'array') {
+                              newAssertion.expected_value = '[]';
+                            } else {
+                              newAssertion.expected_value = '';
+                            }
+                            
+                            // Check if the current operator is compatible with the new type
+                            const validOperators = getOperatorsForType(newAssertion.assertion_type, newType);
+                            
+                            // If the current operator isn't valid for the new type, select a compatible one
+                            if (!validOperators.includes(newAssertion.operator)) {
+                              newAssertion.operator = validOperators[0];
+                            }
+                          }
+                        }}
+                      >
+                        <option value="string">String</option>
+                        <option value="number">Number</option>
+                        <option value="boolean">Boolean</option>
+                        <option value="object">Object</option>
+                        <option value="array">Array</option>
+                      </select>
+                    </div>
+                  {/if}
+                </div>
               </div>
               
-              {#if isRangeOperator(newAssertion.operator)}
+              {#if newAssertion.is_template_expression}
+                <!-- Template Expression Input -->
+                <div>
+                  <textarea
+                    id="new-expected-value"
+                    bind:value={newAssertion.expected_value}
+                    class="w-full rounded border px-1.5 py-0.5 text-xs font-mono bg-yellow-50 border-yellow-200"
+                    rows="2"
+                    placeholder="{`{{res:step1-0.$.data.id}} or {{{res:step1-0.$.user.active}}}`}"
+                  ></textarea>
+                </div>
+              {:else}
+                <!-- Existing fixed value inputs -->
+                {#if isRangeOperator(newAssertion.operator)}
                 <!-- Special handling for between/not_between which need array of two numbers -->
                 <div class="flex items-center gap-2">
                   {#if true}
@@ -1061,6 +1155,7 @@
                   bind:value={newAssertion.expected_value}
                   class="w-full rounded border px-1.5 py-0.5 text-xs"
                 />
+              {/if}
               {/if}
             </div>
           {/if}

@@ -63,12 +63,26 @@
   
   // Edit an existing parameter
   function startEditing(parameter: ExtendedFlowParameter) {
-    parameter.editing = true;
-    parameter.tempName = parameter.name;
-    parameter.tempType = parameter.type;
-    parameter.tempDefaultValue = parameter.defaultValue;
-    parameter.tempDescription = parameter.description || '';
-    parameter.tempRequired = parameter.required;
+    console.log('startEditing called for:', parameter.name, 'current editing state:', parameter.editing);
+    
+    // Find the parameter in the working array and update it to trigger reactivity
+    const paramIndex = workingParameters.findIndex(p => p === parameter);
+    console.log('Parameter index found:', paramIndex);
+    
+    if (paramIndex !== -1) {
+      workingParameters[paramIndex] = {
+        ...workingParameters[paramIndex],
+        editing: true,
+        tempName: parameter.name,
+        tempType: parameter.type,
+        tempDefaultValue: parameter.defaultValue,
+        tempDescription: parameter.description || '',
+        tempRequired: parameter.required
+      };
+      // Trigger reactivity
+      workingParameters = workingParameters;
+      console.log('Updated workingParameters, new editing state:', workingParameters[paramIndex].editing);
+    }
   }
   
   // Cancel editing a parameter
@@ -76,7 +90,16 @@
     if (parameter.isNew) {
       newParameter = null;
     } else {
-      parameter.editing = false;
+      // Find the parameter in the working array and update it to trigger reactivity
+      const paramIndex = workingParameters.findIndex(p => p === parameter);
+      if (paramIndex !== -1) {
+        workingParameters[paramIndex] = {
+          ...workingParameters[paramIndex],
+          editing: false
+        };
+        // Trigger reactivity
+        workingParameters = workingParameters;
+      }
     }
   }
   
@@ -112,20 +135,36 @@
     }
     
     // Apply the changes
-    parameter.name = parameter.tempName || '';
-    parameter.type = parameter.tempType as any;
-    parameter.defaultValue = parameter.tempDefaultValue;
-    parameter.description = parameter.tempDescription;
-    parameter.required = parameter.tempRequired === true;
+    const paramIndex = workingParameters.findIndex(p => p === parameter);
+    if (paramIndex !== -1) {
+      workingParameters[paramIndex] = {
+        ...workingParameters[paramIndex],
+        name: parameter.tempName || '',
+        type: parameter.tempType as any,
+        defaultValue: parameter.tempDefaultValue,
+        description: parameter.tempDescription,
+        required: parameter.tempRequired === true,
+        editing: false
+      };
+    } else {
+      // For direct assignment fallback
+      parameter.name = parameter.tempName || '';
+      parameter.type = parameter.tempType as any;
+      parameter.defaultValue = parameter.tempDefaultValue;
+      parameter.description = parameter.tempDescription;
+      parameter.required = parameter.tempRequired === true;
+      parameter.editing = false;
+    }
     
     // If it's a new parameter, add it to the working list
     if (parameter.isNew && newParameter === parameter) {
       workingParameters = [...workingParameters, parameter];
       newParameter = null;
+    } else {
+      // Trigger reactivity for existing parameters
+      workingParameters = workingParameters;
     }
     
-    // Turn off editing mode
-    parameter.editing = false;
     hasChanges = true;
     
     return true;
@@ -200,7 +239,7 @@
 >
   <!-- Completely transparent clickable overlay for the left side -->
   <div
-    class="absolute inset-y-0 right-0 left-0 bg-transparent transition-opacity duration-300 ease-in-out sm:right-[75%] md:right-[600px] lg:right-[500px]"
+    class="absolute inset-y-0 right-0 left-0 bg-transparent transition-opacity duration-300 ease-in-out sm:right-[85%] md:right-[750px] lg:right-[650px]"
     on:click={closeEditor}
     role="presentation"
     aria-hidden="true"
@@ -208,7 +247,7 @@
 
   <!-- The panel itself - responsive sizing for different screens -->
   <div
-    class="fixed inset-y-0 right-0 z-50 w-full overflow-y-auto bg-white shadow-xl transition-transform duration-300 ease-in-out sm:w-[75%] md:w-[600px] lg:w-[500px] {!isOpen
+    class="fixed inset-y-0 right-0 z-50 w-full overflow-y-auto bg-white shadow-xl transition-transform duration-300 ease-in-out sm:w-[85%] md:w-[750px] lg:w-[650px] {!isOpen
       ? 'pointer-events-none'
       : ''}"
     style="transform: {isOpen ? 'translateX(0)' : 'translateX(100%)'};"
@@ -278,19 +317,19 @@
               </button>
             </div>
           {:else}
-            <div class="rounded-md border border-gray-200 bg-gray-50 shadow-sm">
-              <table class="w-full border-collapse">
+            <div class="rounded-md border border-gray-200 bg-gray-50 shadow-sm overflow-x-auto">
+              <table class="w-full min-w-[600px] border-collapse">
                 <thead>
                   <tr class="border-b bg-gray-100 text-left">
-                    <th class="px-3 py-2 text-xs font-medium text-gray-600">Name</th>
-                    <th class="px-3 py-2 text-xs font-medium text-gray-600">Type</th>
-                    <th class="px-3 py-2 text-xs font-medium text-gray-600">Default Value</th>
-                    <th class="w-16 px-3 py-2 text-xs font-medium text-gray-600">Required</th>
-                    <th class="w-20 px-3 py-2"></th>
+                    <th class="px-3 py-2 text-xs font-medium text-gray-600 min-w-[120px]">Name</th>
+                    <th class="px-3 py-2 text-xs font-medium text-gray-600 min-w-[80px]">Type</th>
+                    <th class="px-3 py-2 text-xs font-medium text-gray-600 min-w-[120px]">Default Value</th>
+                    <th class="w-16 px-3 py-2 text-xs font-medium text-gray-600 text-center">Required</th>
+                    <th class="w-24 px-3 py-2 text-xs font-medium text-gray-600 text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {#each workingParameters as parameter, index (parameter.name)}
+                  {#each workingParameters as parameter, index (index)}
                     <tr class="group border-b border-gray-200 last:border-0 hover:bg-gray-50">
                       {#if parameter.editing}
                         <td class="px-3 py-2">
@@ -359,8 +398,12 @@
                         <td class="px-3 py-2 text-right whitespace-nowrap">
                           <div class="flex justify-end space-x-1">
                             <button
-                              class="text-blue-600 hover:text-blue-800"
-                              on:click={() => applyChanges(parameter)}
+                              type="button"
+                              class="text-blue-600 hover:text-blue-800 p-1"
+                              on:click={(e) => {
+                                e.stopPropagation();
+                                applyChanges(parameter);
+                              }}
                               aria-label="Apply changes"
                             >
                               <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
@@ -372,8 +415,12 @@
                               </svg>
                             </button>
                             <button
-                              class="text-gray-400 hover:text-gray-600"
-                              on:click={() => cancelEditing(parameter)}
+                              type="button"
+                              class="text-gray-400 hover:text-gray-600 p-1"
+                              on:click={(e) => {
+                                e.stopPropagation();
+                                cancelEditing(parameter);
+                              }}
                               aria-label="Cancel editing"
                             >
                               <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
@@ -415,10 +462,16 @@
                           {/if}
                         </td>
                         <td class="px-3 py-2 text-right">
-                          <div class="flex justify-end opacity-0 space-x-1 group-hover:opacity-100 transition-opacity">
+                          <div class="flex justify-end space-x-1">
                             <button
-                              class="text-gray-400 hover:text-blue-600"
-                              on:click={() => startEditing(parameter)}
+                              type="button"
+                              class="text-gray-400 hover:text-blue-600 p-1"
+                              on:click={(e) => {
+                                e.stopPropagation();
+                                console.log('Edit button clicked for parameter:', parameter.name);
+                                startEditing(parameter);
+                                console.log('Parameter after edit:', parameter);
+                              }}
                               aria-label="Edit parameter"
                             >
                               <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
@@ -426,8 +479,12 @@
                               </svg>
                             </button>
                             <button
-                              class="text-gray-400 hover:text-red-600"
-                              on:click={() => removeParameter(parameter, index)}
+                              type="button"
+                              class="text-gray-400 hover:text-red-600 p-1"
+                              on:click={(e) => {
+                                e.stopPropagation();
+                                removeParameter(parameter, index);
+                              }}
                               aria-label="Remove parameter"
                             >
                               <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
@@ -513,8 +570,12 @@
                       <td class="px-3 py-2 text-right whitespace-nowrap">
                         <div class="flex justify-end space-x-1">
                           <button
-                            class="text-blue-600 hover:text-blue-800"
-                            on:click={() => newParameter && applyChanges(newParameter)}
+                            type="button"
+                            class="text-blue-600 hover:text-blue-800 p-1"
+                            on:click={(e) => {
+                              e.stopPropagation();
+                              newParameter && applyChanges(newParameter);
+                            }}
                             aria-label="Apply changes"
                           >
                             <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
@@ -526,8 +587,12 @@
                             </svg>
                           </button>
                           <button
-                            class="text-gray-400 hover:text-gray-600"
-                            on:click={() => newParameter && cancelEditing(newParameter)}
+                            type="button"
+                            class="text-gray-400 hover:text-gray-600 p-1"
+                            on:click={(e) => {
+                              e.stopPropagation();
+                              newParameter && cancelEditing(newParameter);
+                            }}
                             aria-label="Cancel"
                           >
                             <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">

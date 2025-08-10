@@ -60,6 +60,8 @@ export interface Assertion {
   operator: AssertionOperator;
   expected_value: unknown;
   enabled: boolean;
+  // Add field to indicate if expected_value contains template expressions
+  is_template_expression?: boolean;
 }
 
 /**
@@ -83,5 +85,7 @@ export interface AssertionResult {
   passed: boolean;
   actualValue: unknown;
   expectedValue: unknown;
+  originalExpectedValue?: unknown; // Store original template for reference
   message?: string;
+  error?: string;
 }

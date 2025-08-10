@@ -2,31 +2,61 @@
  * Assertion engine for evaluating API response assertions
  */
 import { getOperator } from './operators';
-import type { Assertion, AssertionResult } from './types';
+import type { Assertion, AssertionResult, AssertionOperator } from './types';
+import { resolveAssertionExpectedValue, type TemplateContext } from './template';
 
 /**
- * Evaluate a single assertion against actual data
+ * Evaluate a single assertion against actual data with optional template context
  * 
  * @param assertion The assertion configuration
  * @param actualValue The value extracted from the response or transformed data
+ * @param templateContext Optional context for resolving template expressions
  * @returns An assertion result object with pass/fail status and additional info
  */
-export function evaluateAssertion(assertion: Assertion, actualValue: unknown): AssertionResult {
+export function evaluateAssertion(
+  assertion: Assertion, 
+  actualValue: unknown, 
+  templateContext?: TemplateContext
+): AssertionResult {
   try {
+    let resolvedExpectedValue = assertion.expected_value;
+    let originalExpectedValue = assertion.expected_value;
+
+    // Resolve template expressions if enabled and context is provided
+    if (assertion.is_template_expression && templateContext) {
+      try {
+        resolvedExpectedValue = resolveAssertionExpectedValue(assertion.expected_value, templateContext);
+      } catch (error) {
+        return {
+          passed: false,
+          actualValue,
+          expectedValue: resolvedExpectedValue,
+          originalExpectedValue,
+          error: `Template resolution failed: ${error instanceof Error ? error.message : String(error)}`
+        };
+      }
+    }
+
     // Get the operator implementation
     const operator = getOperator(assertion.operator);
     
-    // Evaluate the assertion
-    const passed = operator.evaluate(actualValue, assertion.expected_value);
+    // Evaluate the assertion using resolved expected value
+    const passed = operator.evaluate(actualValue, resolvedExpectedValue);
+    
+    // Create message with proper context
+    const messageExpectedValue = assertion.is_template_expression 
+      ? `${originalExpectedValue} → ${JSON.stringify(resolvedExpectedValue)}`
+      : JSON.stringify(resolvedExpectedValue);
     
     // Return the result
     return {
       passed,
       actualValue,
-      expectedValue: assertion.expected_value,
+      expectedValue: resolvedExpectedValue,
+      originalExpectedValue: assertion.is_template_expression ? originalExpectedValue : undefined,
       message: passed 
-        ? `Assertion passed: ${assertion.assertion_type} ${assertion.data_id} ${assertion.operator} ${JSON.stringify(assertion.expected_value)}`
-        : `Assertion failed: ${assertion.assertion_type} ${assertion.data_id} ${assertion.operator} ${JSON.stringify(assertion.expected_value)}, actual value: ${JSON.stringify(actualValue)}`
+        ? `Assertion passed: ${assertion.assertion_type} ${assertion.data_id} ${assertion.operator} ${messageExpectedValue}`
+        : `Assertion failed: ${assertion.assertion_type} ${assertion.data_id} ${assertion.operator} ${messageExpectedValue}, actual value: ${JSON.stringify(actualValue)}`
     };
   } catch (error) {
     // Handle any errors during evaluation
@@ -34,6 +64,7 @@ export function evaluateAssertion(assertion: Assertion, actualValue: unknown): A
       passed: false,
       actualValue,
       expectedValue: assertion.expected_value,
+      originalExpectedValue: assertion.is_template_expression ? assertion.expected_value : undefined,
       message: `Error evaluating assertion: ${error instanceof Error ? error.message : String(error)}`
     };
   }
@@ -94,6 +125,7 @@ export async function extractAssertionValue(
  * @param responseData Parsed response data
  * @param transformedData Optional transformed data
  * @param responseTime Response time in milliseconds
+ * @param templateContext Optional context for template expressions (responses, transformed data, parameters)
  * @returns Object with results and overall pass/fail status
  */
 export async function runAssertions(
@@ -101,7 +133,8 @@ export async function runAssertions(
   response: Response,
   responseData: unknown,
   transformedData: Record<string, unknown> | null = null,
-  responseTime: number
+  responseTime: number,
+  templateContext?: TemplateContext
 ): Promise<{
   passed: boolean;
   results: AssertionResult[];
@@ -127,8 +160,8 @@ export async function runAssertions(
         responseTime
       );
       
-      // Evaluate the assertion
-      const result = evaluateAssertion(assertion, actualValue);
+      // Evaluate the assertion with template context
+      const result = evaluateAssertion(assertion, actualValue, templateContext);
       results.push(result);
       
       // Track overall status
@@ -144,6 +177,7 @@ export async function runAssertions(
         passed: false,
         actualValue: null,
         expectedValue: assertion.expected_value,
+        originalExpectedValue: assertion.is_template_expression ? assertion.expected_value : undefined,
         message: `Error extracting assertion value: ${errorMessage}`
       });
       

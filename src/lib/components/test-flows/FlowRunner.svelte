@@ -3,6 +3,8 @@
   import type { TestFlowData, FlowParameter, ExecutionState, FlowStep, StepEndpoint } from './types';
   // Import assertion types (will be used when typing the endpoint.assertions array)
   import type { Assertion } from '$lib/assertions/types';
+  import { runAssertions } from '$lib/assertions/engine';
+  import { resolveTemplate, createTemplateContextFromFlowRunner, type TemplateContext } from '$lib/template';
   import FlowParameterEditor from './FlowParameterEditor.svelte';
 
   // Props
@@ -149,11 +151,7 @@ import {
     }
 
     // Validate that at least one API host is configured
-    const hasApiHosts = flowData.settings && 
-      flowData.settings.api_hosts && 
-      Object.values(flowData.settings.api_hosts).some(host => host.url && host.url.trim() !== '');
-    
-    if (!hasApiHosts) {
+    if (!validateApiHosts()) {
       error = new Error(
         'No API Hosts are configured. Please configure at least one API host before running the flow.'
       );
@@ -212,11 +210,7 @@ import {
     shouldStopExecution = false;
 
     // Validate that at least one API host is configured
-    const hasApiHosts = flowData.settings && 
-      flowData.settings.api_hosts && 
-      Object.values(flowData.settings.api_hosts).some(host => host.url && host.url.trim() !== '');
-    
-    if (!hasApiHosts) {
+    if (!validateApiHosts()) {
       error = new Error(
         'No API Hosts are configured. Please configure at least one API host before running the flow.'
       );
@@ -364,18 +358,12 @@ import {
     const endpointId = `${stepId}-${endpointIndex}`;
 
     // Set initial status - create a new object to trigger reactivity
-    executionState = {
-      ...executionState,
-      [endpointId]: {
-        status: 'running',
-        request: {},
-        response: null,
-        timing: 0
-      }
-    };
-
-    // Emit execution state update event to notify parent component
-    dispatch('executionStateUpdate', executionState);
+    updateExecutionState(endpointId, {
+      status: 'running',
+      request: {},
+      response: null,
+      timing: 0
+    });
 
     try {
       // Make sure endpoints array exists
@@ -415,8 +403,8 @@ import {
       if (endpoint.pathParams && typeof endpoint.pathParams === 'object') {
         try {
           Object.entries(endpoint.pathParams).forEach(([name, value]) => {
-            // Replace template values from stored responses
-            const resolvedValue = resolveTemplateValue(value as string, storedResponses);
+            // Replace template values using centralized engine
+            const resolvedValue = resolveTemplateValueUnified(value as string);
             url = url.replace(`{${name}}`, encodeURIComponent(resolvedValue));
           });
         } catch (err: unknown) {
@@ -433,7 +421,7 @@ import {
         try {
           const queryParams = new URLSearchParams();
           Object.entries(endpoint.queryParams).forEach(([name, value]) => {
-            const resolvedValue = resolveTemplateValue(value as string, storedResponses);
+            const resolvedValue = resolveTemplateValueUnified(value as string);
             queryParams.append(name, resolvedValue);
           });
           url += `?${queryParams.toString()}`;
@@ -448,31 +436,27 @@ import {
         endpoint.headers
           .filter((h: { enabled: boolean }) => h.enabled)
           .forEach((h: { name: string; value: string }) => {
-            headers[h.name] = resolveTemplateValue(h.value, storedResponses);
+            headers[h.name] = resolveTemplateValueUnified(h.value);
           });
       }
 
       // Prepare body
       let body = null;
       if (endpoint.body) {
-        body = resolveTemplateObject(endpoint.body, storedResponses);
+        body = resolveTemplateObjectUnified(endpoint.body);
       }
 
       // Record the request details for debugging - create a new object for reactivity
-      executionState = {
-        ...executionState,
-        [endpointId]: {
-          ...executionState[endpointId],
-          request: {
-            url,
-            method: endpointDef.method,
-            headers,
-            body,
-            pathParams: endpoint.pathParams,
-            queryParams: endpoint.queryParams
-          }
+      updateExecutionState(endpointId, {
+        request: {
+          url,
+          method: endpointDef.method,
+          headers,
+          body,
+          pathParams: endpoint.pathParams,
+          queryParams: endpoint.queryParams
         }
-      };
+      });
 
       // Start timer
       const startTime = performance.now();
@@ -567,13 +551,7 @@ import {
       // Calculate timing - create a new object for reactivity
       const endTime = performance.now();
       const timing = Math.round(endTime - startTime);
-      executionState = {
-        ...executionState,
-        [endpointId]: {
-          ...executionState[endpointId],
-          timing
-        }
-      };
+      updateExecutionState(endpointId, { timing });
 
       // Process response
       const responseData = await getResponseData(response);
@@ -581,18 +559,14 @@ import {
       
 
       // Store response details - create a new object for reactivity
-      executionState = {
-        ...executionState,
-        [endpointId]: {
-          ...executionState[endpointId],
-          response: {
-            status: response.status,
-            statusText: response.statusText,
-            headers: Object.fromEntries([...response.headers.entries()]),
-            body: responseData
-          }
+      updateExecutionState(endpointId, {
+        response: {
+          status: response.status,
+          statusText: response.statusText,
+          headers: Object.fromEntries([...response.headers.entries()]),
+          body: responseData
         }
-      };
+      });
 
       // Always store response with endpointId for reference by templates
       storedResponses[endpointId] = responseData;
@@ -701,6 +675,14 @@ import {
           // Import the assertion engine module
           const assertionModule = await import('$lib/assertions');
           
+          // Build template context for template expressions in assertions
+          const templateContext = createTemplateContextFromFlowRunner(
+            storedResponses,
+            storedTransformations,
+            parameterValues,
+            templateFunctions
+          );
+          
           // Run all assertions
           const transformedDataForEndpoint = storedTransformations[endpointId] || null;
           const assertionResults = await assertionModule.runAssertions(
@@ -708,38 +690,45 @@ import {
             response,
             responseData,
             transformedDataForEndpoint,
-            timing
+            timing,
+            templateContext
           );
           
           // Process the results
           for (const result of assertionResults.results) {
+            // Create detailed log message with template info
+            let logDetails = `Actual value: ${JSON.stringify(result.actualValue)}`;
+            if (result.originalExpectedValue && result.originalExpectedValue !== result.expectedValue) {
+              logDetails += `, Template: ${result.originalExpectedValue} → ${JSON.stringify(result.expectedValue)}`;
+            } else {
+              logDetails += `, Expected: ${JSON.stringify(result.expectedValue)}`;
+            }
+            
             // Log each assertion result
             addLog(
               result.passed ? 'debug' : 'error',
               result.message || '',
-              `Actual value: ${JSON.stringify(result.actualValue)}`
+              logDetails
             );
+            
+            // Show any template resolution errors
+            if (result.error) {
+              addLog('error', 'Template Error:', result.error);
+            }
           }
           
           // Update status based on overall assertion results
           if (!assertionResults.passed) {
             // Update execution state with failed assertion
-            executionState = {
-              ...executionState,
-              [endpointId]: {
-                ...executionState[endpointId],
-                status: 'failed',
-                error: assertionResults.failureMessage || 'Assertion failed'
-              }
-            };
+            updateExecutionState(endpointId, {
+              status: 'failed',
+              error: assertionResults.failureMessage || 'Assertion failed'
+            });
             
             // Set error if stopOnError is true
             if (preferences.stopOnError) {
               error = new Error(assertionResults.failureMessage || 'Assertion failed');
             }
-            
-            // Emit execution state update
-            dispatch('executionStateUpdate', executionState);
             
             return;
           }
@@ -747,14 +736,10 @@ import {
           const errorMessage = `Failed to run assertions: ${error instanceof Error ? error.message : String(error)}`;
           
           // Update execution state with the error
-          executionState = {
-            ...executionState,
-            [endpointId]: {
-              ...executionState[endpointId],
-              status: 'failed',
-              error: errorMessage
-            }
-          };
+          updateExecutionState(endpointId, {
+            status: 'failed',
+            error: errorMessage
+          });
           
           // Set error if stopOnError is true
           if (preferences.stopOnError) {
@@ -764,57 +749,18 @@ import {
           // Log the error
           addLog('error', errorMessage);
           
-          // Emit execution state update
-          dispatch('executionStateUpdate', executionState);
-          
           return;
         }
       }
 
       // Update status - create a new object for reactivity
       if (response.ok) {
-        // Create a new copy of the endpoint state to ensure reactivity
-        const updatedEndpointState = {
-          ...executionState[endpointId],
-          status: 'completed'
-        };
-
-        // Update the global execution state
-        executionState = {
-          ...executionState,
-          [endpointId]: updatedEndpointState
-        };
-
-        // Emit execution state update event
-        dispatch('executionStateUpdate', executionState);
-
-        // Also emit a specific endpoint update event for more focused updates
-        dispatch('endpointStateUpdate', {
-          endpointId,
-          state: updatedEndpointState
-        });
+        updateExecutionState(endpointId, { status: 'completed' }, true);
       } else {
-        // Create a new copy of the endpoint state to ensure reactivity
-        const updatedEndpointState = {
-          ...executionState[endpointId],
+        updateExecutionState(endpointId, {
           status: 'failed',
           error: `Request failed with status ${response.status}: ${response.statusText}`
-        };
-
-        // Update the global execution state
-        executionState = {
-          ...executionState,
-          [endpointId]: updatedEndpointState
-        };
-
-        // Emit execution state update event
-        dispatch('executionStateUpdate', executionState);
-
-        // Also emit a specific endpoint update event for more focused updates
-        dispatch('endpointStateUpdate', {
-          endpointId,
-          state: updatedEndpointState
-        });
+        }, true);
 
         // Set error if stopOnError is true
         if (preferences.stopOnError) {
@@ -826,26 +772,17 @@ import {
     } catch (err: unknown) {
       // Handle network errors or timeouts - create a new object for reactivity
       const errorMessage = err instanceof Error ? err.message : String(err);
-      executionState = {
-        ...executionState,
-        [endpointId]: {
-          ...executionState[endpointId],
-          status: 'failed',
-          error: errorMessage
-        }
-      };
+      updateExecutionState(endpointId, {
+        status: 'failed',
+        error: errorMessage
+      });
 
       if (preferences.stopOnError) {
         error = err;
       }
     }
 
-    // Update execution state
-    executionState = {
-      ...executionState
-    };
-
-    // Emit execution state update event
+    // Final execution state update (this ensures any missed updates are emitted)
     dispatch('executionStateUpdate', executionState);
   }
 
@@ -928,324 +865,97 @@ import {
     }
   }
 
-  import * as templateFunctionsModule from './templateFunctions';
+  import { createTemplateFunctions, defaultTemplateFunctions } from '$lib/template';
   import { transformResponse } from '$lib/transform';
 
-  // Create an indexed object for dynamic function access
-  const templateFunctions: Record<string, (...args: any[]) => any> = {};
-  Object.entries(templateFunctionsModule).forEach(([key, value]) => {
-    if (typeof value === 'function') {
-      templateFunctions[key] = value;
-    }
+  // Create template functions for use in template resolution
+  const templateFunctions = createTemplateFunctions({
+    responses: {},
+    transformedData: {},
+    parameters: {},
+    functions: defaultTemplateFunctions
   });
 
-  // Helper function to process a template expression
-  function processTemplateExpression(
-    expression: string,
-    storedData: Record<string, unknown>,
-    originalMatch: string
-  ): string {
+  // Unified template resolution using centralized engine
+  function resolveTemplateValueUnified(value: string): string {
     try {
-      // First verify that we have a valid expression with a source and path
-      if (!expression || expression.indexOf(':') === -1) {
-        addLog(
-          'warning',
-          `Invalid template expression: ${expression}`,
-          `Expression must be in format 'source:path'`
-        );
-        return originalMatch;
-      }
-      
-      const [source, path] = expression.trim().split(':', 2);
-      
-      if (!path || path.trim() === '') {
-        addLog(
-          'warning', 
-          `Missing path in template expression: ${expression}`,
-          `Expression must include a path after the colon`
-        );
-        return originalMatch;
-      }
-
-      switch (source.trim()) {
-        case 'res':
-          // Handle res:stepId-endpointIndex.jsonpath
-          return resolveResponseTemplate(path.trim(), storedData);
-
-        case 'proc':
-          // Handle proc:stepId-endpointIndex.$.alias.path
-          return resolveTransformationTemplate(path.trim());
-
-        case 'func':
-          // Handle func:functionName(arg1,arg2,...)
-          return resolveFunctionTemplate(path.trim());
-
-        case 'param':
-          // Handle param:parameter_name
-          return resolveParameterTemplate(path.trim());
-
-        default:
-          addLog(
-            'warning',
-            `Unknown template source: ${source}`,
-            `Valid sources are: 'res', 'proc', 'func', and 'param'`
-          );
-          return originalMatch; // Keep original template if source is unknown
-      }
-    } catch (error: unknown) {
-      addLog(
-        'error',
-        `Error processing template expression: ${expression}`,
-        error instanceof Error ? error.message : String(error)
+      const context = createTemplateContextFromFlowRunner(
+        storedResponses,
+        storedTransformations,
+        parameterValues,
+        templateFunctions
       );
-      return originalMatch;
+      
+      const result = resolveTemplate(value, context);
+      return result !== undefined && result !== null ? String(result) : '';
+    } catch (error) {
+      addLog('error', `Template resolution failed for "${value}"`, error instanceof Error ? error.message : String(error));
+      return value; // Return original value on error
     }
   }
 
-  // Helper function to resolve template values like {{source:expression}} or "{{{source:expression}}}"
-  function resolveTemplateValue(value: string, storedData: Record<string, unknown>): string {
-    if (value === null || value === undefined) {
-      return '';
-    }
-
-    if (typeof value !== 'string') {
-      return String(value);
-    }
-
-    // First handle quoted triple bracket templates "{{{...}}}"
-    // These will be replaced without the surrounding quotes
-    value = value.replace(/"(\{\{\{([^}]+)\}\}\})"/g, (_match, _bracketExpr, expression) => {
-      return processTemplateExpression(expression, storedData, _match);
-    });
-
-    // Then handle regular double bracket templates {{...}}
-    // Fixed: Store the result of replace() back into the value Parameter
-    // Also fixed: Removed the trailing space from the regex pattern that was preventing matches
-    value = value.replace(/\{\{([^}]+)\}\}/g, (_match, expression) => {
-      return processTemplateExpression(expression, storedData, _match);
-    });
-
-    return value;
-  }
-
-  // resolve template values in an json object
-  function resolveTemplateObject(obj: unknown, storedData: Record<string, unknown>): unknown {
-    if (obj === null || obj === undefined) {
-      return obj;
-    }
-
-    let objString = JSON.stringify(obj);
-    const processedStr = resolveTemplateValue(objString, storedData);
-    const processedObj = JSON.parse(processedStr);
-
-    return processedObj;
-  }
-
-  // Helper function to resolve response templates like stepId-endpointIndex.jsonpath
-  function resolveResponseTemplate(path: string, storedData: Record<string, unknown>): string {
-    // Get step and jsonpath parts (e.g., "step1-0.$.data.id")
-    const firstDotIndex = path.indexOf('.');
-    const stepEndpointId = firstDotIndex > 0 ? path.substring(0, firstDotIndex) : path;
-    const jsonPathExpr = firstDotIndex > 0 ? path.substring(firstDotIndex + 1) : '$';
-
-    // Lookup the response data
-    const responseData = storedData[stepEndpointId];
-    if (!responseData) {
-      console.warn(`Response data not found for: ${stepEndpointId}`);
-      
-      // Log available keys to help debug
-      const availableKeys = Object.keys(storedData);
-      addLog(
-        'warning',
-        `Response data not found for: ${stepEndpointId}`,
-        `Available response keys: ${JSON.stringify(availableKeys)}`
-      );
-      
-      return `{res:${path}}`;
-    }
-
-    // Apply JSONPath if specified
-    if (jsonPathExpr) {
-      try {
-        const result = templateFunctions.jsonPath(responseData, jsonPathExpr);
-        return result !== undefined ? String(result) : `{res:${path}}`;
-      } catch (error: unknown) {
-        console.error(`Error applying JSONPath '${jsonPathExpr}' to response:`, error);
-        addLog(
-          'error',
-          `Error applying JSONPath to response`,
-          `Path: ${jsonPathExpr}\nError: ${error instanceof Error ? error.message : String(error)}`
-        );
-        return `{res:${path}}`;
-      }
-    }
-
-    return String(responseData);
-  }
-
-  // Helper function to resolve transformation templates like stepId-endpointIndex.$.alias.path
-  function resolveTransformationTemplate(path: string): string {
-    // Format: "step1-0.$.alias.path"
-    const dotSeparated = path.split('.');
-    
-    if (dotSeparated.length < 2) {
-      addLog(
-        'warning',
-        `Invalid transformation template: ${path}`,
-        `Format should be stepId-endpointIndex.$.alias.path`
-      );
-      return `{proc:${path}}`;
-    }
-    
-    // Extract step ID and alias
-    const stepEndpointId = dotSeparated[0];
-    
-    // Check if we have a $ indicating JSON path
-    if (dotSeparated[1] !== '$') {
-      addLog(
-        'warning',
-        `Invalid transformation template: ${path}`,
-        `Format should include $ to indicate JSON path: stepId-endpointIndex.$.alias.path`
-      );
-      return `{proc:${path}}`;
-    }
-    
-    // The alias is the next part after $
-    const alias = dotSeparated[2];
-    
-    // Check if this step and transformation exist
-    if (!storedTransformations[stepEndpointId]) {
-      // Log available keys to help debug
-      const availableKeys = Object.keys(storedTransformations);
-      addLog(
-        'warning',
-        `Transformation data not found for: ${stepEndpointId}`,
-        `Available transformation keys: ${JSON.stringify(availableKeys)}`
-      );
-      
-      return `{proc:${path}}`;
-    }
-    
-    // Get the transformed data by alias
-    const transformedData = storedTransformations[stepEndpointId][alias];
-    if (transformedData === undefined) {
-      // Log available aliases to help debug
-      const availableAliases = Object.keys(storedTransformations[stepEndpointId]);
-      addLog(
-        'warning',
-        `Transformation alias not found: ${alias} for step ${stepEndpointId}`,
-        `Available aliases: ${JSON.stringify(availableAliases)}`
-      );
-      
-      return `{proc:${path}}`;
-    }
-    
-    // If there are more parts, it's a JSON path into the transformed data
-    if (dotSeparated.length > 3) {
-      try {
-        // Reconstruct the JSON path by joining all parts after the alias with dots
-        const jsonPathParts = dotSeparated.slice(3);
-        const jsonPath = jsonPathParts.join('.');
-        
-        // Use the same jsonPath function that's used for response templates
-        // This is synchronous and more reliable in this context
-        const result = templateFunctions.jsonPath(transformedData, jsonPath);
-        if (result !== undefined) {
-          return String(result);
-        }
-        
-        return `{proc:${path}}`;
-      } catch (error: unknown) {
-        console.error(`Error applying JSONPath to transformation:`, error);
-        addLog(
-          'error',
-          `Error applying JSONPath to transformation`,
-          `Path: ${path}\nError: ${error instanceof Error ? error.message : String(error)}`
-        );
-        return `{proc:${path}}`;
-      }
-    }
-    
-    // Handle different types of transformed data
-    if (transformedData === null || transformedData === undefined) {
-      return '';
-    } else if (typeof transformedData === 'object') {
-      try {
-        return JSON.stringify(transformedData);
-      } catch {
-        return String(transformedData);
-      }
-    }
-    
-    // If no JSON path specified beyond the alias, return the full transformed data
-    return String(transformedData);
-  }
-
-  // Helper function to resolve function templates like functionName(arg1,arg2,...)
-  function resolveFunctionTemplate(expression: string): string {
-    // Parse function name and arguments
-    const match = expression.match(/^([a-zA-Z0-9_]+)\s*\((.*)\)$/);
-    if (!match) {
-      console.warn(`Invalid function template format: ${expression}`);
-      return `{func:${expression}}`;
-    }
-
-    const functionName = match[1];
-    const argsString = match[2].trim();
-
-    // Check if the function exists
-    if (typeof templateFunctions[functionName] !== 'function') {
-      console.warn(`Function not found: ${functionName}`);
-      return `{func:${expression}}`;
-    }
-
+  // Unified template resolution for objects using centralized engine
+  function resolveTemplateObjectUnified(obj: unknown): unknown {
     try {
-      let args: unknown[] = [];
-
-      // Parse arguments if any
-      if (argsString) {
-        // Handle comma-separated arguments, respecting quoted strings
-        // This is a basic version - for production consider a proper parser
-        args = argsString.split(',').map((arg) => {
-          const trimmed = arg.trim();
-
-          // Try to parse as JSON (handles numbers, booleans, null, quoted strings)
-          try {
-            return JSON.parse(trimmed);
-          } catch (_e: unknown) {
-            // If it's not valid JSON, return as string
-            return trimmed;
-          }
-        });
+      const context = createTemplateContextFromFlowRunner(
+        storedResponses,
+        storedTransformations,
+        parameterValues,
+        templateFunctions
+      );
+      
+      if (obj === null || obj === undefined) {
+        return obj;
       }
 
-      // Call the function with arguments
-      const result = templateFunctions[functionName](...args);
-      return result !== undefined ? String(result) : `{func:${expression}}`;
-    } catch (error: unknown) {
-      console.error(`Error executing template function '${functionName}':`, error);
-      return `{func:${expression}}`;
-    }
-  }
-
-  // Helper function to resolve Parameter templates like var:Parameter_name
-  function resolveParameterTemplate(parameterName: string): string {
-    if (Object.prototype.hasOwnProperty.call(parameterValues, parameterName)) {
-      const value = parameterValues[parameterName];
-      const result = value !== null && value !== undefined ? String(value) : '';
-
-      // Add to logs for debugging
-      addLog('debug', `Parameter substitution: ${parameterName}`, `Value: ${result}`);
-
+      let objString = JSON.stringify(obj);
+      const result = resolveTemplate(objString, context);
+      
+      if (typeof result === 'string') {
+        return JSON.parse(result);
+      }
+      
       return result;
+    } catch (error) {
+      addLog('error', 'Template object resolution failed', error instanceof Error ? error.message : String(error));
+      return obj; // Return original object on error
     }
-    console.warn(`Parameter not found: ${parameterName}`);
-    return `{param:${parameterName}}`;
   }
 
   // Function for adding debug logs about requests
   function addRequestDebugLogs(path: string, reqHeaders: Record<string, string>) {
     
+  }
+
+  // Utility function to validate API hosts configuration
+  function validateApiHosts(): boolean {
+    return !!(flowData.settings && 
+      flowData.settings.api_hosts && 
+      Object.values(flowData.settings.api_hosts).some(host => host.url && host.url.trim() !== ''));
+  }
+
+  // Utility function to update execution state immutably
+  function updateExecutionState(endpointId: string, updates: Partial<any>, emitEndpointUpdate: boolean = false) {
+    const updatedEndpointState = {
+      ...executionState[endpointId],
+      ...updates
+    };
+    
+    executionState = {
+      ...executionState,
+      [endpointId]: updatedEndpointState
+    };
+    
+    // Emit execution state update event
+    dispatch('executionStateUpdate', executionState);
+    
+    // Optionally emit specific endpoint update event
+    if (emitEndpointUpdate) {
+      dispatch('endpointStateUpdate', {
+        endpointId,
+        state: updatedEndpointState
+      });
+    }
   }
 
   // Function to prepare parameters before executing the flow
