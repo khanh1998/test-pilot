@@ -31,6 +31,10 @@
   let showNewStepModal = false;
   let newStepLabel = '';
 
+  // Available APIs for dropdown
+  let availableApis: any[] = [];
+  let showAddApiModal = false;
+
   onMount(async () => {
     await fetchTestFlow();
 
@@ -39,8 +43,8 @@
       flowJson.settings.api_hosts = {};
     }
 
-    // Initialize API hosts from API information
-    await fetchApiHosts();
+    // Load available APIs for the dropdown
+    await loadAvailableApis();
   });
 
   async function fetchTestFlow() {
@@ -92,82 +96,54 @@
     }
   }
 
-  async function fetchApiHosts() {
+  async function loadAvailableApis() {
     try {
-      // First, ensure we have a valid settings.api_hosts object
-      if (!flowJson.settings.api_hosts) {
-        flowJson.settings.api_hosts = {};
-      }
-      
-      // Get all APIs related to this test flow
       const apisData = await getApiList();
-      if (apisData) {
-        console.log('APIs data fetched:', apisData); // Debug log
-        
-        if (apisData && apisData.apis && Array.isArray(apisData.apis)) {
-          // For each API found, add it to the api_hosts if not already there
-          apisData.apis.forEach((api: {id: number, host: string | null, name: string}) => {
-            const apiIdStr = String(api.id);
-            
-            // If this API isn't in our hosts yet, add it
-            if (api.host && flowJson.settings.api_hosts && !flowJson.settings.api_hosts[apiIdStr]) {
-              flowJson.settings.api_hosts[apiIdStr] = {
-                name: api.name || `API ${api.id}`,
-                url: api.host
-              };
-              console.log(`Added API host from API ${api.id}:`, api.host);
-              markDirty();
-            }
-          });
-        }
-        
-        // If we have a primary API in the testFlow, make sure it's in our hosts
-        if (testFlow && testFlow.apiId) {
-          const primaryApiId = String(testFlow.apiId);
-          
-          // If we don't have the primary API in our hosts, fetch it specifically
-          if (!flowJson.settings.api_hosts[primaryApiId]) {
-            await fetchPrimaryApiHost();
-          }
-        }
+      if (apisData && apisData.apis && Array.isArray(apisData.apis)) {
+        availableApis = apisData.apis;
+        console.log('Available APIs loaded:', availableApis);
       }
     } catch (err) {
-      console.error('Error fetching API hosts:', err);
+      console.error('Error loading available APIs:', err);
     }
   }
   
-  // Fetch the primary API host for this test flow
-  async function fetchPrimaryApiHost() {
-    if (!testFlow || !testFlow.apiId) return;
-
-    try {
-      const apiData = await getApiDetails(testFlow.apiId);
-      if (apiData && apiData.api) {
-        console.log('Primary API data fetched:', apiData);
-
-        // Get the host from the API data
-        const hostFromApi = apiData.api.host || '';
-        const apiId = String(apiData.api.id);
-
-        if (hostFromApi) {
-          // Make sure we have an api_hosts object
-          if (!flowJson.settings.api_hosts) {
-            flowJson.settings.api_hosts = {};
-          }
-          
-          // Add the primary API to our hosts
-          flowJson.settings.api_hosts[apiId] = {
-            name: apiData.api.name || `API ${apiData.api.id}`,
-            url: hostFromApi
-          };
-          console.log(`Added primary API host: ${hostFromApi}`);
-          
-          markDirty();
-        }
-      }
-    } catch (err) {
-      console.error('Error fetching primary API host:', err);
+  function addApiFromList(api: any) {
+    if (!flowJson.settings.api_hosts) {
+      flowJson.settings.api_hosts = {};
     }
+    
+    const apiId = String(api.id);
+    
+    // Check if this API is already added
+    if (flowJson.settings.api_hosts[apiId]) {
+      error = 'This API is already added to the flow';
+      return;
+    }
+    
+    // Add the API host
+    flowJson.settings.api_hosts[apiId] = {
+      name: api.name || `API ${api.id}`,
+      url: api.host || ''
+    };
+    
+    showAddApiModal = false;
+    markDirty();
+  }
+
+  function addCustomApiHost() {
+    if (!flowJson.settings.api_hosts) {
+      flowJson.settings.api_hosts = {};
+    }
+    
+    const newApiId = `api-${Date.now()}`;
+    flowJson.settings.api_hosts[newApiId] = {
+      name: `API ${Object.keys(flowJson.settings.api_hosts).length + 1}`,
+      url: ''
+    };
+    
+    showAddApiModal = false;
+    markDirty();
   }
 
   // Reset execution state
@@ -397,23 +373,7 @@
                   <h3 class="text-lg font-medium text-gray-800">API Hosts</h3>
                   <button
                     class="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700 flex items-center"
-                    on:click={() => {
-                      // Initialize api_hosts if not existing
-                      if (!flowJson.settings.api_hosts) {
-                        flowJson.settings.api_hosts = {};
-                      }
-                      
-                      // Generate a unique ID for the new API host
-                      const newApiId = `api-${Date.now()}`;
-                      
-                      // Add the new API host
-                      flowJson.settings.api_hosts[newApiId] = {
-                        name: `API ${Object.keys(flowJson.settings.api_hosts).length + 1}`,
-                        url: ''
-                      };
-                      
-                      markDirty();
-                    }}
+                    on:click={() => showAddApiModal = true}
                   >
                     <svg class="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
@@ -498,80 +458,13 @@
                     <p class="mb-4 text-gray-600">No API hosts configured yet</p>
                     <button
                       class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md flex items-center text-sm"
-                      on:click={() => {
-                        if (!flowJson.settings.api_hosts) {
-                          flowJson.settings.api_hosts = {};
-                        }
-                        const newApiId = `api-${Date.now()}`;
-                        flowJson.settings.api_hosts[newApiId] = {
-                          name: "Primary API",
-                          url: ''
-                        };
-                        markDirty();
-                      }}
+                      on:click={() => showAddApiModal = true}
                     >
                       <svg class="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
                       </svg>
                       Add Your First API Host
                     </button>
-                  </div>
-                {/if}
-              </div>
-
-              <!-- Flow Parameters -->
-              <div class="mt-8 mb-6 border-t pt-6">
-                <div class="mb-4 flex items-center justify-between">
-                  <h3 class="text-lg font-medium">Flow Parameters</h3>
-                  <button
-                    class="rounded-md bg-blue-600 px-3 py-1 text-sm text-white transition hover:bg-blue-700"
-                    on:click={() => {
-                      // Open parameters panel in TestFlowEditor/FlowRunner
-                      const testFlowEditor = document.querySelector(
-                        'svelte-component[this="TestFlowEditor"]'
-                      );
-                      if (testFlowEditor) {
-                        // Dispatch a custom event to show parameters panel
-                        testFlowEditor.dispatchEvent(new CustomEvent('showParametersPanel'));
-                      }
-                    }}
-                  >
-                    Manage parameters
-                  </button>
-                </div>
-
-                {#if !flowJson.parameters || flowJson.parameters.length === 0}
-                  <div class="rounded-lg bg-gray-50 p-4 text-center">
-                    <p class="text-gray-600">
-                      No parameters defined yet. Click "Manage parameters" to add some.
-                    </p>
-                  </div>
-                {:else}
-                  <div class="rounded-lg bg-gray-50 p-4">
-                    <table class="w-full">
-                      <thead>
-                        <tr class="text-left">
-                          <th class="pb-2 text-sm font-semibold text-gray-600">Name</th>
-                          <th class="pb-2 text-sm font-semibold text-gray-600">Type</th>
-                          <th class="pb-2 text-sm font-semibold text-gray-600">Required</th>
-                          <th class="pb-2 text-sm font-semibold text-gray-600">Default</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {#each flowJson.parameters as parameter}
-                          <tr class="border-t border-gray-200">
-                            <td class="py-2 text-sm">{parameter.name}</td>
-                            <td class="py-2 text-sm">{parameter.type}</td>
-                            <td class="py-2 text-sm">{parameter.required ? 'Yes' : 'No'}</td>
-                            <td class="py-2 text-sm"
-                              >{parameter.defaultValue !== undefined
-                                ? String(parameter.defaultValue)
-                                : '-'}</td
-                            >
-                          </tr>
-                        {/each}
-                      </tbody>
-                    </table>
                   </div>
                 {/if}
               </div>
@@ -585,8 +478,8 @@
 
 <!-- Modal for adding a new step -->
 {#if showNewStepModal}
-  <div class="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-black">
-    <div class="mx-4 w-full max-w-md rounded-lg bg-white p-6">
+  <div class="fixed inset-0 z-50 flex items-center justify-center">
+    <div class="mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-2xl border border-gray-200">
       <h2 class="mb-4 text-xl font-bold">Add New Step</h2>
 
       <div class="mb-4">
@@ -618,6 +511,83 @@
           disabled={!newStepLabel.trim()}
         >
           Add Step
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Modal for adding API host -->
+{#if showAddApiModal}
+  <div class="fixed inset-0 z-50 flex items-center justify-center">
+    <div class="mx-4 w-full max-w-lg rounded-lg bg-white p-6 shadow-2xl border border-gray-200">
+      <h2 class="mb-4 text-xl font-bold">Add API Host</h2>
+
+      {#if availableApis.length > 0}
+        <div class="mb-6">
+          <h3 class="mb-3 text-lg font-medium">Choose from Available APIs</h3>
+          <div class="max-h-64 overflow-y-auto border border-gray-200 rounded-lg">
+            {#each availableApis as api}
+              {@const isAlreadyAdded = flowJson.settings.api_hosts && flowJson.settings.api_hosts[String(api.id)]}
+              <div class="border-b border-gray-100 last:border-b-0">
+                <div class="p-4 flex items-center justify-between hover:bg-gray-50">
+                  <div class="flex-1">
+                    <h4 class="font-medium text-gray-900">{api.name || `API ${api.id}`}</h4>
+                    <p class="text-sm text-gray-500 mt-1">{api.host || 'No host configured'}</p>
+                    <p class="text-xs text-gray-400 mt-1">ID: {api.id}</p>
+                  </div>
+                  <button
+                    class="ml-4 rounded-md px-3 py-1.5 text-sm transition
+                           {isAlreadyAdded 
+                             ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                             : 'bg-blue-600 text-white hover:bg-blue-700'}"
+                    disabled={isAlreadyAdded}
+                    on:click={() => addApiFromList(api)}
+                  >
+                    {isAlreadyAdded ? 'Already Added' : 'Add'}
+                  </button>
+                </div>
+              </div>
+            {/each}
+          </div>
+        </div>
+
+        <div class="border-t pt-4">
+          <h3 class="mb-3 text-lg font-medium">Or Create Custom API Host</h3>
+          <button
+            class="w-full rounded-md bg-gray-100 border-2 border-dashed border-gray-300 px-4 py-3 text-gray-600 hover:bg-gray-50 hover:border-gray-400 transition"
+            on:click={addCustomApiHost}
+          >
+            <svg class="mx-auto h-6 w-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+            </svg>
+            Create Custom API Host
+          </button>
+        </div>
+      {:else}
+        <div class="mb-6 text-center">
+          <p class="text-gray-600 mb-4">No APIs found in your workspace.</p>
+          <button
+            class="w-full rounded-md bg-blue-600 px-4 py-3 text-white hover:bg-blue-700 transition"
+            on:click={addCustomApiHost}
+          >
+            <svg class="mx-auto h-6 w-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+            </svg>
+            Create Custom API Host
+          </button>
+        </div>
+      {/if}
+
+      <div class="flex justify-end">
+        <button
+          class="rounded-md bg-gray-200 px-4 py-2 text-gray-800 transition hover:bg-gray-300"
+          on:click={() => {
+            showAddApiModal = false;
+            error = null;
+          }}
+        >
+          Cancel
         </button>
       </div>
     </div>

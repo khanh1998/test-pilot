@@ -35,7 +35,7 @@ export const apiEndpoints = pgTable('api_endpoints', {
   id: serial('id').primaryKey(),
   apiId: integer('api_id')
     .notNull()
-    .references(() => apis.id),
+    .references(() => apis.id, { onDelete: 'cascade' }),
   path: text('path').notNull(),
   method: varchar('method', { length: 10 }).notNull(), // GET, POST, PUT, DELETE, etc.
   operationId: text('operation_id'),
@@ -63,10 +63,10 @@ export const testFlows = pgTable('test_flows', {
 export const testFlowApis = pgTable('test_flow_apis', {
   testFlowId: integer('test_flow_id')
     .notNull()
-    .references(() => testFlows.id),
+    .references(() => testFlows.id, { onDelete: 'cascade' }),
   apiId: integer('api_id')
     .notNull()
-    .references(() => apis.id)
+    .references(() => apis.id, { onDelete: 'cascade' })
   // Composite primary key is defined in relations.ts
 });
 
@@ -77,7 +77,7 @@ export const endpointEmbeddings = pgTable(
     id: serial('id').primaryKey(),
     endpointId: integer('endpoint_id')
       .notNull()
-      .references(() => apiEndpoints.id),
+      .references(() => apiEndpoints.id, { onDelete: 'cascade' }),
     userId: integer('user_id'), // Added for direct user filtering
     apiId: integer('api_id'),   // Added for optional API filtering
     embedding: vector('embedding', { dimensions: 1536 }), // Dimension based on embedding model (e.g., OpenAI's ada-002)
