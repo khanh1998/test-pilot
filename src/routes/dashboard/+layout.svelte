@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { authStore } from '$lib/store/auth';
+  import { breadcrumbOverrides } from '$lib/store/breadcrumb';
   import DashboardLayout from '$lib/components/DashboardLayout.svelte';
   import type { Snippet } from 'svelte';
 
@@ -36,7 +37,7 @@
     <div class="h-10 w-10 animate-spin rounded-full border-t-2 border-b-2 border-blue-500"></div>
   </div>
 {:else}
-  <DashboardLayout>
+  <DashboardLayout breadcrumbOverrides={$breadcrumbOverrides}>
     {@render children()}
   </DashboardLayout>
 {/if}

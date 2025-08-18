@@ -5,7 +5,7 @@ import { createBasicTestFlow } from '$lib/server/service/test_flows/create_test_
 import { getTestFlowsForUser } from '$lib/server/service/test_flows/list_test_flows';
 
 // Get all test flows for the authenticated user
-export async function GET({ locals }: RequestEvent) {
+export async function GET({ locals, url }: RequestEvent) {
   try {
     // Check if user is authenticated
     if (!locals.user) {
@@ -15,10 +15,27 @@ export async function GET({ locals }: RequestEvent) {
       });
     }
 
-    // Use the service to get test flows
-    const testFlows = await getTestFlowsForUser(locals.user.userId);
+    // Extract query parameters
+    const page = parseInt(url.searchParams.get('page') || '1');
+    const limit = parseInt(url.searchParams.get('limit') || '20');
+    const search = url.searchParams.get('search') || '';
 
-    return json({ testFlows });
+    // Validate parameters
+    if (page < 1 || limit < 1 || limit > 100) {
+      return new Response(JSON.stringify({ error: 'Invalid pagination parameters' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Use the service to get test flows with pagination
+    const result = await getTestFlowsForUser(locals.user.userId, {
+      page,
+      limit,
+      search: search.trim() || undefined
+    });
+
+    return json(result);
   } catch (error) {
     console.error('Error fetching test flows:', error);
     return new Response(JSON.stringify({ error: 'Failed to fetch test flows' }), {

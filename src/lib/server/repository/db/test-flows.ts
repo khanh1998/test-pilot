@@ -1,6 +1,6 @@
 import { db } from '$lib/server/db';
 import { testFlows, testFlowApis, apis, apiEndpoints } from '$lib/server/db/schema';
-import { eq, and, inArray } from 'drizzle-orm';
+import { eq, and, inArray, desc, ilike, or, count } from 'drizzle-orm';
 
 export interface TestFlowWithApis {
   id: number;
@@ -8,6 +8,18 @@ export interface TestFlowWithApis {
   description: string | null;
   flowJson: any;
   userId: number | null;
+  createdAt: Date;
+  updatedAt: Date;
+  apis: Array<{
+    id: number;
+    name: string;
+  }>;
+}
+
+export interface TestFlowListItem {
+  id: number;
+  name: string;
+  description: string | null;
   createdAt: Date;
   updatedAt: Date;
   apis: Array<{
@@ -28,6 +40,98 @@ export interface EndpointInfo {
   requestSchema?: any;
   responseSchema?: any;
   tags?: string[];
+}
+
+/**
+ * Get basic test flow data for a user (without API associations)
+ * @param userId - The user ID
+ * @param options - Pagination and filtering options
+ * @returns Object with test flows array and pagination info
+ */
+export async function getUserTestFlows(
+  userId: number, 
+  options: {
+    limit?: number;
+    offset?: number;
+    search?: string;
+  } = {}
+): Promise<{
+  testFlows: Array<{
+    id: number;
+    name: string;
+    description: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+  }>;
+  total: number;
+}> {
+  const { limit = 20, offset = 0, search } = options;
+
+  // Build the base query
+  let whereConditions = eq(testFlows.userId, userId);
+  
+  // Add search condition if provided
+  if (search && search.trim()) {
+    const searchTerm = `%${search.trim()}%`;
+    const searchCondition = or(
+      ilike(testFlows.name, searchTerm),
+      ilike(testFlows.description, searchTerm)
+    );
+    whereConditions = and(whereConditions, searchCondition)!;
+  }
+
+  // Get the total count
+  const totalResult = await db
+    .select({ count: count() })
+    .from(testFlows)
+    .where(whereConditions);
+  
+  const total = totalResult[0]?.count || 0;
+
+  // Get the paginated results
+  const testFlowsResult = await db
+    .select({
+      id: testFlows.id,
+      name: testFlows.name,
+      description: testFlows.description,
+      createdAt: testFlows.createdAt,
+      updatedAt: testFlows.updatedAt
+    })
+    .from(testFlows)
+    .where(whereConditions)
+    .orderBy(desc(testFlows.updatedAt))
+    .limit(limit)
+    .offset(offset);
+
+  return {
+    testFlows: testFlowsResult,
+    total
+  };
+}
+
+/**
+ * Get API associations for multiple test flows
+ * @param testFlowIds - Array of test flow IDs
+ * @returns Array of test flow API associations
+ */
+export async function getMultipleTestFlowApiAssociations(testFlowIds: number[]): Promise<Array<{
+  testFlowId: number;
+  apiId: number;
+  apiName: string;
+}>> {
+  if (testFlowIds.length === 0) {
+    return [];
+  }
+
+  return db
+    .select({
+      testFlowId: testFlowApis.testFlowId,
+      apiId: testFlowApis.apiId,
+      apiName: apis.name
+    })
+    .from(testFlowApis)
+    .innerJoin(apis, eq(testFlowApis.apiId, apis.id))
+    .where(inArray(testFlowApis.testFlowId, testFlowIds));
 }
 
 // Get a test flow by ID and user ID

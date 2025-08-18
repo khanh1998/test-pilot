@@ -1,39 +1,40 @@
 <script lang="ts">
   import { page } from '$app/stores';
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
   import type { TestFlowData } from '$lib/components/test-flows/types';
   import { getTestFlow, saveTestFlow as saveTestFlowFn } from '$lib/http_client/test-flow';
   import { getApiList, getApiDetails } from '$lib/http_client/apis';
+  import { setBreadcrumbOverride, clearBreadcrumbOverride } from '$lib/store/breadcrumb';
 
   // Import the components we created
   import TestFlowEditor from '$lib/components/test-flows/TestFlowEditor.svelte';
 
-  $: testFlowId = parseInt($page.params.id || '0');
+  let testFlowId = $derived(parseInt($page.params.id || '0'));
 
-  let testFlow: any = null;
-  let endpoints: any[] = [];
-  let selectedEndpoint: any = null;
-  let loading = true;
-  let error: string | null = null;
-  let currentTab: 'steps' | 'settings' = 'steps';
-  let flowJson: TestFlowData = {
+  let testFlow: any = $state(null);
+  let endpoints: any[] = $state([]);
+  let selectedEndpoint: any = $state(null);
+  let loading = $state(true);
+  let error: string | null = $state(null);
+  let currentTab: 'steps' | 'settings' = $state('steps');
+  let flowJson: TestFlowData = $state({
     settings: { 
       api_hosts: {}  // Multi-API host configuration
     },
     steps: [],
     parameters: []
-  };
-  let isDirty = false;
-  let isSaving = false;
+  });
+  let isDirty = $state(false);
+  let isSaving = $state(false);
 
   // New step related state
-  let showNewStepModal = false;
-  let newStepLabel = '';
+  let showNewStepModal = $state(false);
+  let newStepLabel = $state('');
 
   // Available APIs for dropdown
-  let availableApis: any[] = [];
-  let showAddApiModal = false;
+  let availableApis: any[] = $state([]);
+  let showAddApiModal = $state(false);
 
   onMount(async () => {
     await fetchTestFlow();
@@ -45,6 +46,19 @@
 
     // Load available APIs for the dropdown
     await loadAvailableApis();
+  });
+
+  // Update document title and breadcrumb when testFlow is loaded
+  $effect(() => {
+    if (testFlow?.name && typeof document !== 'undefined') {
+      document.title = `${testFlow.name} - Test Pilot`;
+      setBreadcrumbOverride(testFlowId.toString(), testFlow.name);
+    }
+  });
+
+  // Clean up breadcrumb override when component is destroyed
+  onDestroy(() => {
+    clearBreadcrumbOverride(testFlowId.toString());
   });
 
   async function fetchTestFlow() {
@@ -224,27 +238,7 @@
   }
 </script>
 
-<div class="container mx-auto px-4 py-8">
-  <div class="mb-6 flex items-center justify-between">
-    <div>
-      <h1 class="mt-2 text-3xl font-bold">
-        {#if testFlow}
-          {testFlow.name}
-        {:else}
-          Test Flow Editor
-        {/if}
-      </h1>
-    </div>
-
-    <button
-      class="rounded-md bg-blue-600 px-4 py-2 text-white transition hover:bg-blue-700 disabled:opacity-50"
-      disabled={!isDirty || isSaving}
-      on:click={saveTestFlow}
-    >
-      {isSaving ? 'Saving...' : 'Save Changes'}
-    </button>
-  </div>
-
+<div class="container mx-auto px-4 py-4">
   {#if error}
     <div class="relative mb-4 rounded border border-red-400 bg-red-100 px-4 py-3 text-red-700">
       <span class="block sm:inline">{error}</span>
@@ -288,8 +282,6 @@
           <!-- Steps Tab -->
           {#if currentTab === 'steps'}
             <div class="mb-6">
-              <h2 class="mb-4 text-xl font-semibold">Test Flow Steps</h2>
-
               {#if !flowJson.settings.api_hosts || Object.keys(flowJson.settings.api_hosts).length === 0}
                 <div
                   class="mb-4 rounded border border-yellow-300 bg-yellow-100 px-4 py-3 text-yellow-800"
@@ -475,6 +467,36 @@
     </div>
   {/if}
 </div>
+
+<!-- Floating Save Button -->
+{#if testFlow && (isDirty || isSaving)}
+  <div class="fixed bottom-6 right-6 z-50">
+    <button
+      class="group flex items-center gap-2 rounded-full bg-blue-600 px-6 py-3 text-white shadow-lg transition-all hover:bg-blue-700 hover:shadow-xl hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+      disabled={!isDirty || isSaving}
+      on:click={saveTestFlow}
+      title={isSaving ? 'Saving changes...' : 'Save changes to test flow'}
+    >
+      {#if isSaving}
+        <svg class="h-5 w-5 animate-spin" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <span class="font-medium">Saving...</span>
+      {:else}
+        <svg class="h-5 w-5 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3-3m0 0l-3 3m3-3v12"></path>
+        </svg>
+        <span class="font-medium">Save Changes</span>
+      {/if}
+    </button>
+    
+    <!-- Subtle pulse animation when there are unsaved changes -->
+    {#if isDirty && !isSaving}
+      <div class="absolute inset-0 rounded-full bg-blue-600 animate-ping opacity-20"></div>
+    {/if}
+  </div>
+{/if}
 
 <!-- Modal for adding a new step -->
 {#if showNewStepModal}

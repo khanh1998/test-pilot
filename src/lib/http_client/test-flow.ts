@@ -9,19 +9,31 @@ export interface RequestCookie {
 	path?: string;
 }
 
-export async function getTestFlows() {
+export async function getTestFlows(options: {
+	page?: number;
+	limit?: number;
+	search?: string;
+} = {}) {
 	try {
-		const response = await fetchWithAuth('/api/test-flows');
+		const { page = 1, limit = 20, search } = options;
+		const url = new URL('/api/test-flows', window.location.origin);
+		
+		url.searchParams.set('page', page.toString());
+		url.searchParams.set('limit', limit.toString());
+		if (search) {
+			url.searchParams.set('search', search);
+		}
+
+		const response = await fetchWithAuth(url.toString());
 		if (response.ok) {
-			const data = await response.json();
-			return data.testFlows || [];
+			return await response.json();
 		} else {
 			console.error('Failed to fetch test flows:', response.statusText);
-			return [];
+			return { testFlows: [], pagination: { page: 1, limit, total: 0, totalPages: 0, hasNext: false, hasPrev: false } };
 		}
 	} catch (error) {
 		console.error('Error fetching test flows:', error);
-		return [];
+		return { testFlows: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 0, hasNext: false, hasPrev: false } };
 	}
 }
 
