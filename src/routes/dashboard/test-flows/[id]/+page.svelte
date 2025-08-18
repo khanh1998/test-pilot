@@ -200,9 +200,15 @@
       isSaving = true;
       error = null;
 
+      // Validate required fields
+      if (!testFlow.name || !testFlow.name.trim()) {
+        error = 'Flow name is required';
+        return;
+      }
+
       await saveTestFlowFn(testFlowId, {
-        name: testFlow.name,
-        description: testFlow.description,
+        name: testFlow.name.trim(),
+        description: testFlow.description?.trim() || null,
         flowJson
       });
       
@@ -242,7 +248,7 @@
   {#if error}
     <div class="relative mb-4 rounded border border-red-400 bg-red-100 px-4 py-3 text-red-700">
       <span class="block sm:inline">{error}</span>
-      <button class="absolute top-0 right-0 bottom-0 px-4" on:click={() => (error = null)}>
+      <button class="absolute top-0 right-0 bottom-0 px-4" onclick={() => (error = null)}>
         ×
       </button>
     </div>
@@ -256,25 +262,51 @@
     <div class="mb-6">
       <div class="rounded-lg bg-white shadow">
         <div class="border-b border-gray-200">
-          <nav class="flex flex-wrap">
-            <button
-              class="border-b-2 px-6 py-3 text-sm font-medium text-gray-700
-                    {currentTab === 'steps'
-                ? 'border-blue-500 text-blue-500'
-                : 'border-transparent hover:border-gray-300'}"
-              on:click={() => (currentTab = 'steps')}
-            >
-              Steps
-            </button>
-            <button
-              class="border-b-2 px-6 py-3 text-sm font-medium text-gray-700
-                    {currentTab === 'settings'
-                ? 'border-blue-500 text-blue-500'
-                : 'border-transparent hover:border-gray-300'}"
-              on:click={() => (currentTab = 'settings')}
-            >
-              Settings
-            </button>
+          <nav class="flex flex-wrap justify-between items-center">
+            <div class="flex">
+              <button
+                class="border-b-2 px-6 py-3 text-sm font-medium text-gray-700
+                      {currentTab === 'steps'
+                  ? 'border-blue-500 text-blue-500'
+                  : 'border-transparent hover:border-gray-300'}"
+                onclick={() => (currentTab = 'steps')}
+              >
+                Steps
+              </button>
+              <button
+                class="border-b-2 px-6 py-3 text-sm font-medium text-gray-700
+                      {currentTab === 'settings'
+                  ? 'border-blue-500 text-blue-500'
+                  : 'border-transparent hover:border-gray-300'}"
+                onclick={() => (currentTab = 'settings')}
+              >
+                Settings
+              </button>
+            </div>
+            
+            {#if testFlow}
+              <div class="px-6 py-3">
+                <button
+                  class="flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-white shadow-md transition-all hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={isSaving || !testFlow.name?.trim()}
+                  onclick={saveTestFlow}
+                  title={isSaving ? 'Saving changes...' : (!testFlow.name?.trim() ? 'Flow name is required' : 'Save changes to test flow')}
+                >
+                  {#if isSaving}
+                    <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span class="font-medium">Saving...</span>
+                  {:else}
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3-3m0 0l-3 3m3-3v12"></path>
+                    </svg>
+                    <span class="font-medium">Save Changes</span>
+                  {/if}
+                </button>
+              </div>
+            {/if}
           </nav>
         </div>
 
@@ -297,7 +329,7 @@
               <TestFlowEditor
                 flowData={{ ...flowJson, endpoints }}
                 {endpoints}
-                on:change={(event) => {
+                onchange={(event) => {
                   // Extract and update the flow data from the event
                   const updatedFlowData = event.detail;
                   if (updatedFlowData) {
@@ -331,9 +363,9 @@
                   }
                   markDirty();
                 }}
-                on:reset={handleReset}
-                on:executionComplete={handleExecutionComplete}
-                on:log={handleLog}
+                onreset={handleReset}
+                onexecutionComplete={handleExecutionComplete}
+                onlog={handleLog}
               />
 
               <!-- Empty state when there are no steps -->
@@ -343,7 +375,7 @@
                   <p class="mb-6 text-gray-600">Add steps to define your test flow sequence.</p>
                   <button
                     class="rounded-md bg-blue-600 px-4 py-2 text-white transition hover:bg-blue-700"
-                    on:click={() => (showNewStepModal = true)}
+                    onclick={() => (showNewStepModal = true)}
                   >
                     Add First Step
                   </button>
@@ -359,13 +391,54 @@
             </div>
 
             <div class="max-w-lg">
+              <!-- Flow Information -->
+              <div class="mb-8">
+                <h3 class="text-lg font-medium text-gray-800 mb-4">Flow Information</h3>
+                <div class="space-y-4">
+                  <!-- Flow Name -->
+                  <div>
+                    <label for="flowName" class="block text-sm font-medium text-gray-700 mb-2">
+                      Name <span class="text-red-500">*</span>
+                    </label>
+                    <input
+                      id="flowName"
+                      type="text"
+                      bind:value={testFlow.name}
+                      oninput={markDirty}
+                      class="w-full rounded-md border px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none
+                             {(!testFlow.name || !testFlow.name.trim()) ? 'border-red-300 bg-red-50' : 'border-gray-300'}"
+                      placeholder="Enter flow name"
+                      required
+                    />
+                    {#if !testFlow.name || !testFlow.name.trim()}
+                      <p class="mt-1 text-sm text-red-600">Flow name is required</p>
+                    {/if}
+                  </div>
+                  
+                  <!-- Flow Description -->
+                  <div>
+                    <label for="flowDescription" class="block text-sm font-medium text-gray-700 mb-2">
+                      Description
+                    </label>
+                    <textarea
+                      id="flowDescription"
+                      bind:value={testFlow.description}
+                      oninput={markDirty}
+                      rows="3"
+                      class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none resize-y"
+                      placeholder="Enter a description for this test flow"
+                    ></textarea>
+                  </div>
+                </div>
+              </div>
+
               <!-- API Hosts Settings -->
               <div class="mb-6">
                 <div class="flex items-center justify-between mb-3">
                   <h3 class="text-lg font-medium text-gray-800">API Hosts</h3>
                   <button
                     class="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700 flex items-center"
-                    on:click={() => showAddApiModal = true}
+                    onclick={() => showAddApiModal = true}
                   >
                     <svg class="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
@@ -397,7 +470,7 @@
                                 <input
                                   type="text"
                                   bind:value={apiInfo.name}
-                                  on:input={markDirty}
+                                  oninput={markDirty}
                                   class="rounded border border-gray-300 px-3 py-1.5 text-sm w-full"
                                   placeholder="API Name"
                                 />
@@ -408,7 +481,7 @@
                               <input
                                 type="text"
                                 bind:value={apiInfo.url}
-                                on:input={markDirty}
+                                oninput={markDirty}
                                 class="w-full rounded border border-gray-300 px-3 py-1.5 text-sm"
                                 placeholder="https://api.example.com"
                               />
@@ -416,7 +489,7 @@
                             <td class="px-4 py-3 whitespace-nowrap text-right">
                               <button
                                 class="inline-flex items-center justify-center p-1.5 rounded-full text-red-600 hover:text-white hover:bg-red-600 transition-colors"
-                                on:click={() => {
+                                onclick={() => {
                                   if (flowJson.settings.api_hosts) {
                                     delete flowJson.settings.api_hosts[apiId];
                                     flowJson.settings.api_hosts = {...flowJson.settings.api_hosts};
@@ -450,7 +523,7 @@
                     <p class="mb-4 text-gray-600">No API hosts configured yet</p>
                     <button
                       class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md flex items-center text-sm"
-                      on:click={() => showAddApiModal = true}
+                      onclick={() => showAddApiModal = true}
                     >
                       <svg class="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
@@ -467,36 +540,6 @@
     </div>
   {/if}
 </div>
-
-<!-- Floating Save Button -->
-{#if testFlow && (isDirty || isSaving)}
-  <div class="fixed bottom-6 right-6 z-50">
-    <button
-      class="group flex items-center gap-2 rounded-full bg-blue-600 px-6 py-3 text-white shadow-lg transition-all hover:bg-blue-700 hover:shadow-xl hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-      disabled={!isDirty || isSaving}
-      on:click={saveTestFlow}
-      title={isSaving ? 'Saving changes...' : 'Save changes to test flow'}
-    >
-      {#if isSaving}
-        <svg class="h-5 w-5 animate-spin" fill="none" viewBox="0 0 24 24">
-          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-        </svg>
-        <span class="font-medium">Saving...</span>
-      {:else}
-        <svg class="h-5 w-5 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3-3m0 0l-3 3m3-3v12"></path>
-        </svg>
-        <span class="font-medium">Save Changes</span>
-      {/if}
-    </button>
-    
-    <!-- Subtle pulse animation when there are unsaved changes -->
-    {#if isDirty && !isSaving}
-      <div class="absolute inset-0 rounded-full bg-blue-600 animate-ping opacity-20"></div>
-    {/if}
-  </div>
-{/if}
 
 <!-- Modal for adding a new step -->
 {#if showNewStepModal}
@@ -520,7 +563,7 @@
       <div class="flex justify-end">
         <button
           class="mr-2 rounded-md bg-gray-200 px-4 py-2 text-gray-800 transition hover:bg-gray-300"
-          on:click={() => {
+          onclick={() => {
             showNewStepModal = false;
             error = null;
           }}
@@ -529,7 +572,7 @@
         </button>
         <button
           class="rounded-md bg-blue-600 px-4 py-2 text-white transition hover:bg-blue-700 disabled:opacity-50"
-          on:click={addStep}
+          onclick={addStep}
           disabled={!newStepLabel.trim()}
         >
           Add Step
@@ -564,7 +607,7 @@
                              ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
                              : 'bg-blue-600 text-white hover:bg-blue-700'}"
                     disabled={isAlreadyAdded}
-                    on:click={() => addApiFromList(api)}
+                    onclick={() => addApiFromList(api)}
                   >
                     {isAlreadyAdded ? 'Already Added' : 'Add'}
                   </button>
@@ -578,7 +621,7 @@
           <h3 class="mb-3 text-lg font-medium">Or Create Custom API Host</h3>
           <button
             class="w-full rounded-md bg-gray-100 border-2 border-dashed border-gray-300 px-4 py-3 text-gray-600 hover:bg-gray-50 hover:border-gray-400 transition"
-            on:click={addCustomApiHost}
+            onclick={addCustomApiHost}
           >
             <svg class="mx-auto h-6 w-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
@@ -591,7 +634,7 @@
           <p class="text-gray-600 mb-4">No APIs found in your workspace.</p>
           <button
             class="w-full rounded-md bg-blue-600 px-4 py-3 text-white hover:bg-blue-700 transition"
-            on:click={addCustomApiHost}
+            onclick={addCustomApiHost}
           >
             <svg class="mx-auto h-6 w-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
@@ -604,7 +647,7 @@
       <div class="flex justify-end">
         <button
           class="rounded-md bg-gray-200 px-4 py-2 text-gray-800 transition hover:bg-gray-300"
-          on:click={() => {
+          onclick={() => {
             showAddApiModal = false;
             error = null;
           }}
