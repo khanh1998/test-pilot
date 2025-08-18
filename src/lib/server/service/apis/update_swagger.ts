@@ -1,6 +1,7 @@
 import { parseSwaggerSpec, extractEndpoints, extractHost } from '$lib/server/swagger/parser';
 import * as apiRepo from '$lib/server/repository/db/apis';
 import * as apiEndpointsRepo from '$lib/server/repository/db/api-endpoints';
+import { EndpointEmbeddingsService } from '$lib/server/service/endpoint_embeddings/create_embedding';
 
 interface UpdateSwaggerParams {
   apiId: number;
@@ -67,6 +68,9 @@ export async function updateSwagger(params: UpdateSwaggerParams): Promise<Update
 
   // Track which endpoints are processed to determine which ones to delete
   const processedEndpoints = new Set();
+  const embeddingService = new EndpointEmbeddingsService();
+  const createdEndpoints = [];
+  const updatedEndpoints = [];
 
   // Process each endpoint from the new spec
   for (const endpoint of newEndpoints) {
@@ -87,10 +91,47 @@ export async function updateSwagger(params: UpdateSwaggerParams): Promise<Update
         parameters: endpoint.parameters,
         tags: endpoint.tags
       });
+      
+      // Add to updated endpoints for embedding processing
+      updatedEndpoints.push({
+        id: existingEndpoint.id,
+        apiId: existingEndpoint.apiId,
+        path: existingEndpoint.path,
+        method: existingEndpoint.method,
+        operationId: endpoint.operationId || null,
+        summary: endpoint.summary || null,
+        description: endpoint.description || null,
+        requestSchema: endpoint.requestSchema,
+        responseSchema: endpoint.responseSchema,
+        parameters: endpoint.parameters,
+        tags: endpoint.tags,
+        createdAt: existingEndpoint.createdAt
+      });
     } else {
       // Insert new endpoint
-      await apiEndpointsRepo.createApiEndpoints(apiId, [endpoint]);
+      const newDbEndpoints = await apiEndpointsRepo.createApiEndpoints(apiId, [endpoint]);
+      createdEndpoints.push(...newDbEndpoints);
     }
+  }
+
+  // Process embeddings for created endpoints
+  if (createdEndpoints.length > 0) {
+    await embeddingService.batchProcessEndpoints(
+      createdEndpoints,
+      existingApi.name,
+      existingApi.description || undefined,
+      userId
+    );
+  }
+
+  // Process embeddings for updated endpoints
+  if (updatedEndpoints.length > 0) {
+    await embeddingService.batchProcessEndpoints(
+      updatedEndpoints,
+      existingApi.name,
+      existingApi.description || undefined,
+      userId
+    );
   }
 
   // Delete endpoints that no longer exist in the spec

@@ -1,5 +1,5 @@
 import { EndpointEmbeddingsRepository } from '$lib/server/repository/db/endpoint-embeddings';
-import { generateEmbedding, generateEmbeddings, createEndpointText } from '$lib/server/repository/openai/embeddings';
+import { createEndpointText } from '$lib/server/repository/openai/embeddings';
 import type { ApiEndpoint } from '$lib/types/api';
 import type { NewEndpointEmbedding } from '$lib/server/db/types';
 
@@ -31,15 +31,12 @@ export class EndpointEmbeddingsService {
     // 1. Create rich text representation
     const processedText = createEndpointText(endpoint, apiName, apiDescription);
     
-    // 2. Generate embedding using OpenAI
-    const embedding = await generateEmbedding(processedText);
-    
-    // 3. Store embedding in the database
+    // 2. Store embedding in the database (without OpenAI embedding for now)
     const newEmbedding: NewEndpointEmbedding = {
       endpointId: endpoint.id,
       userId: userId,
       apiId: endpoint.apiId,
-      embedding,
+      // embedding: null, // Skip OpenAI embedding for now
       processedText
     };
     
@@ -90,11 +87,9 @@ export class EndpointEmbeddingsService {
     similarityThreshold = 0.65, 
     userId?: number
   ) {
-    // Generate embedding for the query description
-    const embedding = await generateEmbedding(description);
-    
-    // Find similar endpoints, filtering by user ID if provided
-    return this.repository.findSimilarEndpoints(embedding, limit, similarityThreshold, userId);
+    // For now, return empty array since we're focusing on tsvector search
+    // Will implement OpenAI embedding search later
+    return [];
   }
   
   /**
@@ -164,35 +159,8 @@ export class EndpointEmbeddingsService {
     similarityThreshold = 0.8,
     userId?: number
   ) {
-    // Generate embeddings for all sentences at once
-    const embeddings = await generateEmbeddings(sentences);
-
-    console.log("embeddings size: ", embeddings.length)
-    
-    // Find similar endpoints for each embedding
-    const allRecommendations = await Promise.all(
-      embeddings.map(embedding => 
-        this.repository.findSimilarEndpoints(embedding, limit, similarityThreshold, userId)
-      )
-    );
-    
-    // Combine results and remove duplicates
-    const endpointMap = new Map();
-    
-    // Flatten the array and keep the highest similarity score for duplicates
-    allRecommendations.flat().forEach(endpoint => {
-      const existingEndpoint = endpointMap.get(endpoint.id);
-      
-      // If endpoint doesn't exist in map or has higher similarity than existing one, add/update it
-      if (!existingEndpoint || endpoint.similarity > existingEndpoint.similarity) {
-        endpointMap.set(endpoint.id, endpoint);
-      }
-    });
-    
-    // Convert map values back to array and sort by similarity
-    const uniqueRecommendations = Array.from(endpointMap.values())
-      .sort((a, b) => b.similarity - a.similarity);
-    
-    return uniqueRecommendations;
+    // For now, return empty array since we're focusing on tsvector search
+    // Will implement OpenAI embedding search later
+    return [];
   }
 }

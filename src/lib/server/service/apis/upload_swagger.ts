@@ -1,6 +1,7 @@
 import { parseSwaggerSpec, extractEndpoints, extractHost } from '$lib/server/swagger/parser';
 import * as apiRepo from '$lib/server/repository/db/apis';
 import * as apiEndpointsRepo from '$lib/server/repository/db/api-endpoints';
+import { EndpointEmbeddingsService } from '$lib/server/service/endpoint_embeddings/create_embedding';
 
 interface UploadSwaggerParams {
   name: string;
@@ -50,8 +51,21 @@ export async function uploadSwagger(params: UploadSwaggerParams): Promise<Upload
   const endpoints = extractEndpoints(api);
 
   // Create the endpoints in the database
+  const createdEndpoints = [];
   if (endpoints.length > 0) {
-    await apiEndpointsRepo.createApiEndpoints(createdApi.id, endpoints);
+    const dbEndpoints = await apiEndpointsRepo.createApiEndpoints(createdApi.id, endpoints);
+    createdEndpoints.push(...dbEndpoints);
+  }
+
+  // Create embeddings for all created endpoints
+  if (createdEndpoints.length > 0) {
+    const embeddingService = new EndpointEmbeddingsService();
+    await embeddingService.batchProcessEndpoints(
+      createdEndpoints,
+      createdApi.name,
+      createdApi.description || undefined,
+      userId
+    );
   }
 
   return {

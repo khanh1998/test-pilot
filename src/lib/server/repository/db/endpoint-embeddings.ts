@@ -17,12 +17,17 @@ export class EndpointEmbeddingsRepository {
   async createOrUpdate(embedding: NewEndpointEmbedding): Promise<EndpointEmbedding> {
     const result = await db
       .insert(endpointEmbeddings)
-      .values(embedding)
+      .values({
+        ...embedding,
+        // Create tsvector for full-text search from processedText
+        searchVector: embedding.processedText ? sql`to_tsvector('english', ${embedding.processedText})` : null
+      })
       .onConflictDoUpdate({
         target: endpointEmbeddings.endpointId,
         set: {
           embedding: embedding.embedding,
           processedText: embedding.processedText,
+          searchVector: embedding.processedText ? sql`to_tsvector('english', ${embedding.processedText})` : null,
           version: sql`${endpointEmbeddings.version} + 1`,
           updatedAt: new Date()
         }
@@ -144,6 +149,7 @@ export class EndpointEmbeddingsRepository {
         userId: endpointEmbeddings.userId,
         apiId: endpointEmbeddings.apiId,
         embedding: endpointEmbeddings.embedding,
+        searchVector: endpointEmbeddings.searchVector,
         processedText: endpointEmbeddings.processedText,
         version: endpointEmbeddings.version,
         createdAt: endpointEmbeddings.createdAt,
