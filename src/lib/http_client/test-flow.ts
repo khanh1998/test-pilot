@@ -16,15 +16,14 @@ export async function getTestFlows(options: {
 } = {}) {
 	try {
 		const { page = 1, limit = 20, search } = options;
-		const url = new URL('/api/test-flows', window.location.origin);
-		
-		url.searchParams.set('page', page.toString());
-		url.searchParams.set('limit', limit.toString());
+		const params = new URLSearchParams();
+		params.set('page', page.toString());
+		params.set('limit', limit.toString());
 		if (search) {
-			url.searchParams.set('search', search);
+			params.set('search', search);
 		}
 
-		const response = await fetchWithAuth(url.toString());
+		const response = await fetchWithAuth(`/api/test-flows?${params.toString()}`);
 		if (response.ok) {
 			return await response.json();
 		} else {

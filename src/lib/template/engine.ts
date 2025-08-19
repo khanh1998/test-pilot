@@ -71,87 +71,19 @@ export function resolveTemplateExpression(
   try {
     // If no template expressions, return as-is
     if (!hasTemplateExpressions(template)) {
-      return {
-        value: template,
-        success: true
-      };
+      return { value: template, success: true };
     }
 
     const functions = createTemplateFunctions(context);
     
-    // Process the template by replacing all template expressions
-    let processedTemplate = template;
-    const expressionRegex = /\{\{\{[^}]+\}\}\}|\{\{[^}]+\}\}/g;
+    // Handle single expression cases that should preserve type
+    const singleExpressionResult = handleSingleExpression(template, context, functions);
+    if (singleExpressionResult) {
+      return singleExpressionResult;
+    }
     
-    processedTemplate = processedTemplate.replace(expressionRegex, (match) => {
-      const expression = parseTemplateExpression(match);
-      if (!expression) {
-        console.warn(`Invalid template expression: ${match}`);
-        return match; // Return original if can't parse
-      }
-
-      try {
-        const resolved = resolveExpressionBySource(expression, context, functions);
-        
-        // Handle type preservation
-        if (expression.preserveType) {
-          // For triple braces, we need to return the actual value
-          // But since we're in a string replacement context, we need special handling
-          if (typeof resolved === 'string') {
-            return resolved;
-          } else {
-            // For non-strings in triple braces, we need to JSON stringify temporarily
-            // This will be parsed back later if the entire template is a single expression
-            return JSON.stringify(resolved);
-          }
-        } else {
-          // For double braces, always convert to string
-          return resolved !== undefined && resolved !== null ? String(resolved) : '';
-        }
-      } catch (error) {
-        console.error(`Error resolving template expression ${match}:`, error);
-        return match; // Return original expression on error
-      }
-    });
-
-    // Special handling for single triple-brace expressions that should preserve type
-    const singleTripleExpressionMatch = template.match(/^\{\{\{[^}]+\}\}\}$/);
-    if (singleTripleExpressionMatch) {
-      const expression = parseTemplateExpression(singleTripleExpressionMatch[0]);
-      if (expression?.preserveType) {
-        try {
-          const resolved = resolveExpressionBySource(expression, context, functions);
-          return {
-            value: resolved,
-            success: true
-          };
-        } catch (error) {
-          return {
-            value: template,
-            success: false,
-            error: error instanceof Error ? error.message : String(error)
-          };
-        }
-      }
-    }
-
-    // Try to parse the result as JSON if it looks like it was JSON stringified
-    if (processedTemplate !== template && processedTemplate.startsWith('"') && processedTemplate.endsWith('"')) {
-      try {
-        const parsed = JSON.parse(processedTemplate);
-        return {
-          value: parsed,
-          success: true
-        };
-      } catch {
-        // If parsing fails, just return the string
-      }
-    }
-
-    return {
-      value: processedTemplate,
-      success: true
-    };
+    // Handle multiple expressions in template
+    return handleMultipleExpressions(template, context, functions);
   } catch (error) {
     return {
       value: template,
@@ -159,6 +91,174 @@ export function resolveTemplateExpression(
       error: error instanceof Error ? error.message : String(error)
     };
   }
+}
+
+/**
+ * Handle single expression cases that should preserve type
+ */
+function handleSingleExpression(
+  template: string,
+  context: TemplateContext,
+  functions: Record<string, (...args: unknown[]) => unknown>
+): TemplateResolutionResult | null {
+  // Check for single quoted triple-brace: "{{{expr}}}"
+  const quotedMatch = template.match(/^"\{\{\{[^}]+\}\}\}"$/);
+  if (quotedMatch) {
+    return resolveSingleExpression(
+      quotedMatch[0].slice(1, -1), // Remove quotes
+      template,
+      context,
+      functions
+    );
+  }
+  
+  return null;
+}
+
+/**
+ * Resolve a single expression and return result
+ */
+function resolveSingleExpression(
+  expressionStr: string,
+  originalTemplate: string,
+  context: TemplateContext,
+  functions: Record<string, (...args: unknown[]) => unknown>
+): TemplateResolutionResult {
+  const expression = parseTemplateExpression(expressionStr);
+  if (!expression?.preserveType) {
+    return { value: originalTemplate, success: true };
+  }
+  
+  try {
+    const resolved = resolveExpressionBySource(expression, context, functions);
+    return { value: resolved, success: true };
+  } catch (error) {
+    return {
+      value: originalTemplate,
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
+/**
+ * Handle templates with multiple expressions
+ */
+function handleMultipleExpressions(
+  template: string,
+  context: TemplateContext,
+  functions: Record<string, (...args: unknown[]) => unknown>
+): TemplateResolutionResult {
+  let processedTemplate = template;
+  
+  // First pass: Handle quoted triple-brace expressions
+  const quotedResult = processQuotedTripleBraces(processedTemplate, context, functions);
+  if (!quotedResult.success) {
+    return quotedResult;
+  }
+  processedTemplate = quotedResult.value as string;
+  
+  // Second pass: Handle remaining expressions (double braces and unquoted triple braces)
+  const remainingResult = processRemainingExpressions(processedTemplate, context, functions);
+  if (!remainingResult.success) {
+    return { value: template, success: false, error: remainingResult.error };
+  }
+  processedTemplate = remainingResult.value as string;
+  
+  // Try to parse JSON if it looks like a JSON string from triple braces
+  const finalValue = tryParseJsonResult(processedTemplate, template);
+  
+  return { value: finalValue, success: true };
+}
+
+/**
+ * Process quoted triple-brace expressions in template
+ */
+function processQuotedTripleBraces(
+  template: string,
+  context: TemplateContext,
+  functions: Record<string, (...args: unknown[]) => unknown>
+): TemplateResolutionResult {
+  const quotedTripleRegex = /"\{\{\{[^}]+\}\}\}"/g;
+  let hasError = false;
+  let errorMessage = '';
+  
+  const processed = template.replace(quotedTripleRegex, (match) => {
+    const expression = parseTemplateExpression(match.slice(1, -1)); // Remove quotes
+    if (!expression?.preserveType) {
+      return match;
+    }
+    
+    try {
+      const resolved = resolveExpressionBySource(expression, context, functions);
+      return JSON.stringify(resolved);
+    } catch (error) {
+      hasError = true;
+      errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`Error resolving quoted triple-brace expression ${match}:`, error);
+      return match;
+    }
+  });
+  
+  if (hasError) {
+    return { value: template, success: false, error: errorMessage };
+  }
+  
+  return { value: processed, success: true };
+}
+
+/**
+ * Process remaining expressions (double braces only)
+ */
+function processRemainingExpressions(
+  template: string,
+  context: TemplateContext,
+  functions: Record<string, (...args: unknown[]) => unknown>
+): TemplateResolutionResult {
+  const expressionRegex = /\{\{[^}]+\}\}/g; // Only double braces now
+  let hasError = false;
+  let errorMessage = '';
+  
+  const processed = template.replace(expressionRegex, (match) => {
+    const expression = parseTemplateExpression(match);
+    if (!expression) {
+      console.warn(`Invalid template expression: ${match}`);
+      return match;
+    }
+
+    try {
+      const resolved = resolveExpressionBySource(expression, context, functions);
+      // Double braces always convert to string
+      return resolved !== undefined && resolved !== null ? String(resolved) : '';
+    } catch (error) {
+      hasError = true;
+      errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`Error resolving template expression ${match}:`, error);
+      return match;
+    }
+  });
+  
+  if (hasError) {
+    return { value: template, success: false, error: errorMessage };
+  }
+  
+  return { value: processed, success: true };
+}
+
+/**
+ * Try to parse result as JSON if it looks like it was JSON stringified
+ */
+function tryParseJsonResult(processedTemplate: string, originalTemplate: string): unknown {
+  if (processedTemplate !== originalTemplate && 
+      processedTemplate.startsWith('"') && 
+      processedTemplate.endsWith('"')) {
+    try {
+      return JSON.parse(processedTemplate);
+    } catch {
+      // If parsing fails, just return the string
+    }
+  }
+  return processedTemplate;
 }
 
 /**
