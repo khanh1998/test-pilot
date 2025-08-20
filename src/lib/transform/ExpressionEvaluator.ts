@@ -474,10 +474,11 @@ export class SafeExpressionEvaluator {
       return expression; // Keep template expressions as-is
     }
     
-    // Replace "item" with context path if needed
-    if (expression.includes('item.')) {
+    // Replace "item." with context path if needed - but only when it refers to the context item
+    // Use word boundary to avoid replacing "item." within other words like "terminal_menu_item."
+    if (/\bitem\./.test(expression)) {
       const contextObj = { item: context };
-      expression = expression.replace(/item\./g, '$.');
+      expression = expression.replace(/\bitem\./g, '$.');
       return this.jsonPathEvaluator.evaluate(expression, contextObj);
     }
     
