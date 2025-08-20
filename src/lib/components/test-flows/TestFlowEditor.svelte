@@ -236,6 +236,18 @@
 
   // Run the entire flow
   function runFlow() {
+    // Check for API hosts before running
+    if (!hasValidApiHosts()) {
+      dispatch('error', { message: 'Please configure at least one API host before running the flow.' });
+      return;
+    }
+
+    // Check for steps
+    if (flowData.steps.length === 0) {
+      dispatch('error', { message: 'Please add at least one step to the flow before running.' });
+      return;
+    }
+
     if (flowRunner) {
       // Reset the execution state before starting a new run
       executionStore.set({});
@@ -243,6 +255,8 @@
       flowRunner.runFlow().catch((err: unknown) => {
         console.error('Error running flow:', err);
         isRunning = false;
+        const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred while running the flow.';
+        dispatch('error', { message: errorMessage });
       });
     }
   }
@@ -363,9 +377,11 @@
         <button
           class="inline-flex items-center rounded-md border border-transparent px-4 py-2 text-sm font-medium text-white shadow-sm {isRunning
             ? 'bg-red-600 hover:bg-red-700'
+            : !hasValidApiHosts() || flowData.steps.length === 0
+            ? 'bg-gray-400 cursor-not-allowed'
             : 'bg-blue-600 hover:bg-blue-700'}"
           on:click={isRunning ? handleStop : runFlow}
-          disabled={!hasValidApiHosts() || flowData.steps.length === 0}
+          disabled={isRunning || !hasValidApiHosts() || flowData.steps.length === 0}
         >
           {#if isRunning}
             <svg
@@ -389,6 +405,26 @@
               ></path>
             </svg>
             Stop
+          {:else if !hasValidApiHosts()}
+            <svg class="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z"
+              />
+            </svg>
+            Configure API Hosts
+          {:else if flowData.steps.length === 0}
+            <svg class="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+              />
+            </svg>
+            Add Steps First
           {:else}
             <svg class="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path

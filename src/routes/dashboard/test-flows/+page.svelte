@@ -19,7 +19,7 @@
 
   // Pagination state
   let currentPage = 1;
-  let pageSize = 8;
+  let pageSize = 12;
   let totalItems = 0;
   let totalPages = 0;
   let hasNext = false;
