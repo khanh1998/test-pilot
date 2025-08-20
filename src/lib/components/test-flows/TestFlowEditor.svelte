@@ -143,11 +143,9 @@
   function handleChange(event?: CustomEvent<{ flowData: TestFlowData }>) {
     // If event has flowData in detail, use it
     if (event && event.detail && event.detail.flowData) {
-      console.log('Received flowData change:', event.detail.flowData);
       flowData = { ...event.detail.flowData };
     } else {
       // Otherwise update the local variable
-      console.log('Regular change in TestFlowEditor');
       flowData = { ...flowData };
     }
 

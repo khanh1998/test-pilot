@@ -19,10 +19,26 @@
   let jsonBodyContent: string = '{}';
   let headers: { name: string; value: string; enabled: boolean }[] = [];
   let initialized = false; // Add a flag to track if we've already initialized
+  
+  // Local copies to prevent cross-component interference
+  let localQueryParams: Record<string, string> = {};
+  let localPathParams: Record<string, string> = {};
 
   // Initialize state when component mounts
   $: if (isMounted && endpoint && !initialized) {
     initialized = true; // Set the flag to true so this block runs only once
+
+    // Initialize and copy queryParams to local state
+    if (!stepEndpoint.queryParams) {
+      stepEndpoint.queryParams = {};
+    }
+    localQueryParams = { ...stepEndpoint.queryParams };
+
+    // Initialize and copy pathParams to local state
+    if (!stepEndpoint.pathParams) {
+      stepEndpoint.pathParams = {};
+    }
+    localPathParams = { ...stepEndpoint.pathParams };
 
     // Initialize headers if needed
     if (!stepEndpoint.headers) {
@@ -78,7 +94,9 @@
         stepEndpoint.body = parsedJson;
       }
 
-      // Save headers
+      // Save local changes back to stepEndpoint
+      stepEndpoint.queryParams = { ...localQueryParams };
+      stepEndpoint.pathParams = { ...localPathParams };
       stepEndpoint.headers = [...headers];
 
       dispatch('change');
@@ -330,7 +348,7 @@
       {#if activeTab === 'path' && endpoint?.parameters?.some((p) => p.in === 'path')}
         <div class="space-y-4">
           <h4 class="mb-2 text-sm font-medium text-gray-700">Path Parameters</h4>
-          {#each endpoint.parameters.filter((p) => p.in === 'path') as param (param.name)}
+          {#each endpoint.parameters.filter((p) => p.in === 'path') as param}
             <div class="mb-4 flex flex-col">
               <label
                 class="mb-1 text-sm"
@@ -347,10 +365,9 @@
                 type="text"
                 class="rounded-md border px-3 py-2 text-sm"
                 placeholder={param.example || param.name}
-                value={stepEndpoint.pathParams?.[param.name] || ''}
+                value={localPathParams[param.name] || ''}
                 on:input={(e) => {
-                  if (!stepEndpoint.pathParams) stepEndpoint.pathParams = {};
-                  stepEndpoint.pathParams[param.name] = (e.currentTarget as HTMLInputElement).value;
+                  localPathParams[param.name] = (e.currentTarget as HTMLInputElement).value;
                 }}
               />
             </div>
@@ -362,7 +379,7 @@
       {#if activeTab === 'query' && endpoint?.parameters?.some((p) => p.in === 'query')}
         <div class="space-y-4">
           <h4 class="mb-2 text-sm font-medium text-gray-700">Query Parameters</h4>
-          {#each endpoint.parameters.filter((p) => p.in === 'query') as param (param.name)}
+          {#each endpoint.parameters.filter((p) => p.in === 'query') as param}
             <div class="mb-4 flex flex-col">
               <div class="flex items-center justify-between">
                 <label
@@ -378,29 +395,27 @@
                 <input
                   id="query-param-checkbox-{stepIndex}-{endpointIndex}-{param.name}-{instanceIndex}"
                   type="checkbox"
-                  checked={stepEndpoint.queryParams?.[param.name] !== undefined}
+                  checked={localQueryParams[param.name] !== undefined}
                   on:change={(e) => {
-                    if (!stepEndpoint.queryParams) stepEndpoint.queryParams = {};
                     if ((e.currentTarget as HTMLInputElement).checked) {
-                      stepEndpoint.queryParams[param.name] = param.example || '';
+                      localQueryParams[param.name] = param.example || '';
                     } else {
-                      delete stepEndpoint.queryParams[param.name];
+                      delete localQueryParams[param.name];
                     }
+                    // Force reactivity update for local state
+                    localQueryParams = { ...localQueryParams };
                   }}
                 />
               </div>
-              {#if stepEndpoint.queryParams?.[param.name] !== undefined}
+              {#if localQueryParams[param.name] !== undefined}
                 <input
                   id="query-param-{stepIndex}-{endpointIndex}-{param.name}-{instanceIndex}"
                   type="text"
                   class="rounded-md border px-3 py-2 text-sm"
                   placeholder={param.example || param.name}
-                  value={stepEndpoint.queryParams[param.name] || ''}
+                  value={localQueryParams[param.name] || ''}
                   on:input={(e) => {
-                    if (!stepEndpoint.queryParams) stepEndpoint.queryParams = {};
-                    stepEndpoint.queryParams[param.name] = (
-                      e.currentTarget as HTMLInputElement
-                    ).value;
+                    localQueryParams[param.name] = (e.currentTarget as HTMLInputElement).value;
                   }}
                 />
               {/if}

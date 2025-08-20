@@ -97,14 +97,8 @@ import {
 
   // Ensure parameters array exists
   $: if (!flowData.parameters) {
-    console.log('Initializing empty parameters array');
     flowData.parameters = [];
-  }
-
-  // Log whenever parameters change
-  $: console.log('Parameters in flowData:', flowData.parameters);
-
-  $: console.log('flow data', flowData);
+  }  $: console.log('flow data', flowData);
 
   // Watch executionState for changes and emit update events
   $: if (Object.keys(executionState).length > 0) {

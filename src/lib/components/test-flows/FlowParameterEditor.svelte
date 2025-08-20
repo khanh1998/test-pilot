@@ -63,11 +63,8 @@
   
   // Edit an existing parameter
   function startEditing(parameter: ExtendedFlowParameter) {
-    console.log('startEditing called for:', parameter.name, 'current editing state:', parameter.editing);
-    
     // Find the parameter in the working array and update it to trigger reactivity
     const paramIndex = workingParameters.findIndex(p => p === parameter);
-    console.log('Parameter index found:', paramIndex);
     
     if (paramIndex !== -1) {
       workingParameters[paramIndex] = {
@@ -81,7 +78,6 @@
       };
       // Trigger reactivity
       workingParameters = workingParameters;
-      console.log('Updated workingParameters, new editing state:', workingParameters[paramIndex].editing);
     }
   }
   
@@ -134,6 +130,16 @@
       }
     }
     
+    // Check if this is a new parameter or if changes were made (before updating the parameter)
+    const isNewParam = parameter.isNew;
+    const parameterHasChanges = !isNewParam && (
+      parameter.tempName !== parameter.name ||
+      parameter.tempType !== parameter.type ||
+      parameter.tempDefaultValue !== parameter.defaultValue ||
+      parameter.tempDescription !== parameter.description ||
+      parameter.tempRequired !== parameter.required
+    );
+    
     // Apply the changes
     const paramIndex = workingParameters.findIndex(p => p === parameter);
     if (paramIndex !== -1) {
@@ -157,15 +163,25 @@
     }
     
     // If it's a new parameter, add it to the working list
-    if (parameter.isNew && newParameter === parameter) {
+    if (isNewParam && newParameter === parameter) {
       workingParameters = [...workingParameters, parameter];
       newParameter = null;
+      
+      // Dispatch save event immediately for new parameters
+      const { editing, tempName, tempType, tempDefaultValue, tempDescription, tempRequired, ...cleanParam } = parameter;
+      dispatch('save', { ...cleanParam, isNew: true });
+      hasChanges = true;
     } else {
       // Trigger reactivity for existing parameters
       workingParameters = workingParameters;
+      
+      // Dispatch save event immediately for modified existing parameters
+      if (parameterHasChanges) {
+        const { editing, tempName, tempType, tempDefaultValue, tempDescription, tempRequired, ...cleanParam } = parameter;
+        dispatch('save', cleanParam);
+        hasChanges = true;
+      }
     }
-    
-    hasChanges = true;
     
     return true;
   }
@@ -183,9 +199,10 @@
     // For new parameters, dispatch save events
     for (const parameter of workingParameters) {
       if (parameter.isNew) {
-        // Remove temporary editing fields
+        // Remove temporary editing fields but keep isNew flag
         const { editing, tempName, tempType, tempDefaultValue, tempDescription, tempRequired, ...cleanParam } = parameter;
-        dispatch('save', cleanParam);
+        // Keep the isNew flag for the FlowRunner to identify new parameters
+        dispatch('save', { ...cleanParam, isNew: true });
       } 
       else if (hasParameterChanged(parameter)) {
         // For modified parameters, dispatch save events
@@ -468,9 +485,7 @@
                               class="text-gray-400 hover:text-blue-600 p-1"
                               on:click={(e) => {
                                 e.stopPropagation();
-                                console.log('Edit button clicked for parameter:', parameter.name);
                                 startEditing(parameter);
-                                console.log('Parameter after edit:', parameter);
                               }}
                               aria-label="Edit parameter"
                             >

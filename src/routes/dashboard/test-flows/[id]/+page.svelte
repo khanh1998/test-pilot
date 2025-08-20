@@ -95,10 +95,7 @@
 
       // Ensure parameters array exists
       if (!flowJson.parameters) {
-        console.log('Initializing empty parameters array');
         flowJson.parameters = [];
-      } else {
-        console.log('Loaded Flow Parameters:', flowJson.parameters);
       }
 
       isDirty = false;
@@ -329,7 +326,7 @@
               <TestFlowEditor
                 flowData={{ ...flowJson, endpoints }}
                 {endpoints}
-                onchange={(event) => {
+                on:change={(event: CustomEvent) => {
                   // Extract and update the flow data from the event
                   const updatedFlowData = event.detail;
                   if (updatedFlowData) {
@@ -355,17 +352,20 @@
                       return step;
                     });
 
+                    // Ensure parameters are properly updated - prioritize updatedFlowData.parameters
+                    const updatedParameters = updatedFlowData.parameters || flowJson.parameters || [];
+
                     flowJson = {
                       settings: updatedFlowData.settings || flowJson.settings,
                       steps: normalizedSteps,
-                      parameters: updatedFlowData.parameters || flowJson.parameters || []
+                      parameters: updatedParameters
                     };
                   }
                   markDirty();
                 }}
-                onreset={handleReset}
-                onexecutionComplete={handleExecutionComplete}
-                onlog={handleLog}
+                on:reset={handleReset}
+                on:executionComplete={handleExecutionComplete}
+                on:log={handleLog}
               />
 
               <!-- Empty state when there are no steps -->
@@ -593,7 +593,7 @@
           <h3 class="mb-3 text-lg font-medium">Choose from Available APIs</h3>
           <div class="max-h-64 overflow-y-auto border border-gray-200 rounded-lg">
             {#each availableApis as api}
-              {@const isAlreadyAdded = flowJson.settings.api_hosts && flowJson.settings.api_hosts[String(api.id)]}
+              {@const isAlreadyAdded = !!(flowJson.settings.api_hosts && flowJson.settings.api_hosts[String(api.id)])}
               <div class="border-b border-gray-100 last:border-b-0">
                 <div class="p-4 flex items-center justify-between hover:bg-gray-50">
                   <div class="flex-1">
