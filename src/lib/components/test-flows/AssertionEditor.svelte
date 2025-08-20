@@ -170,6 +170,11 @@
       stepEndpoint.assertions = [];
     }
     assertions = [...(stepEndpoint.assertions || [])];
+    
+    // Initialize skipDefaultStatusCheck if not set
+    if (stepEndpoint.skipDefaultStatusCheck === undefined) {
+      stepEndpoint.skipDefaultStatusCheck = false;
+    }
   }
   
   // Get transformations for transformed_data source
@@ -539,6 +544,45 @@
 
     <!-- Content -->
     <div class="p-2 sm:p-3">
+      <!-- Default Status Check Settings -->
+      <div class="mb-4 rounded-lg border bg-white p-3 shadow-sm">
+        <h3 class="mb-2 font-medium flex items-center">
+          <svg class="w-4 h-4 mr-1 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+          </svg>
+          Default Checks
+        </h3>
+        
+        <div class="flex items-center justify-between">
+          <div>
+            <label class="flex items-center text-sm">
+              <input
+                type="checkbox"
+                bind:checked={stepEndpoint.skipDefaultStatusCheck}
+                class="mr-2 rounded border-gray-300"
+                on:change={() => dispatch('change')}
+              />
+              Skip automatic 2xx status check
+            </label>
+            <p class="mt-1 text-xs text-gray-500">
+              When enabled, non-2xx responses (like 404, 500) won't be treated as failures automatically. 
+              Useful for testing error scenarios.
+            </p>
+          </div>
+          
+          {#if stepEndpoint.skipDefaultStatusCheck}
+            <span class="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded">
+              Error Testing Mode
+            </span>
+          {:else}
+            <span class="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
+              Success Testing Mode
+            </span>
+          {/if}
+        </div>
+      </div>
+
       <div class="mb-3">
         <h3 class="mb-2 font-medium flex items-center">
           <svg class="w-4 h-4 mr-1 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">

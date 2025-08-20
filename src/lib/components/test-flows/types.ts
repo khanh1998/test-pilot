@@ -33,6 +33,7 @@ export type StepEndpoint = {
     expression: string; // Will store the transformation expression as string in Phase 1
   }>;
   assertions?: Array<import('$lib/assertions/types').Assertion>;
+  skipDefaultStatusCheck?: boolean; // When true, skips the automatic 2xx status check
 };
 
 export type EndpointExecutionState = {

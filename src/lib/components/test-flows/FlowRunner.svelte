@@ -754,7 +754,19 @@ import {
       }
 
       // Update status - create a new object for reactivity
-      if (response.ok) {
+      // Check if we should skip the default 2xx status check
+      const shouldSkipDefaultCheck = endpoint.skipDefaultStatusCheck === true;
+      
+      if (shouldSkipDefaultCheck) {
+        // When skipping default check, always mark as completed regardless of status code
+        // The user will use explicit status code assertions to validate the response
+        updateExecutionState(endpointId, { status: 'completed' }, true);
+        addLog(
+          'debug',
+          `Skipped default status check for endpoint ${endpointId}`,
+          `Response status: ${response.status} - using explicit assertions only`
+        );
+      } else if (response.ok) {
         updateExecutionState(endpointId, { status: 'completed' }, true);
       } else {
         updateExecutionState(endpointId, {
