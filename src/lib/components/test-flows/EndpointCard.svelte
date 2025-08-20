@@ -349,7 +349,7 @@
     <div class="mt-0.5 flex flex-wrap gap-0.5 text-[10px]">
       <!-- Path & query parameters -->
       {#if endpoint.parameters && endpoint.parameters.length > 0}
-        {#each endpoint.parameters.filter((p) => p.in === 'path') as param (param.name)}
+        {#each endpoint.parameters.filter((p) => p.in === 'path') as param, index (`path-${param.name}-${index}`)}
           {#if stepEndpoint.pathParams && stepEndpoint.pathParams[param.name]}
             <span
               class="rounded bg-purple-100 px-0.5 py-px text-purple-800"
@@ -359,7 +359,7 @@
             </span>
           {/if}
         {/each}
-        {#each endpoint.parameters.filter((p) => p.in === 'query') as param (param.name)}
+        {#each endpoint.parameters.filter((p) => p.in === 'query') as param, index (`query-${param.name}-${index}`)}
           {#if stepEndpoint.queryParams && stepEndpoint.queryParams[param.name]}
             <span
               class="rounded bg-blue-100 px-0.5 py-px text-blue-800"
