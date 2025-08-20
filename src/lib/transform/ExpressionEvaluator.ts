@@ -181,12 +181,29 @@ export class SafeExpressionEvaluator {
         
         if (valueA === valueB) return 0;
         
-        // Convert to comparable types
+        // Handle null/undefined values - treat them as distinct but both come first
+        if (valueA === null && valueB === null) return 0;
+        if (valueA === undefined && valueB === undefined) return 0;
+        if (valueA === null && valueB === undefined) return desc ? 1 : -1;
+        if (valueA === undefined && valueB === null) return desc ? -1 : 1;
+        if (valueA === null || valueA === undefined) return desc ? 1 : -1;
+        if (valueB === null || valueB === undefined) return desc ? -1 : 1;
+        
+        // Try numeric comparison first
+        const numA = Number(valueA);
+        const numB = Number(valueB);
+        
+        if (!isNaN(numA) && !isNaN(numB)) {
+          // Both are valid numbers - use numeric comparison
+          const result = numA - numB;
+          return desc ? -result : result;
+        }
+        
+        // Fall back to string comparison
         const strA = String(valueA);
         const strB = String(valueB);
         
-        // Sort logic
-        const result = strA < strB ? -1 : 1;
+        const result = strA.localeCompare(strB);
         return desc ? -result : result;
       });
     },
