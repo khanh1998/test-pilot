@@ -17,13 +17,14 @@ export const GET: RequestHandler = async ({ locals, url }) => {
     // Get query parameters
     const query = url.searchParams.get('query');
     const apiIdParam = url.searchParams.get('apiId');
+    const apiIdsParams = url.searchParams.getAll('apiIds');
     const limitParam = url.searchParams.get('limit');
-    
+
     if (!query) {
       return json({ error: 'Query parameter is required' }, { status: 400 });
     }
 
-    // Parse optional apiId
+    // Parse optional apiId (single API filter)
     let apiId: number | undefined;
     if (apiIdParam) {
       const parsedApiId = parseInt(apiIdParam, 10);
@@ -31,6 +32,20 @@ export const GET: RequestHandler = async ({ locals, url }) => {
         return json({ error: 'Invalid apiId parameter' }, { status: 400 });
       }
       apiId = parsedApiId;
+    }
+
+    // Parse optional apiIds (multiple API filter)
+    let apiIds: number[] | undefined;
+    if (apiIdsParams.length > 0) {
+      const parsedApiIds: number[] = [];
+      for (const apiIdStr of apiIdsParams) {
+        const parsedApiId = parseInt(apiIdStr, 10);
+        if (isNaN(parsedApiId)) {
+          return json({ error: 'Invalid apiIds parameter' }, { status: 400 });
+        }
+        parsedApiIds.push(parsedApiId);
+      }
+      apiIds = parsedApiIds;
     }
 
     // Parse limit
@@ -42,7 +57,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
       }
       limit = parsedLimit;
     } else {
-        limit = 10;
+      limit = 10;
     }
 
     // Search endpoints
@@ -50,7 +65,8 @@ export const GET: RequestHandler = async ({ locals, url }) => {
       query,
       userId,
       apiId,
-      limit,
+      apiIds,
+      limit
     });
 
     return json({
@@ -58,12 +74,8 @@ export const GET: RequestHandler = async ({ locals, url }) => {
       data: results,
       count: results.length
     });
-
   } catch (error) {
     console.error('Error searching endpoints:', error);
-    return json(
-      { error: 'Failed to search endpoints' },
-      { status: 500 }
-    );
+    return json({ error: 'Failed to search endpoints' }, { status: 500 });
   }
 };

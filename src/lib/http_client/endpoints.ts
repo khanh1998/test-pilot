@@ -9,6 +9,7 @@ export interface EndpointRecommendationParams {
 export interface SearchEndpointsParams {
   query: string;
   apiId?: number;
+  apiIds?: number[];
   limit?: number;
 }
 
@@ -46,22 +47,30 @@ export interface SearchEndpointsResponse {
   count: number;
 }
 
-export async function searchEndpoints(params: SearchEndpointsParams): Promise<SearchEndpointsResponse> {
+export async function searchEndpoints(
+  params: SearchEndpointsParams
+): Promise<SearchEndpointsResponse> {
   try {
     const searchParams = new URLSearchParams({
       query: params.query
     });
-    
+
     if (params.apiId) {
       searchParams.append('apiId', params.apiId.toString());
     }
-    
+
+    if (params.apiIds && params.apiIds.length > 0) {
+      params.apiIds.forEach((id) => {
+        searchParams.append('apiIds', id.toString());
+      });
+    }
+
     if (params.limit) {
       searchParams.append('limit', params.limit.toString());
     }
 
     const response = await fetchWithAuth(`/api/endpoints/search?${searchParams.toString()}`, {
-      method: 'GET',
+      method: 'GET'
     });
 
     if (response.ok) {
@@ -80,7 +89,7 @@ export async function searchEndpoints(params: SearchEndpointsParams): Promise<Se
 export async function getEndpointById(endpointId: number): Promise<EndpointDetails> {
   try {
     const response = await fetchWithAuth(`/api/endpoints/${endpointId}`, {
-      method: 'GET',
+      method: 'GET'
     });
 
     if (response.ok) {
@@ -101,9 +110,9 @@ export async function getRecommendedEndpoints(params: EndpointRecommendationPara
     const response = await fetchWithAuth('/api/endpoints/recommend', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/json'
       },
-      body: JSON.stringify(params),
+      body: JSON.stringify(params)
     });
 
     if (response.ok) {
@@ -111,7 +120,9 @@ export async function getRecommendedEndpoints(params: EndpointRecommendationPara
       return data;
     } else {
       const errorData = await response.json();
-      throw new Error(errorData.error || `Failed to get recommended endpoints (${response.status})`);
+      throw new Error(
+        errorData.error || `Failed to get recommended endpoints (${response.status})`
+      );
     }
   } catch (error) {
     console.error('Error getting endpoint recommendations:', error);

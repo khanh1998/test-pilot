@@ -4,11 +4,12 @@ interface SearchEndpointsParams {
   query: string;
   userId: number;
   apiId?: number;
-  limit: number,
+  apiIds?: number[];
+  limit: number;
 }
 
 export async function searchEndpointsByDescription(params: SearchEndpointsParams) {
-  const { query, userId, apiId, limit } = params;
+  const { query, userId, apiId, apiIds, limit } = params;
 
   // Validate input
   if (!query.trim()) {
@@ -20,10 +21,11 @@ export async function searchEndpointsByDescription(params: SearchEndpointsParams
     query: query.trim(),
     userId,
     apiId,
-    limit,
+    apiIds,
+    limit
   });
 
-  return results.map(endpoint => ({
+  return results.map((endpoint) => ({
     id: endpoint.id,
     apiId: endpoint.apiId,
     path: endpoint.path,

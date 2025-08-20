@@ -22,7 +22,7 @@ export async function getApiEndpointById(endpointId: number, userId?: number) {
     .from(apiEndpoints)
     .leftJoin(apis, eq(apiEndpoints.apiId, apis.id))
     .where(
-      userId 
+      userId
         ? and(eq(apiEndpoints.id, endpointId), eq(apis.userId, userId))
         : eq(apiEndpoints.id, endpointId)
     );
@@ -47,7 +47,7 @@ export async function getApiEndpointSummaryById(endpointId: number, userId?: num
     .from(apiEndpoints)
     .leftJoin(apis, eq(apiEndpoints.apiId, apis.id))
     .where(
-      userId 
+      userId
         ? and(eq(apiEndpoints.id, endpointId), eq(apis.userId, userId))
         : eq(apiEndpoints.id, endpointId)
     );
@@ -96,7 +96,7 @@ export async function getApiEndpointsByIds(endpointIds: number[], userId?: numbe
     .from(apiEndpoints)
     .leftJoin(apis, eq(apiEndpoints.apiId, apis.id))
     .where(
-      userId 
+      userId
         ? and(inArray(apiEndpoints.id, endpointIds), eq(apis.userId, userId))
         : inArray(apiEndpoints.id, endpointIds)
     );
@@ -231,33 +231,31 @@ export async function deleteApiEndpoints(endpointIds: number[]) {
   if (endpointIds.length === 0) {
     return;
   }
-  
-  await db
-    .delete(apiEndpoints)
-    .where(inArray(apiEndpoints.id, endpointIds));
+
+  await db.delete(apiEndpoints).where(inArray(apiEndpoints.id, endpointIds));
 }
 
 // search endpoints by using `search_vector` in `endpoint_embeddings`
-interface SearchByTsVectorParams  {
-  query: string,
-  userId: number,
-  apiId?: number, // optional
-  limit: number,
+interface SearchByTsVectorParams {
+  query: string;
+  userId: number;
+  apiId?: number; // optional
+  apiIds?: number[]; // optional
+  limit: number;
 }
 
 export async function searchByTsVector(params: SearchByTsVectorParams) {
-  const { query, userId, apiId } = params;
-  
+  const { query, userId, apiId, apiIds } = params;
+
   let whereConditions = and(
     eq(endpointEmbeddings.userId, userId),
     sql`${endpointEmbeddings.searchVector} @@ plainto_tsquery('english',${query})`
   );
 
   if (apiId) {
-    whereConditions = and(
-      whereConditions,
-      eq(endpointEmbeddings.apiId, apiId)
-    );
+    whereConditions = and(whereConditions, eq(endpointEmbeddings.apiId, apiId));
+  } else if (apiIds && apiIds.length > 0) {
+    whereConditions = and(whereConditions, inArray(endpointEmbeddings.apiId, apiIds));
   }
 
   const results = await db
