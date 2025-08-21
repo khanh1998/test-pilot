@@ -162,6 +162,14 @@ export class SafeExpressionEvaluator {
       return Array.isArray(data) ? data.length : 0;
     },
     
+    'first': (data: unknown): unknown => {
+      return Array.isArray(data) && data.length > 0 ? data[0] : undefined;
+    },
+    
+    'last': (data: unknown): unknown => {
+      return Array.isArray(data) && data.length > 0 ? data[data.length - 1] : undefined;
+    },
+    
     // Sorting and slicing
     'sort': (data: unknown, options?: unknown): unknown[] => {
       if (!Array.isArray(data)) return [];

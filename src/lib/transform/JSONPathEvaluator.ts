@@ -166,12 +166,30 @@ export class SafeJSONPathEvaluator {
   private executeSteps(steps: JSONPathStep[], data: unknown): unknown {
     let current = data;
 
-    for (const step of steps) {
+    for (let i = 0; i < steps.length; i++) {
+      const step = steps[i];
+      
       if (current === undefined || current === null) {
         return undefined;
       }
       
       current = this.executeStep(step, current);
+      
+      // Handle wildcard result followed by property access
+      if (Array.isArray(current) && i + 1 < steps.length) {
+        const nextStep = steps[i + 1];
+        if (nextStep.type === 'property') {
+          // Apply the next property step to each element of the array
+          const results = current.map(item => {
+            if (typeof item === 'object' && item !== null && typeof nextStep.value === 'string') {
+              return (item as Record<string, unknown>)[nextStep.value];
+            }
+            return undefined;
+          });
+          current = results;
+          i++; // Skip the next step since we've already processed it
+        }
+      }
     }
 
     return current;
