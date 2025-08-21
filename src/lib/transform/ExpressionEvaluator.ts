@@ -249,13 +249,13 @@ export class SafeExpressionEvaluator {
   evaluate(expression: string, data: unknown): unknown {
     expression = expression.trim();
     
-    // Check for pipeline notation
-    if (expression.includes('|')) {
+    // Check for pipeline notation (| but not ||)
+    if (this.isPipelineExpression(expression)) {
       return this.evaluatePipeline(expression, data);
     }
     
-    // Check for JSONPath notation
-    if (expression.startsWith('$')) {
+    // Check for JSONPath notation - but only if it doesn't contain operators
+    if (expression.startsWith('$') && !this.containsOperators(expression)) {
       return this.jsonPathEvaluator.evaluate(expression, data);
     }
     
@@ -278,8 +278,8 @@ export class SafeExpressionEvaluator {
    * @returns The transformed data
    */
   private evaluatePipeline(expression: string, data: unknown): unknown {
-    // Split by pipe operator
-    const steps = expression.split('|').map(s => s.trim());
+    // Split by pipe operator, but respect parentheses to avoid splitting on || inside functions
+    const steps = this.splitPipelineSteps(expression);
     
     // The first part is the data reference
     const initialData = steps[0].startsWith('$') 
@@ -295,6 +295,48 @@ export class SafeExpressionEvaluator {
     }
     
     return result;
+  }
+  
+  /**
+   * Split pipeline expression by | operator while respecting parentheses
+   * @param expression - Pipeline expression
+   * @returns Array of pipeline steps
+   */
+  private splitPipelineSteps(expression: string): string[] {
+    const steps: string[] = [];
+    let current = '';
+    let parenthesesLevel = 0;
+    
+    for (let i = 0; i < expression.length; i++) {
+      const char = expression[i];
+      
+      if (char === '(') {
+        parenthesesLevel++;
+        current += char;
+      } else if (char === ')') {
+        parenthesesLevel--;
+        current += char;
+      } else if (char === '|' && parenthesesLevel === 0) {
+        // Only split on | when not inside parentheses
+        if (i + 1 < expression.length && expression[i + 1] === '|') {
+          // This is ||, not a pipeline separator - add both characters and skip next
+          current += '||';
+          i++; // Skip the next |
+        } else {
+          // This is a pipeline separator
+          steps.push(current.trim());
+          current = '';
+        }
+      } else {
+        current += char;
+      }
+    }
+    
+    if (current.trim()) {
+      steps.push(current.trim());
+    }
+    
+    return steps;
   }
   
   /**
@@ -591,6 +633,35 @@ export class SafeExpressionEvaluator {
    */
   private isTemplateExpression(str: string): boolean {
     return typeof str === 'string' && str.includes('{{') && str.includes('}}');
+  }
+  
+  /**
+   * Check if an expression contains operators that require expression parsing
+   * @param expression - Expression to check
+   * @returns Whether the expression contains operators
+   */
+  private containsOperators(expression: string): boolean {
+    // List of operators that indicate this is an expression, not pure JSONPath
+    const operatorPatterns = [
+      /\s*(==|!=|>=|<=|>|<)\s*/,  // Comparison operators
+      /\s*(&&|\|\|)\s*/,          // Logical operators
+      /\s*!\s*/,                  // Negation operator
+      /\s*(\+|-|\*|\/|%)\s*/      // Arithmetic operators
+    ];
+    
+    return operatorPatterns.some(pattern => pattern.test(expression));
+  }
+  
+  /**
+   * Check if an expression is a pipeline expression (contains | but not ||)
+   * @param expression - Expression to check
+   * @returns Whether the expression is a pipeline
+   */
+  private isPipelineExpression(expression: string): boolean {
+    // Check if it contains | but not as part of ||
+    // We'll use a simple approach: look for | that's not preceded or followed by |
+    const regex = /(?<!\|)\|(?!\|)/;
+    return regex.test(expression);
   }
 }
 
