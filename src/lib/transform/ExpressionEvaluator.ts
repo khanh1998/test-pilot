@@ -231,6 +231,29 @@ export class SafeExpressionEvaluator {
     },
     
     // Utility
+    'flatten': (data: unknown, depth?: unknown): unknown[] => {
+      if (!Array.isArray(data)) return [];
+      const flattenDepth = depth !== undefined ? Number(depth) : 1;
+      if (isNaN(flattenDepth) || flattenDepth <= 0) return data;
+      
+      // Simple flatten implementation
+      const flatten = (arr: unknown[], currentDepth: number): unknown[] => {
+        if (currentDepth <= 0) return arr;
+        
+        const result: unknown[] = [];
+        for (const item of arr) {
+          if (Array.isArray(item)) {
+            result.push(...flatten(item, currentDepth - 1));
+          } else {
+            result.push(item);
+          }
+        }
+        return result;
+      };
+      
+      return flatten(data, flattenDepth);
+    },
+    
     'pick': (obj: unknown, keys: unknown): Record<string, unknown> => {
       if (typeof obj !== 'object' || obj === null) return {};
       if (!Array.isArray(keys)) return {};
@@ -414,6 +437,10 @@ export class SafeExpressionEvaluator {
       case 'take':
       case 'skip':
         args = [data, parseInt(argsString, 10)];
+        break;
+        
+      case 'flatten':
+        args = argsString ? [data, parseInt(argsString, 10)] : [data];
         break;
         
       case 'sum':
