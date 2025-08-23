@@ -693,6 +693,11 @@ import {
             templateContext
           );
           
+          // Store assertion results in execution state for UI access
+          updateExecutionState(endpointId, {
+            assertions: assertionResults
+          });
+          
           // Process the results
           for (const result of assertionResults.results) {
             // Create detailed log message with template info
@@ -715,6 +720,12 @@ import {
               addLog('error', 'Template Error:', result.error);
             }
           }
+          
+          addLog(
+            'info',
+            `Assertion evaluation completed for endpoint: ${endpointId}`,
+            `${assertionResults.results.length} assertions processed, Overall: ${assertionResults.passed ? 'PASSED' : 'FAILED'}`
+          );
           
           // Update status based on overall assertion results
           if (!assertionResults.passed) {

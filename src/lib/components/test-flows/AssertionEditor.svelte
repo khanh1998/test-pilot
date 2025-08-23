@@ -15,6 +15,10 @@
   export let duplicateCount: number = 1;
   export let instanceIndex: number = 1;
 
+  // Add props for displaying assertion results
+  export let assertionResults: { passed: boolean; results: Array<any>; failureMessage?: string } = { passed: true, results: [] }; // Results from last execution
+  export let hasExecutionData: boolean = false; // Whether we have execution data to show
+
   const dispatch = createEventDispatcher();
 
   // Assertion editor state
@@ -91,6 +95,11 @@
     ]
   };
   
+  // Auto-show results if we have execution data
+  $: if (hasExecutionData && assertionResults.results && assertionResults.results.length > 0) {
+    showResults = true;
+  }
+  
   // Get all available operators from our registry
   const allOperators = getAllOperators();
   
@@ -162,6 +171,9 @@
         return operatorsByType[assertionType];
     }
   }
+  
+  // UI state for showing/hiding results
+  let showResults = false;
   
   // Initialize state when component mounts
   $: if (isMounted && endpoint && stepEndpoint) {
@@ -484,6 +496,39 @@
   function closeAssertionEditor() {
     dispatch('close');
   }
+  
+  // Helper function to safely stringify values for display
+  function formatValue(value: unknown): string {
+    if (value === null) return 'null';
+    if (value === undefined) return 'undefined';
+    if (typeof value === 'string') return `"${value}"`;
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+    
+    try {
+      return JSON.stringify(value, null, 2);
+    } catch {
+      return String(value);
+    }
+  }
+
+  // Helper function to get the data type of a value
+  function getValueType(value: unknown): string {
+    if (value === null) return 'null';
+    if (value === undefined) return 'undefined';
+    if (Array.isArray(value)) return 'array';
+    if (typeof value === 'object') return 'object';
+    return typeof value;
+  }
+
+  // Get the result for a specific assertion by index
+  function getAssertionResult(assertionIndex: number): any {
+    return assertionResults.results?.[assertionIndex];
+  }
+
+  // Check if an assertion has a result by index
+  function hasAssertionResult(assertionIndex: number): boolean {
+    return !!getAssertionResult(assertionIndex);
+  }
 </script>
 
 <div
@@ -520,6 +565,16 @@
           {#if duplicateCount > 1}
             <span class="ml-1 rounded bg-blue-100 px-1 py-0.5 text-xs text-blue-800">#{instanceIndex}</span>
           {/if}
+          {#if hasExecutionData}
+            <span class="ml-1 rounded bg-green-100 px-1 py-0.5 text-xs text-green-800">
+              Has Results
+            </span>
+            {#if assertionResults.passed !== undefined}
+              <span class="ml-1 rounded px-1 py-0.5 text-xs {assertionResults.passed ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
+                {assertionResults.passed ? '✓ All Passed' : '✗ Failed'}
+              </span>
+            {/if}
+          {/if}
         </h2>
         <p class="text-xs text-gray-500">
           Step {stepIndex + 1}, Endpoint {endpointIndex + 1}
@@ -527,6 +582,16 @@
       </div>
       
       <div class="flex space-x-1.5">
+        {#if hasExecutionData}
+          <button
+            class="rounded px-2 py-0.5 text-xs transition-colors {showResults
+              ? 'bg-gray-600 text-white hover:bg-gray-700'
+              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}"
+            on:click={() => (showResults = !showResults)}
+          >
+            {showResults ? 'Hide Results' : 'Show Results'}
+          </button>
+        {/if}
         <button
           class="rounded bg-blue-600 px-2 py-0.5 text-xs text-white hover:bg-blue-700"
           on:click={saveAssertionChanges}
@@ -608,6 +673,11 @@
                       on:change={handleAssertionChange}
                     />
                     <span class="font-medium">#{i + 1}</span>
+                    {#if hasAssertionResult(i)}
+                      <span class="ml-1 rounded px-1 py-0.5 text-xs {getAssertionResult(i).passed ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
+                        {getAssertionResult(i).passed ? '✓' : '✗'}
+                      </span>
+                    {/if}
                     <span class="ml-2 text-xs bg-blue-100 text-blue-800 px-1 py-0.5 rounded">
                       {assertion.assertion_type}
                     </span>
@@ -914,6 +984,85 @@
                     </div>
                   {/if}
                 </div>
+                
+                <!-- Show assertion result inline if available -->
+                {#if hasAssertionResult(i) && showResults}
+                  {@const result = getAssertionResult(i)}
+                  <div class="mt-2 rounded-lg border-2 p-3 shadow-sm {result.passed ? 'border-green-300 bg-gradient-to-r from-green-50 to-green-100' : 'border-red-300 bg-gradient-to-r from-red-50 to-red-100'}">
+                    <div class="flex items-center justify-between mb-2">
+                      <span class="text-xs font-semibold flex items-center {result.passed ? 'text-green-800' : 'text-red-800'}">
+                        {#if result.passed}
+                          <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                          </svg>
+                          PASSED
+                        {:else}
+                          <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+                          </svg>
+                          FAILED
+                        {/if}
+                      </span>
+                      <span class="text-xs font-medium px-2 py-1 rounded-full border {result.passed ? 'text-green-700 bg-green-200 border-green-300' : 'text-red-700 bg-red-200 border-red-300'}">
+                        Result
+                      </span>
+                    </div>
+                    
+                    <!-- Actual vs Expected Values -->
+                    <div class="space-y-2">
+                      <!-- Actual Value -->
+                      <div class="rounded-md border bg-white p-2 {result.passed ? 'border-green-200' : 'border-red-200'}">
+                        <div class="text-xs font-medium mb-1 {result.passed ? 'text-green-800' : 'text-red-800'}">
+                          Actual Value <span class="font-normal text-gray-600">({getValueType(result.actualValue)})</span>:
+                        </div>
+                        <pre class="text-xs overflow-x-auto max-h-24 font-mono {result.passed ? 'text-green-800' : 'text-red-800'}">{formatValue(result.actualValue)}</pre>
+                      </div>
+                      
+                      <!-- Expected Value (if comparison-based) -->
+                      {#if !isNoValueOperator(assertion.operator)}
+                        <div class="rounded-md border bg-white p-2 {result.passed ? 'border-green-200' : 'border-red-200'}">
+                          <div class="text-xs font-medium mb-1 {result.passed ? 'text-green-800' : 'text-red-800'}">
+                            Expected Value <span class="font-normal text-gray-600">({getValueType(result.expectedValue)})</span>:
+                            {#if result.originalExpectedValue && result.originalExpectedValue !== result.expectedValue}
+                              <span class="ml-1 text-xs bg-amber-100 text-amber-700 px-1 py-0.5 rounded">template resolved</span>
+                            {/if}
+                          </div>
+                          <pre class="text-xs overflow-x-auto max-h-24 font-mono {result.passed ? 'text-green-800' : 'text-red-800'}">{formatValue(result.expectedValue)}</pre>
+                          {#if result.originalExpectedValue && result.originalExpectedValue !== result.expectedValue}
+                            <div class="mt-1 text-xs text-gray-600">
+                              <span class="font-medium">Template:</span> <span class="font-mono bg-yellow-100 px-1 py-0.5 rounded">{result.originalExpectedValue}</span>
+                            </div>
+                          {/if}
+                        </div>
+                      {/if}
+                      
+                      <!-- Comparison Result -->
+                      <div class="rounded-md border bg-white p-2 {result.passed ? 'border-green-200' : 'border-red-200'}">
+                        <div class="text-xs font-medium mb-1 {result.passed ? 'text-green-800' : 'text-red-800'}">
+                          Comparison Result:
+                        </div>
+                        <div class="text-xs {result.passed ? 'text-green-800' : 'text-red-800'}">
+                          <span class="font-mono">{formatValue(result.actualValue)}</span>
+                          <span class="mx-1 font-semibold">{getOperatorDisplayName(assertion.operator)}</span>
+                          {#if !isNoValueOperator(assertion.operator)}
+                            <span class="font-mono">{formatValue(result.expectedValue)}</span>
+                          {/if}
+                          <span class="ml-2 font-semibold">→ {result.passed ? '✓' : '✗'}</span>
+                        </div>
+                        {#if result.message}
+                          <div class="mt-1 text-xs text-gray-600">
+                            <span class="font-medium">Details:</span> {result.message}
+                          </div>
+                        {/if}
+                        {#if result.error}
+                          <div class="mt-1 text-xs text-red-600">
+                            <span class="font-medium">Error:</span> {result.error}
+                          </div>
+                        {/if}
+                      </div>
+                    </div>
+                  </div>
+                {/if}
               </div>
             {/each}
           </div>

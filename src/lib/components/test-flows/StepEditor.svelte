@@ -604,6 +604,8 @@
       endpointIndex={safeIndex}
       {duplicateCount}
       {instanceIndex}
+      assertionResults={executionStore[`${step.step_id}-${safeIndex}`]?.assertions || { passed: true, results: [] }}
+      hasExecutionData={!!executionStore[`${step.step_id}-${safeIndex}`]?.response}
       on:close={closeAssertionEditor}
       on:change={handleParamChange}
     />

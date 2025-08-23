@@ -55,6 +55,11 @@ export type EndpointExecutionState = {
   error?: string;
   timing?: number;
   transformations?: Record<string, unknown>; // Add transformations results
+  assertions?: { // Add assertion results
+    passed: boolean;
+    results: Array<import('$lib/assertions/types').AssertionResult>;
+    failureMessage?: string;
+  };
 };
 
 export type ExecutionState = Record<string, EndpointExecutionState> & {
