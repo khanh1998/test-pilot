@@ -38,6 +38,7 @@
   $: executionStatus = currentExecutionState?.status;
   $: executionResponse = currentExecutionState?.response;
   $: executionTiming = currentExecutionState?.timing || null;
+  $: transformationResults = currentExecutionState?.transformations || {};
 
   // Check if an endpoint is currently running
   $: isRunning = executionStatus === 'running';
@@ -47,6 +48,9 @@
 
   // Check if an endpoint has failed
   $: isFailed = executionStatus === 'failed';
+
+  // Check if transformation results are available
+  $: hasTransformationResults = Object.keys(transformationResults).length > 0;
 
   // Get the response status code for an endpoint
   $: statusCode = executionResponse?.status || null;
@@ -235,8 +239,13 @@
     
       <!-- Transformation Editor Button -->
       <button
-        class="flex items-center justify-center rounded border border-purple-200 bg-purple-50 px-1.5 py-0.5 text-xs text-purple-700 transition-colors hover:bg-purple-100"
+        class="flex items-center justify-center rounded border px-1.5 py-0.5 text-xs transition-colors {hasTransformationResults
+          ? 'border-purple-300 bg-purple-100 text-purple-800 hover:bg-purple-200'
+          : 'border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100'}"
         on:click={openTransformationEditor}
+        title={hasTransformationResults
+          ? `Transform results available (${Object.keys(transformationResults).length} aliases)`
+          : 'Configure response transformations'}
       >
         <svg 
           xmlns="http://www.w3.org/2000/svg" 

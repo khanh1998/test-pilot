@@ -574,6 +574,9 @@
       endpointIndex={safeIndex}
       {duplicateCount}
       {instanceIndex}
+      transformationResults={executionStore[`${step.step_id}-${safeIndex}`]?.transformations || {}}
+      rawResponse={executionStore[`${step.step_id}-${safeIndex}`]?.response?.body}
+      hasExecutionData={!!executionStore[`${step.step_id}-${safeIndex}`]?.response}
       on:close={closeTransformationEditor}
       on:change={handleTransformationChange}
     />

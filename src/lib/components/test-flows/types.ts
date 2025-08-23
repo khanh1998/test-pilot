@@ -54,6 +54,7 @@ export type EndpointExecutionState = {
   } | null;
   error?: string;
   timing?: number;
+  transformations?: Record<string, unknown>; // Add transformations results
 };
 
 export type ExecutionState = Record<string, EndpointExecutionState> & {

@@ -10,6 +10,11 @@
   export let endpointIndex: number;
   export let duplicateCount: number = 1;
   export let instanceIndex: number = 1;
+  
+  // Add props for displaying transformation results
+  export let transformationResults: Record<string, unknown> = {}; // Results from last execution
+  export let rawResponse: unknown = null; // Raw response data for preview
+  export let hasExecutionData: boolean = false; // Whether we have execution data to show
 
   const dispatch = createEventDispatcher();
 
@@ -22,6 +27,9 @@
   let transformations: Transformation[] = [];
   let editingTransformationIndex: number | null = null;
   let newTransformation: Transformation = { alias: '', expression: '' };
+  
+  // UI state for showing/hiding results
+  let showResults = false;
 
   // Initialize state when component mounts
   $: if (isMounted && endpoint && stepEndpoint) {
@@ -30,6 +38,11 @@
       stepEndpoint.transformations = [];
     }
     transformations = [...(stepEndpoint.transformations || [])];
+  }
+
+  // Auto-show results if we have execution data
+  $: if (hasExecutionData && Object.keys(transformationResults).length > 0) {
+    showResults = true;
   }
 
   // Save changes from transformation editor
@@ -47,9 +60,7 @@
       console.error('Error saving transformation changes:', e);
       // You might want to show an error message here
     }
-  }
-
-  // Add a new transformation
+  }    // Add a new transformation
   function addTransformation() {
     if (!newTransformation.alias || !newTransformation.expression) {
       // Skip adding empty transformations
@@ -100,6 +111,39 @@
   function closeTransformationEditor() {
     dispatch('close');
   }
+
+  // Helper function to safely stringify values for display
+  function formatValue(value: unknown): string {
+    if (value === null) return 'null';
+    if (value === undefined) return 'undefined';
+    if (typeof value === 'string') return `"${value}"`;
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+    
+    try {
+      return JSON.stringify(value, null, 2);
+    } catch {
+      return String(value);
+    }
+  }
+
+  // Helper function to get the data type of a value
+  function getValueType(value: unknown): string {
+    if (value === null) return 'null';
+    if (value === undefined) return 'undefined';
+    if (Array.isArray(value)) return 'array';
+    if (typeof value === 'object') return 'object';
+    return typeof value;
+  }
+
+  // Get the result for a specific transformation
+  function getTransformationResult(alias: string): unknown {
+    return transformationResults[alias];
+  }
+
+  // Check if a transformation has a result
+  function hasResult(alias: string): boolean {
+    return alias in transformationResults;
+  }
 </script>
 
 <div
@@ -136,15 +180,30 @@
           <span class="mr-2 rounded bg-purple-100 px-2 py-1 text-xs text-purple-800">
             Transformation
           </span>
-          <span class="font-mono text-sm">{endpoint?.path}</span>
+                    <span class="font-mono text-sm">{endpoint?.path}</span>
           {#if duplicateCount > 1}
             <span class="ml-2 rounded bg-blue-100 px-2 py-1 text-xs text-blue-800">
               Instance #{instanceIndex}
             </span>
           {/if}
+          {#if hasExecutionData}
+            <span class="ml-2 rounded bg-green-100 px-2 py-1 text-xs text-green-800">
+              Has Results
+            </span>
+          {/if}
         </h3>
       </div>
       <div class="flex items-center gap-2">
+        {#if hasExecutionData}
+          <button
+            class="rounded px-3 py-1 text-sm transition-colors {showResults
+              ? 'bg-gray-600 text-white hover:bg-gray-700'
+              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}"
+            on:click={() => (showResults = !showResults)}
+          >
+            {showResults ? 'Hide Results' : 'Show Results'}
+          </button>
+        {/if}
         <button
           class="rounded bg-blue-600 px-3 py-1 text-sm text-white transition-colors hover:bg-blue-700"
           on:click={saveTransformationChanges}
@@ -194,21 +253,6 @@
         </div>
       {/if}
 
-      <!-- Transformation Description -->
-      <div class="mb-4 rounded border border-gray-100 bg-gray-50 p-3 text-sm text-gray-600">
-        <p class="mb-2">
-          <strong>Phase 1:</strong> Configure transformations that will be applied to the response.
-        </p>
-        <p>
-          Define an <strong>alias</strong> and an <strong>expression</strong> for each transformation.
-          In Phase 1, expressions are stored but not evaluated - the raw response will be available under each alias.
-        </p>
-        <p class="mt-2">
-          Reference transformed values in later steps using:
-          <code class="rounded bg-gray-200 px-1 py-0.5 text-xs">{'{{proc:step1-1.$.alias.path}}'}</code>
-        </p>
-      </div>
-
       <!-- Add/Edit Transformation Form -->
       <div class="mb-6 rounded border border-gray-200 p-4">
         <h4 class="mb-3 text-sm font-medium text-gray-700">
@@ -230,15 +274,18 @@
         <!-- Expression input -->
         <div class="mb-3">
           <label for="expression" class="mb-1 block text-sm font-medium text-gray-700">
-            Expression (Phase 2)
+            Expression
           </label>
           <textarea
             id="expression"
             rows="3"
-            class="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-            placeholder="e.g., sum(map(response.items, 'price'))"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-sm font-mono"
+            placeholder="e.g., $.data[*].id or $.users | where($.active == true) | map($.name)"
             bind:value={newTransformation.expression}
           ></textarea>
+          <p class="mt-1 text-xs text-gray-500">
+            Use JSONPath ($.field.path) or functional pipeline syntax (data | filter | transform)
+          </p>
         </div>
         
         <div class="flex justify-end gap-2">
@@ -277,10 +324,15 @@
         {:else}
           <div class="space-y-3">
             {#each transformations as transformation, i}
-              <div class="rounded border border-gray-200 bg-white p-3">
+              <div class="rounded border border-gray-200 bg-white p-3 {hasResult(transformation.alias) ? 'border-green-300 bg-green-50' : ''}">
                 <div class="flex items-center justify-between">
-                  <div class="font-medium text-gray-700">
-                    {transformation.alias}
+                  <div class="flex items-center gap-2">
+                    <span class="font-medium text-gray-700">{transformation.alias}</span>
+                    {#if hasResult(transformation.alias)}
+                      <span class="rounded bg-green-100 px-2 py-0.5 text-xs text-green-800">
+                        ✓ Result Available
+                      </span>
+                    {/if}
                   </div>
                   <div class="flex items-center gap-1">
                     <button
@@ -316,8 +368,28 @@
                   </div>
                 </div>
                 <div class="mt-1 text-sm text-gray-500">
-                  <span class="font-mono">{transformation.expression}</span>
+                  <span class="font-mono text-xs">{transformation.expression}</span>
                 </div>
+                
+                <!-- Show transformation result inline if available -->
+                {#if hasResult(transformation.alias) && showResults}
+                  <div class="mt-2 rounded-lg border-2 border-green-300 bg-gradient-to-r from-green-50 to-green-100 p-3 shadow-sm">
+                    <div class="flex items-center justify-between mb-2">
+                      <span class="text-xs font-semibold text-green-800 flex items-center">
+                        <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                        </svg>
+                        Result
+                      </span>
+                      <span class="text-xs font-medium text-green-700 bg-green-200 px-2 py-1 rounded-full border border-green-300">
+                        {getValueType(getTransformationResult(transformation.alias))}
+                      </span>
+                    </div>
+                    <div class="rounded-md border border-green-200 bg-white p-2">
+                      <pre class="text-xs text-green-800 overflow-x-auto max-h-24 font-mono">{formatValue(getTransformationResult(transformation.alias))}</pre>
+                    </div>
+                  </div>
+                {/if}
               </div>
             {/each}
           </div>

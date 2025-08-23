@@ -651,6 +651,11 @@ import {
         // Store all transformations for this endpoint
         storedTransformations[endpointId] = transformedData;
         
+        // Also store transformations in execution state for UI access
+        updateExecutionState(endpointId, {
+          transformations: transformedData
+        });
+        
         addLog(
           'info',
           `Stored ${endpoint.transformations.length} transformations for endpoint: ${endpointId}`,
