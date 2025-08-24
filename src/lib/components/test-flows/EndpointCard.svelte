@@ -1,6 +1,8 @@
 <script lang="ts">
   import type { Endpoint, StepEndpoint, ExecutionState } from './types';
+  import type { ApiEndpoint } from '$lib/types/api';
   import { getEndpointDisplayId } from './utils';
+  import EndpointDetails from '$lib/components/apis/EndpointDetails.svelte';
 
   export let endpoint: Endpoint;
   export let stepEndpoint: StepEndpoint;
@@ -15,6 +17,10 @@
   // Emitted events will be handled by the parent component
   import { createEventDispatcher } from 'svelte';
   const dispatch = createEventDispatcher();
+
+  // State for endpoint details panel
+  let showEndpointDetails = false;
+  let selectedEndpoint: ApiEndpoint | null = null;
 
   // Additional prop for step ID
   export let stepId: string;
@@ -85,6 +91,31 @@
   function removeEndpoint() {
     dispatch('removeEndpoint', { endpointIndex });
   }
+
+  function showEndpointDetail() {
+    // Convert Endpoint to ApiEndpoint format
+    selectedEndpoint = {
+      id: endpoint.id,
+      apiId: endpoint.apiId,
+      path: endpoint.path,
+      method: endpoint.method,
+      operationId: endpoint.operationId || null,
+      summary: endpoint.summary || null,
+      description: endpoint.description || null,
+      tags: endpoint.tags || null,
+      requestSchema: endpoint.requestSchema || null,
+      responseSchema: endpoint.responseSchema || null,
+      parameters: endpoint.parameters || null,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    } as ApiEndpoint;
+    showEndpointDetails = true;
+  }
+
+  function closeEndpointDetails() {
+    showEndpointDetails = false;
+    selectedEndpoint = null;
+  }
 </script>
 
 <div
@@ -95,7 +126,7 @@
     : ''} {getResponseStatusClass()}"
 >
   <div class="mb-2 flex items-start justify-between">
-    <div class="flex items-center">
+    <div class="flex items-center flex-1">
       <span
         class="mr-1.5 rounded bg-green-100 px-1.5 py-0.5 text-xs font-medium text-green-800 uppercase"
       >
@@ -126,19 +157,32 @@
         </span>
       {/if}
     </div>
-    <button
-      class="text-red-500 hover:text-red-700"
-      on:click={removeEndpoint}
-      aria-label="Remove endpoint"
-    >
-      <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-        <path
-          fill-rule="evenodd"
-          d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-          clip-rule="evenodd"
-        ></path>
-      </svg>
-    </button>
+    <div class="flex items-center gap-1">
+      <!-- Small info button to show endpoint details -->
+      <button
+        class="text-gray-400 hover:text-blue-600 transition-colors p-0.5 rounded-full hover:bg-blue-50"
+        on:click={showEndpointDetail}
+        aria-label="View endpoint details"
+        title="View endpoint details"
+      >
+        <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        </svg>
+      </button>
+      <button
+        class="text-red-500 hover:text-red-700 p-0.5"
+        on:click={removeEndpoint}
+        aria-label="Remove endpoint"
+      >
+        <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+          <path
+            fill-rule="evenodd"
+            d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+            clip-rule="evenodd"
+          ></path>
+        </svg>
+      </button>
+    </div>
   </div>
 
   <!-- Enhanced Execution Status Indicator -->
@@ -428,3 +472,10 @@
     </div>
   </div>
 </div>
+
+<!-- Endpoint Details Panel -->
+<EndpointDetails
+  bind:isOpen={showEndpointDetails}
+  endpoint={selectedEndpoint}
+  on:close={closeEndpointDetails}
+/>
