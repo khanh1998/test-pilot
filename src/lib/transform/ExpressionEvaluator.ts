@@ -55,7 +55,13 @@ export class SafeExpressionEvaluator {
       (Array.isArray(a) && a.length === 0) ||
       (typeof a === 'object' && a !== null && Object.keys(a).length === 0),
     'length': (a: unknown): number => Array.isArray(a) ? a.length : 
-      (typeof a === 'string' ? a.length : 0)
+      (typeof a === 'string' ? a.length : 0),
+    
+    // Type casting functions
+    'int': (a: unknown, defaultValue?: unknown): number | null => this.castToInt(a, defaultValue),
+    'float': (a: unknown, defaultValue?: unknown): number | null => this.castToFloat(a, defaultValue),
+    'string': (a: unknown, defaultValue?: unknown): string | null => this.castToString(a, defaultValue),
+    'bool': (a: unknown, defaultValue?: unknown): boolean | null => this.castToBool(a, defaultValue)
   };
   
   // Pipeline functions for transformations
@@ -268,6 +274,34 @@ export class SafeExpressionEvaluator {
         }
       }
       return result;
+    },
+    
+    // Type casting pipeline functions
+    'int': (data: unknown, defaultValue?: unknown): unknown => {
+      if (Array.isArray(data)) {
+        return data.map(item => this.castToInt(item, defaultValue));
+      }
+      return this.castToInt(data, defaultValue);
+    },
+    
+    'float': (data: unknown, defaultValue?: unknown): unknown => {
+      if (Array.isArray(data)) {
+        return data.map(item => this.castToFloat(item, defaultValue));
+      }
+      return this.castToFloat(data, defaultValue);
+    },
+    
+    'string': (data: unknown, defaultValue?: unknown): unknown => {
+      if (Array.isArray(data)) {
+        return data.map(item => this.castToString(item, defaultValue));
+      }
+      return this.castToString(data, defaultValue);
+    },
+    
+    'bool': (data: unknown, defaultValue?: unknown): unknown => {
+      // For boolean casting, we typically want to cast the value itself to boolean
+      // rather than mapping over arrays, since booleans are used for truthiness
+      return this.castToBool(data, defaultValue);
     }
   };
   
@@ -313,9 +347,39 @@ export class SafeExpressionEvaluator {
     const steps = this.splitPipelineSteps(expression);
     
     // The first part is the data reference
-    const initialData = steps[0].startsWith('$') 
-      ? this.jsonPathEvaluator.evaluate(steps[0], data)
-      : steps[0] === 'data' ? data : null;
+    let initialData: unknown;
+    const firstStep = steps[0];
+    
+    if (firstStep.startsWith('$')) {
+      initialData = this.jsonPathEvaluator.evaluate(firstStep, data);
+    } else if (firstStep === 'data') {
+      initialData = data;
+    } else {
+      // Check if the first step is a function call (like in "float(0) | int()")
+      const functionMatch = firstStep.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*\((.*)\)$/);
+      if (functionMatch) {
+        const functionName = functionMatch[1];
+        const argsString = functionMatch[2].trim();
+        
+        if (['int', 'float', 'string', 'bool'].includes(functionName)) {
+          const castFunction = this.operators[functionName];
+          if (typeof castFunction === 'function') {
+            if (argsString) {
+              const defaultValue = this.parseArgumentValue(argsString);
+              initialData = castFunction(data, defaultValue);
+            } else {
+              initialData = castFunction(data);
+            }
+          } else {
+            initialData = null;
+          }
+        } else {
+          initialData = null;
+        }
+      } else {
+        initialData = null;
+      }
+    }
     
     // Process each pipeline step
     let result = initialData;
@@ -447,6 +511,14 @@ export class SafeExpressionEvaluator {
         args = argsString ? [data, argsString] : [data];
         break;
         
+      case 'int':
+      case 'float':
+      case 'string':
+      case 'bool':
+        // Type casting functions with optional default value
+        args = argsString ? [data, this.parseArgumentValue(argsString)] : [data];
+        break;
+        
       default:
         // Try to parse JSON-like arguments
         try {
@@ -566,6 +638,31 @@ export class SafeExpressionEvaluator {
     // Check if it's a template expression (e.g., {{func:uuid()}})
     if (this.isTemplateExpression(expression)) {
       return expression; // Keep template expressions as-is
+    }
+    
+    // Check if it's a simple function call like int(), float(), etc.
+    const functionMatch = expression.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*\((.*)\)$/);
+    if (functionMatch) {
+      const functionName = functionMatch[1];
+      const argsString = functionMatch[2].trim();
+      
+      // Check if it's a type casting function
+      if (['int', 'float', 'string', 'bool'].includes(functionName)) {
+        const castFunction = this.operators[functionName];
+        if (typeof castFunction === 'function') {
+          if (argsString) {
+            const defaultValue = this.parseArgumentValue(argsString);
+            return castFunction(context, defaultValue);
+          } else {
+            return castFunction(context);
+          }
+        }
+      }
+    }
+    
+    // Check for pipeline notation in the context (like "float(0) | int()")
+    if (this.isPipelineExpression(expression)) {
+      return this.evaluatePipeline(expression, context);
     }
     
     // Replace "item." with context path if needed - but only when it refers to the context item
@@ -697,6 +794,131 @@ export class SafeExpressionEvaluator {
     // We'll use a simple approach: look for | that's not preceded or followed by |
     const regex = /(?<!\|)\|(?!\|)/;
     return regex.test(expression);
+  }
+  
+  /**
+   * Cast value to integer
+   * @param value - Value to cast
+   * @param defaultValue - Default value if casting fails
+   * @returns Integer value or null/default
+   */
+  private castToInt(value: unknown, defaultValue?: unknown): number | null {
+    if (value === null || value === undefined) {
+      return defaultValue !== undefined ? Number(defaultValue) : null;
+    }
+    
+    if (typeof value === 'number') {
+      return Math.floor(value);
+    }
+    
+    if (typeof value === 'boolean') {
+      return value ? 1 : 0;
+    }
+    
+    if (typeof value === 'string') {
+      const parsed = parseInt(value.trim(), 10);
+      if (!isNaN(parsed)) {
+        return parsed;
+      }
+    }
+    
+    // Casting failed
+    return defaultValue !== undefined ? Number(defaultValue) : null;
+  }
+  
+  /**
+   * Cast value to float
+   * @param value - Value to cast
+   * @param defaultValue - Default value if casting fails
+   * @returns Float value or null/default
+   */
+  private castToFloat(value: unknown, defaultValue?: unknown): number | null {
+    if (value === null || value === undefined) {
+      return defaultValue !== undefined ? Number(defaultValue) : null;
+    }
+    
+    if (typeof value === 'number') {
+      return value;
+    }
+    
+    if (typeof value === 'boolean') {
+      return value ? 1.0 : 0.0;
+    }
+    
+    if (typeof value === 'string') {
+      const parsed = parseFloat(value.trim());
+      if (!isNaN(parsed)) {
+        return parsed;
+      }
+    }
+    
+    // Casting failed
+    return defaultValue !== undefined ? Number(defaultValue) : null;
+  }
+  
+  /**
+   * Cast value to string
+   * @param value - Value to cast
+   * @param defaultValue - Default value if casting fails
+   * @returns String value or null/default
+   */
+  private castToString(value: unknown, defaultValue?: unknown): string | null {
+    if (value === null || value === undefined) {
+      return defaultValue !== undefined ? String(defaultValue) : null;
+    }
+    
+    if (typeof value === 'string') {
+      return value;
+    }
+    
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      return String(value);
+    }
+    
+    if (typeof value === 'object') {
+      try {
+        return JSON.stringify(value);
+      } catch {
+        return defaultValue !== undefined ? String(defaultValue) : null;
+      }
+    }
+    
+    return String(value);
+  }
+  
+  /**
+   * Cast value to boolean
+   * @param value - Value to cast
+   * @param defaultValue - Default value if casting fails
+   * @returns Boolean value or null/default
+   */
+  private castToBool(value: unknown, defaultValue?: unknown): boolean | null {
+    if (value === null || value === undefined) {
+      return defaultValue !== undefined ? Boolean(defaultValue) : null;
+    }
+    
+    if (typeof value === 'boolean') {
+      return value;
+    }
+    
+    if (typeof value === 'number') {
+      return value !== 0;
+    }
+    
+    if (typeof value === 'string') {
+      const lowered = value.toLowerCase().trim();
+      if (lowered === 'true' || lowered === '1') {
+        return true;
+      }
+      if (lowered === 'false' || lowered === '0' || lowered === '') {
+        return false;
+      }
+      // Non-empty strings are truthy
+      return value.trim().length > 0;
+    }
+    
+    // Default JavaScript truthiness for other types
+    return Boolean(value);
   }
 }
 
