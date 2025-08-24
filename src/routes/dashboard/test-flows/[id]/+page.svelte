@@ -23,7 +23,8 @@
       api_hosts: {}  // Multi-API host configuration
     },
     steps: [],
-    parameters: []
+    parameters: [],
+    outputs: []
   });
   let isDirty = $state(false);
   let isSaving = $state(false);
@@ -80,7 +81,8 @@
           api_hosts: {}
         },
         steps: [],
-        parameters: []
+        parameters: [],
+        outputs: []
       };
 
       // Make sure settings object has all required properties
@@ -96,6 +98,11 @@
       // Ensure parameters array exists
       if (!flowJson.parameters) {
         flowJson.parameters = [];
+      }
+
+      // Ensure outputs array exists
+      if (!flowJson.outputs) {
+        flowJson.outputs = [];
       }
 
       isDirty = false;
@@ -358,7 +365,8 @@
                     flowJson = {
                       settings: updatedFlowData.settings || flowJson.settings,
                       steps: normalizedSteps,
-                      parameters: updatedParameters
+                      parameters: updatedParameters,
+                      outputs: updatedFlowData.outputs || flowJson.outputs || []
                     };
                   }
                   markDirty();

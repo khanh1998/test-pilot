@@ -76,6 +76,13 @@ export type FlowParameter = {
   required: boolean;
 };
 
+export type FlowOutput = {
+  name: string;
+  description?: string;
+  value: string; // JSON template expression or hardcoded value
+  isTemplate?: boolean; // Whether the value is a template expression
+};
+
 export type FlowStep = {
   step_id: string;
   label: string;
@@ -100,6 +107,7 @@ export type TestFlowData = {
     // Other settings
   };
   parameters: FlowParameter[];
+  outputs?: FlowOutput[]; // Add outputs array
   steps: FlowStep[];
   endpoints?: Endpoint[]; // Reference to available endpoints
 };

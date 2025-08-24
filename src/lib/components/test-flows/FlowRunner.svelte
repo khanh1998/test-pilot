@@ -10,6 +10,7 @@
   // Props
   export let flowData: TestFlowData = {
     parameters: [],
+    outputs: [],
     settings: { 
       api_hosts: {}
     },
@@ -98,7 +99,9 @@ import {
   // Ensure parameters array exists
   $: if (!flowData.parameters) {
     flowData.parameters = [];
-  }  $: console.log('flow data', flowData);
+  }
+
+  // Note: outputs array is initialized in TestFlowEditor and should not be reset here
 
   // Watch executionState for changes and emit update events
   $: if (Object.keys(executionState).length > 0) {
@@ -277,6 +280,12 @@ import {
       }
 
       progress = 100;
+      
+      // Evaluate flow outputs if execution completed successfully
+      let flowOutputs: Record<string, unknown> = {};
+      if (!error) {
+        flowOutputs = evaluateFlowOutputs();
+      }
     } catch (err: unknown) {
       error = err;
       console.error('Flow execution error:', err);
@@ -288,6 +297,7 @@ import {
         storedResponses,
         parameterValues,
         transformResponse,
+        flowOutputs: !error ? evaluateFlowOutputs() : {},
       });
     }
   }
@@ -949,6 +959,48 @@ import {
     
   }
 
+  // Evaluate flow outputs at the end of execution
+  function evaluateFlowOutputs(): Record<string, unknown> {
+    const results: Record<string, unknown> = {};
+    
+    if (!flowData.outputs || flowData.outputs.length === 0) {
+      return results;
+    }
+
+    addLog('info', 'Evaluating flow outputs', `${flowData.outputs.length} outputs to evaluate`);
+
+    for (const output of flowData.outputs) {
+      try {
+        if (output.isTemplate && output.value) {
+          // Use template resolution for template expressions
+          const result = resolveTemplateValueUnified(output.value);
+          
+          // Try to parse as JSON if it looks like JSON
+          try {
+            if (result.startsWith('{') || result.startsWith('[') || result.startsWith('"')) {
+              results[output.name] = JSON.parse(result);
+            } else {
+              results[output.name] = result;
+            }
+          } catch {
+            results[output.name] = result;
+          }
+        } else {
+          // For non-template values, use as-is
+          results[output.name] = output.value;
+        }
+        
+        addLog('debug', `Output "${output.name}" evaluated successfully`, String(results[output.name]));
+      } catch (outputError: unknown) {
+        const errorMessage = outputError instanceof Error ? outputError.message : String(outputError);
+        addLog('error', `Failed to evaluate output "${output.name}"`, errorMessage);
+        results[output.name] = null;
+      }
+    }
+
+    return results;
+  }
+
   // Utility function to validate API hosts configuration
   function validateApiHosts(): boolean {
     return !!(flowData.settings && 
@@ -1055,12 +1107,7 @@ import {
     }
   }
 
-  // Debug Parameter reactivity
-  $: if (flowData && flowData.parameters) {
-    console.log('FlowRunner: flowData.parameters updated', flowData.parameters);
-  }
-
-  // Add debugging to see if Parameter updates are being triggered
+  // Parameters management has been moved to FlowParameterEditor.svelte
 </script>
 
 <!-- Parameter Input Modal - Only shown when required parameters are missing -->

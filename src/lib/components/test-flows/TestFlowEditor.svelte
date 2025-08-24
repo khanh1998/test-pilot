@@ -2,6 +2,7 @@
   import StepEditor from './StepEditor.svelte';
   import SmartEndpointSelector from './SmartEndpointSelector.svelte';
   import FlowRunner from './FlowRunner.svelte';
+  import FlowOutputEditor from './FlowOutputEditor.svelte';
   import { fade } from 'svelte/transition';
   import type { TestFlowData, Endpoint, ExecutionState, EndpointExecutionState, Parameter } from './types';
   import { getEndpointById, type EndpointDetails } from '$lib/http_client/endpoints';
@@ -13,6 +14,11 @@
   // flowData includes settings.api_hosts which contains multiple API host configurations
   export let flowData: TestFlowData;
   export let endpoints: Endpoint[] = [];
+
+  // Initialize outputs if not present
+  $: if (flowData && !flowData.outputs) {
+    flowData.outputs = [];
+  }
 
   let isRunning = false;
   let flowRunner: FlowRunner;
@@ -27,6 +33,12 @@
 
   // parameters panel control
   let showParametersPanel = false;
+
+  // Flow output editor state
+  let isOutputEditorOpen = false;
+  let isOutputEditorMounted = false;
+  let outputResults: Record<string, unknown> = {};
+  let outputExecutionError: unknown = null;
 
   // Execution preferences - default values
   let preferences = {
@@ -206,6 +218,10 @@
     executionStore.set({});
     isRunning = false;
 
+    // Reset output results
+    outputResults = {};
+    outputExecutionError = null;
+
     // Dispatch reset event to parent
     dispatch('reset');
   }
@@ -214,6 +230,16 @@
   function handleExecutionComplete(event: CustomEvent) {
     console.log('Execution completed:', event.detail);
     isRunning = false;
+    
+    // Handle flow outputs from execution
+    if (event.detail.flowOutputs) {
+      outputResults = event.detail.flowOutputs;
+      outputExecutionError = null;
+    } else if (event.detail.error) {
+      outputResults = {};
+      outputExecutionError = event.detail.error;
+    }
+    
     // Force an update of all components that depend on the execution state
     // This maintains the updated endpoint ID format (stepId-endpointIndex)
     executionStore.update((state) => ({ ...state }));
@@ -296,6 +322,43 @@
     }
     
     return false;
+  }
+
+  // Flow output editor functions
+  function openOutputEditor() {
+    isOutputEditorMounted = true;
+    isOutputEditorOpen = false;
+
+    // Add a class to the body to prevent scrolling while modal is open
+    document.body.classList.add('overflow-hidden');
+
+    // Use requestAnimationFrame to ensure the DOM is updated before applying the animation
+    requestAnimationFrame(() => {
+      isOutputEditorOpen = true;
+    });
+  }
+
+  function closeOutputEditor() {
+    isOutputEditorOpen = false;
+
+    // Add a small delay to allow for animation to complete before unmounting
+    setTimeout(() => {
+      isOutputEditorMounted = false;
+
+      // Remove the class from body to re-enable scrolling
+      document.body.classList.remove('overflow-hidden');
+    }, 300);
+  }
+
+  function handleOutputSave(event: CustomEvent<{ outputs: import('./types').FlowOutput[] }>) {
+    const { outputs } = event.detail;
+    
+    if (!flowData.outputs) {
+      flowData.outputs = [];
+    }
+    
+    flowData.outputs = [...outputs];
+    handleChange();
   }
 
   // No longer needed - we use progress and currentStep directly from executionStore
@@ -638,4 +701,66 @@
       Add New Step
     </button>
   </div>
+
+  <!-- Flow Outputs Section -->
+  <div class="mt-8 rounded-lg border border-gray-200 bg-gray-50 p-6">
+    <div class="flex items-center justify-between">
+      <div class="flex-1">
+        <h3 class="text-lg font-medium text-gray-900">Flow Outputs</h3>
+        <p class="mt-1 text-sm text-gray-500">
+          Define values that will be extracted when the flow completes successfully
+        </p>
+        
+        {#if flowData.outputs && flowData.outputs.length > 0}
+          <div class="mt-3 flex flex-wrap gap-2">
+            {#each flowData.outputs as output}
+              <span class="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800">
+                {output.name}
+                {#if output.isTemplate}
+                  <svg class="ml-1 h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+                  </svg>
+                {/if}
+              </span>
+            {/each}
+          </div>
+        {/if}
+      </div>
+      
+      <button
+        class="inline-flex items-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+        on:click={openOutputEditor}
+        disabled={isRunning}
+      >
+        <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+        </svg>
+        {flowData.outputs && flowData.outputs.length > 0 ? 'Manage Outputs' : 'Define Outputs'}
+      </button>
+    </div>
+
+    {#if !flowData.outputs || flowData.outputs.length === 0}
+      <div class="mt-4 text-center">
+        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+        </svg>
+        <p class="mt-2 text-sm text-gray-500">No outputs defined</p>
+        <p class="text-xs text-gray-400">Click "Define Outputs" to extract values from your flow execution</p>
+      </div>
+    {/if}
+  </div>
 </div>
+
+<!-- Flow Output Editor Slide-out Panel -->
+{#if isOutputEditorMounted}
+  <FlowOutputEditor
+    isOpen={isOutputEditorOpen}
+    isMounted={true}
+    outputs={flowData.outputs || []}
+    {outputResults}
+    executionError={outputExecutionError}
+    hasExecutionData={Object.keys(outputResults).length > 0 || outputExecutionError !== null}
+    on:close={closeOutputEditor}
+    on:save={handleOutputSave}
+  />
+{/if}
