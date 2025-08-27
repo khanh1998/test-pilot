@@ -1259,6 +1259,21 @@ import {
       // Dispatch change event to notify parent components
       dispatch('change', { flowData });
     }}
+    on:saveAll={(e) => {
+      // Handle saving all parameters at once
+      const parameters = e.detail;
+      
+      // Initialize parameters array if it doesn't exist
+      if (!flowData.parameters) {
+        flowData.parameters = [];
+      }
+      
+      // Replace all parameters with the new ones
+      flowData.parameters = [...parameters];
+      
+      // Dispatch change event to notify parent components
+      dispatch('change', { flowData });
+    }}
     on:close={() => (showParametersPanel = false)}
   />
 {/if}
