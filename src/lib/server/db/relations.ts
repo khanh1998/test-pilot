@@ -1,9 +1,10 @@
 import { relations } from 'drizzle-orm';
-import { users, apis, apiEndpoints, testFlows, testFlowApis, endpointEmbeddings } from './schema';
+import { users, apis, apiEndpoints, testFlows, testFlowApis, endpointEmbeddings, environments, environmentApis } from './schema';
 
 export const usersRelations = relations(users, ({ many }) => ({
   apis: many(apis),
-  testFlows: many(testFlows)
+  testFlows: many(testFlows),
+  environments: many(environments)
 }));
 
 export const apisRelations = relations(apis, ({ one, many }) => ({
@@ -12,7 +13,8 @@ export const apisRelations = relations(apis, ({ one, many }) => ({
     references: [users.id]
   }),
   endpoints: many(apiEndpoints),
-  testFlowApis: many(testFlowApis)
+  testFlowApis: many(testFlowApis),
+  environmentApis: many(environmentApis)
 }));
 
 export const apiEndpointsRelations = relations(apiEndpoints, ({ one, many }) => ({
@@ -27,6 +29,10 @@ export const testFlowsRelations = relations(testFlows, ({ one, many }) => ({
   user: one(users, {
     fields: [testFlows.userId],
     references: [users.id]
+  }),
+  environment: one(environments, {
+    fields: [testFlows.environmentId],
+    references: [environments.id]
   }),
   testFlowApis: many(testFlowApis)
 }));
@@ -46,5 +52,25 @@ export const endpointEmbeddingsRelations = relations(endpointEmbeddings, ({ one 
   endpoint: one(apiEndpoints, {
     fields: [endpointEmbeddings.endpointId],
     references: [apiEndpoints.id]
+  })
+}));
+
+export const environmentsRelations = relations(environments, ({ one, many }) => ({
+  user: one(users, {
+    fields: [environments.userId],
+    references: [users.id]
+  }),
+  environmentApis: many(environmentApis),
+  testFlows: many(testFlows)
+}));
+
+export const environmentApisRelations = relations(environmentApis, ({ one }) => ({
+  environment: one(environments, {
+    fields: [environmentApis.environmentId],
+    references: [environments.id]
+  }),
+  api: one(apis, {
+    fields: [environmentApis.apiId],
+    references: [apis.id]
   })
 }));

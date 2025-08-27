@@ -51,12 +51,13 @@ export function parseTemplateExpression(expression: string): TemplateExpression 
 /**
  * Validate and normalize source type
  */
-function validateSource(source: string): 'res' | 'proc' | 'param' | 'func' | null {
+function validateSource(source: string): 'res' | 'proc' | 'param' | 'func' | 'env' | null {
   const normalized = source.toLowerCase().trim();
   if (normalized === 'res' || normalized === 'response') return 'res';
   if (normalized === 'proc' || normalized === 'process' || normalized === 'transform') return 'proc';
   if (normalized === 'param' || normalized === 'parameter' || normalized === 'var') return 'param';
   if (normalized === 'func' || normalized === 'function') return 'func';
+  if (normalized === 'env' || normalized === 'environment') return 'env';
   return null;
 }
 
@@ -282,6 +283,9 @@ function resolveExpressionBySource(
     case 'func':
       return resolveFunctionExpression(expression.path, functions);
       
+    case 'env':
+      return resolveEnvironmentExpression(expression.path, context);
+      
     default:
       throw new Error(`Unknown template source: ${expression.source}`);
   }
@@ -359,6 +363,22 @@ function resolveParameterExpression(parameterName: string, context: TemplateCont
   }
   
   return context.parameters[parameterName];
+}
+
+/**
+ * Resolve environment variable expressions
+ */
+function resolveEnvironmentExpression(variableName: string, context: TemplateContext): unknown {
+  if (!context.environment) {
+    throw new Error('Environment context not available for environment variable resolution');
+  }
+  
+  if (!(variableName in context.environment)) {
+    const availableVars = Object.keys(context.environment);
+    throw new Error(`Environment variable not found: ${variableName}. Available variables: ${availableVars.join(', ')}`);
+  }
+  
+  return context.environment[variableName];
 }
 
 /**

@@ -12,12 +12,23 @@
     parameters: [],
     outputs: [],
     settings: { 
-      api_hosts: {}
+      api_hosts: {},
+      environment: {
+        environmentId: null,
+        subEnvironment: null
+      }
     },
     steps: [],
   }; // The complete test flow data
   export let isRunning: boolean = false; // Whether the flow is currently running
   export let executionState: ExecutionState = {}; // Execution state for each endpoint
+
+  // Environment context for template resolution
+  export let environments: import('$lib/types/environment').Environment[] = [];
+  export let selectedEnvironment: import('$lib/types/environment').Environment | null = null;
+
+  // Ensure environments is used (prevent Svelte warning)
+  $: void environments;
 
   // Parameter input modal state
   let showParameterInputModal = false;
@@ -31,6 +42,37 @@
 
   // Computed Parameter values for template resolution
   let parameterValues: Record<string, unknown> = {};
+
+  // Computed environment variables for template resolution
+  $: environmentVariables = computeEnvironmentVariables(selectedEnvironment, flowData.settings.environment?.subEnvironment || null);
+
+  function computeEnvironmentVariables(env: import('$lib/types/environment').Environment | null, subEnv: string | null): Record<string, unknown> {
+    if (!env || !subEnv || !env.config.environments[subEnv]) {
+      return {};
+    }
+
+    const envData: Record<string, unknown> = {};
+    const subEnvironment = env.config.environments[subEnv];
+
+    // Add variable values from the selected sub-environment
+    Object.entries(env.config.variable_definitions).forEach(([varName, varDef]) => {
+      const value = subEnvironment.variables[varName];
+      if (value !== undefined) {
+        envData[varName] = value;
+      } else if (varDef.default_value !== undefined) {
+        envData[varName] = varDef.default_value;
+      }
+    });
+
+    // Add API hosts from the sub-environment
+    if (subEnvironment.api_hosts) {
+      Object.entries(subEnvironment.api_hosts).forEach(([apiId, hostUrl]) => {
+        envData[`api_host_${apiId}`] = hostUrl;
+      });
+    }
+
+    return envData;
+  }
 
   // Execution preferences
   export let preferences = {
@@ -384,19 +426,33 @@ import {
       // Get the API host for this endpoint
       let endpointHost = '';
       
-      // Get host from api_hosts using endpoint's api_id
-      if (endpoint.api_id && flowData.settings && flowData.settings.api_hosts) {
+      // First, check if the selected environment provides API host override
+      if (selectedEnvironment && flowData.settings.environment?.subEnvironment) {
+        const subEnv = flowData.settings.environment.subEnvironment;
+        const subEnvironmentConfig = selectedEnvironment.config.environments[subEnv];
+        
+        if (subEnvironmentConfig?.api_hosts && endpoint.api_id) {
+          const envHost = subEnvironmentConfig.api_hosts[String(endpoint.api_id)];
+          if (envHost) {
+            endpointHost = envHost;
+            addLog('debug', `Using environment host override for API ID ${endpoint.api_id}: ${endpointHost}`, `Environment: ${selectedEnvironment.name} (${subEnv})`);
+          }
+        }
+      }
+      
+      // Fallback to flow's api_hosts if no environment override
+      if (!endpointHost && endpoint.api_id && flowData.settings && flowData.settings.api_hosts) {
         const apiHostInfo = flowData.settings.api_hosts[endpoint.api_id];
         if (apiHostInfo && apiHostInfo.url) {
           endpointHost = apiHostInfo.url;
-          addLog('debug', `Using host for API ID ${endpoint.api_id}: ${endpointHost}`);
+          addLog('debug', `Using flow host for API ID ${endpoint.api_id}: ${endpointHost}`);
         } else {
           addLog('warning', `API host not found for ID: ${endpoint.api_id}`);
         }
       }
       
       if (!endpointHost) {
-        addLog('error', 'No API host available for endpoint', `Endpoint ID: ${endpoint.endpoint_id}`);
+        addLog('error', 'No API host available for endpoint', `Endpoint ID: ${endpoint.endpoint_id}, API ID: ${endpoint.api_id}`);
         throw new Error(`No API host available for endpoint ${endpoint.endpoint_id}`);
       }
       
@@ -689,7 +745,8 @@ import {
             storedResponses,
             storedTransformations,
             parameterValues,
-            templateFunctions
+            templateFunctions,
+            environmentVariables
           );
           
           // Run all assertions
@@ -915,7 +972,8 @@ import {
         storedResponses,
         storedTransformations,
         parameterValues,
-        templateFunctions
+        templateFunctions,
+        environmentVariables
       );
       
       const result = resolveTemplate(value, context);
@@ -933,7 +991,8 @@ import {
         storedResponses,
         storedTransformations,
         parameterValues,
-        templateFunctions
+        templateFunctions,
+        environmentVariables
       );
       
       if (obj === null || obj === undefined) {

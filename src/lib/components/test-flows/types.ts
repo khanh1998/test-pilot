@@ -104,6 +104,10 @@ export type ApiHostInfo = {
 export type TestFlowData = {
   settings: {
     api_hosts?: Record<string | number, ApiHostInfo>; // New multi-API host structure
+    environment?: {
+      environmentId: number | null;
+      subEnvironment: string | null;
+    };
     // Other settings
   };
   parameters: FlowParameter[];

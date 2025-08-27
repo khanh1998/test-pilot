@@ -15,6 +15,9 @@ export interface TemplateContext {
   /** Parameter values for the test flow */
   parameters: Record<string, unknown>;
   
+  /** Environment variables for the current environment */
+  environment?: Record<string, unknown>;
+  
   /** Template functions for utility operations */
   functions?: Record<string, (...args: unknown[]) => unknown>;
 }
@@ -37,8 +40,8 @@ export interface TemplateResolutionResult {
  * Template expression types
  */
 export type TemplateExpression = {
-  /** Source type: res, proc, param, func */
-  source: 'res' | 'proc' | 'param' | 'func';
+  /** Source type: res, proc, param, func, env */
+  source: 'res' | 'proc' | 'param' | 'func' | 'env';
   
   /** Path or expression to resolve */
   path: string;
