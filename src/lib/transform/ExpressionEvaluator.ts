@@ -236,6 +236,19 @@ export class SafeExpressionEvaluator {
       return data.slice(count);
     },
     
+    'at': (data: unknown, index: unknown): unknown => {
+      if (!Array.isArray(data)) return undefined;
+      const idx = Number(index);
+      if (isNaN(idx)) return undefined;
+      
+      // Handle negative indices (e.g., -1 for last element)
+      if (idx < 0) {
+        return data[data.length + idx];
+      }
+      
+      return data[idx];
+    },
+    
     // Utility
     'flatten': (data: unknown, depth?: unknown): unknown[] => {
       if (!Array.isArray(data)) return [];
@@ -500,6 +513,7 @@ export class SafeExpressionEvaluator {
         
       case 'take':
       case 'skip':
+      case 'at':
         args = [data, parseInt(argsString, 10)];
         break;
         
