@@ -96,6 +96,10 @@
     subEnvironments = event.detail.subEnvironments;
   }
 
+  function handleLinkedApisChange(event: CustomEvent<{ linkedApis: number[] }>) {
+    linkedApis = event.detail.linkedApis;
+  }
+
   function setActiveTab(tab: typeof activeTab) {
     activeTab = tab;
   }
@@ -301,7 +305,9 @@
       <div>
         <ApiHostEditor 
           bind:subEnvironments
+          {linkedApis}
           on:change={handleSubEnvironmentsChange}
+          on:updateLinkedApis={handleLinkedApisChange}
           {disabled}
         />
       </div>

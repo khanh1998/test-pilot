@@ -428,9 +428,6 @@
       <!-- Environment Selection -->
       <div class="flex items-center space-x-4">
         <div class="min-w-0 flex-1">
-          <label for="environment-selector" class="block text-sm font-medium text-gray-700 mb-1">
-            Environment
-          </label>
           <div class="w-64">
             <EnvironmentSelector
               id="environment-selector"

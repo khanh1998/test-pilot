@@ -78,15 +78,14 @@
 
 <svelte:window on:click={handleClickOutside} />
 
-<div class="w-full {disabled ? 'opacity-60 pointer-events-none' : ''}" class:disabled>
+<div class="w-full environment-selector {disabled ? 'opacity-60 pointer-events-none' : ''}" class:disabled>
   <div class="flex gap-4 items-end flex-wrap">
     <!-- Environment Selection -->
     <div class="flex-1 min-w-[200px] relative">
-      <span class="block text-sm font-medium text-gray-700 mb-2">Environment</span>
       <button 
         {id}
         class="w-full flex justify-between items-center px-3 py-2 border border-gray-300 rounded-md bg-white cursor-pointer transition-all text-sm hover:border-gray-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:cursor-not-allowed {isOpen ? 'border-blue-500 ring-1 ring-blue-500' : ''}" 
-        onclick={toggleDropdown}
+        on:click={toggleDropdown}
         {disabled}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
@@ -103,7 +102,7 @@
         <div class="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto" role="listbox">
           <button 
             class="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 focus:outline-none focus:bg-gray-50 {selectedEnvironmentId === null ? 'bg-blue-50 text-blue-900' : 'text-gray-900'}" 
-            onclick={() => selectEnvironment(null)}
+            on:click={() => selectEnvironment(null)}
             role="option"
             aria-selected={selectedEnvironmentId === null}
           >
@@ -112,7 +111,7 @@
           {#each environments as environment}
             <button 
               class="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 focus:outline-none focus:bg-gray-50 {selectedEnvironmentId === environment.id ? 'bg-blue-50 text-blue-900' : 'text-gray-900'}" 
-              onclick={() => selectEnvironment(environment.id)}
+              on:click={() => selectEnvironment(environment.id)}
               role="option"
               aria-selected={selectedEnvironmentId === environment.id}
             >
@@ -136,7 +135,7 @@
           {#each availableSubEnvironments as subEnvName}
             <button 
               class="px-3 py-2 text-sm font-medium rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed {selectedSubEnvironment === subEnvName ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}" 
-              onclick={() => selectSubEnvironment(subEnvName)}
+              on:click={() => selectSubEnvironment(subEnvName)}
               {disabled}
               role="tab"
               aria-selected={selectedSubEnvironment === subEnvName}
@@ -150,7 +149,7 @@
 
     <!-- Clear Selection Button -->
     {#if selectedEnvironmentId}
-      <button class="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed" onclick={clearSelection} {disabled}>
+      <button class="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed" on:click={clearSelection} {disabled}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <line x1="18" y1="6" x2="6" y2="18"></line>
           <line x1="6" y1="6" x2="18" y2="18"></line>

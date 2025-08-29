@@ -5,15 +5,18 @@
   import type { Api } from '$lib/types/api';
 
   export let subEnvironments: Record<string, SubEnvironment> = {};
+  export let linkedApis: number[] = [];
   export let disabled: boolean = false;
 
   const dispatch = createEventDispatcher<{
     change: { subEnvironments: Record<string, SubEnvironment> };
+    updateLinkedApis: { linkedApis: number[] };
   }>();
 
   let availableApis: Api[] = [];
   let loading = true;
   let error: string | null = null;
+  let showApiSelector = false;
 
   async function loadApis() {
     try {
@@ -35,6 +38,29 @@
 
   function updateSubEnvironments() {
     dispatch('change', { subEnvironments });
+  }
+
+  function addApiToLinked(apiId: number) {
+    if (!linkedApis.includes(apiId)) {
+      const newLinkedApis = [...linkedApis, apiId];
+      dispatch('updateLinkedApis', { linkedApis: newLinkedApis });
+    }
+    showApiSelector = false;
+  }
+
+  function removeApiFromLinked(apiId: number) {
+    const newLinkedApis = linkedApis.filter(id => id !== apiId);
+    
+    // Also remove from all sub-environments' api_hosts
+    Object.keys(subEnvironments).forEach(subEnvKey => {
+      if (subEnvironments[subEnvKey].api_hosts) {
+        delete subEnvironments[subEnvKey].api_hosts[apiId.toString()];
+      }
+    });
+    
+    subEnvironments = { ...subEnvironments };
+    dispatch('updateLinkedApis', { linkedApis: newLinkedApis });
+    updateSubEnvironments();
   }
 
   function setApiHost(subEnvKey: string, apiId: string, hostUrl: string) {
@@ -68,8 +94,8 @@
     
     const suggestions = getHostSuggestions(subEnvKey);
     
-    availableApis.forEach(api => {
-      if (api.id && suggestions[subEnvKey]) {
+    linkedApisList.forEach(api => {
+      if (api.id) {
         // Only set if not already configured
         if (!subEnvironments[subEnvKey].api_hosts[api.id.toString()]) {
           const baseDomain = suggestions[subEnvKey];
@@ -103,16 +129,33 @@
   });
 
   $: subEnvEntries = Object.entries(subEnvironments);
+  $: linkedApisList = availableApis.filter(api => api.id && linkedApis.includes(api.id));
+  $: unlinkedApisList = availableApis.filter(api => api.id && !linkedApis.includes(api.id));
 </script>
 
 <div class="border border-gray-200 rounded-lg bg-white" class:opacity-60={disabled} class:pointer-events-none={disabled}>
   <div class="flex justify-between items-center p-6 border-b border-gray-100">
     <h3 class="text-lg font-semibold text-gray-900 m-0">API Host Configuration</h3>
-    {#if availableApis.length > 0}
-      <div class="flex items-center gap-4">
-        <span class="bg-blue-50 text-blue-700 px-3 py-1 rounded text-sm font-medium">{availableApis.length} APIs available</span>
-      </div>
-    {/if}
+    <div class="flex items-center gap-4">
+      {#if linkedApisList.length > 0}
+        <span class="bg-blue-50 text-blue-700 px-3 py-1 rounded text-sm font-medium">{linkedApisList.length} Linked APIs</span>
+      {/if}
+      {#if unlinkedApisList.length > 0}
+        <button 
+          class="inline-flex items-center gap-2 bg-green-50 text-green-700 border border-green-300 px-3 py-2 rounded text-sm font-medium cursor-pointer transition-all duration-200 hover:bg-green-100 disabled:opacity-50 disabled:cursor-not-allowed"
+          on:click={() => showApiSelector = true}
+          {disabled}
+          type="button"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="16"></line>
+            <line x1="8" y1="12" x2="16" y2="12"></line>
+          </svg>
+          Add API
+        </button>
+      {/if}
+    </div>
   </div>
 
   <div class="p-4 bg-gray-50 border-b border-gray-100 text-sm text-gray-600">
@@ -129,9 +172,21 @@
       <p>Error: {error}</p>
       <button class="mt-4 bg-red-600 text-white border-0 px-4 py-2 rounded cursor-pointer hover:bg-red-700" on:click={loadApis}>Retry</button>
     </div>
-  {:else if availableApis.length === 0}
+  {:else if linkedApisList.length === 0}
     <div class="p-8 text-center text-gray-600">
-      <p>No APIs found. Create APIs first before configuring environment hosts.</p>
+      <p>No APIs linked to this environment.</p>
+      {#if unlinkedApisList.length > 0}
+        <button 
+          class="mt-4 bg-green-600 text-white border-0 px-4 py-2 rounded cursor-pointer hover:bg-green-700"
+          on:click={() => showApiSelector = true}
+          {disabled}
+          type="button"
+        >
+          Link APIs to Environment
+        </button>
+      {:else}
+        <p class="text-sm text-gray-500 mt-2">Create APIs first before configuring environment hosts.</p>
+      {/if}
     </div>
   {:else if subEnvEntries.length === 0}
     <div class="p-8 text-center text-gray-600">
@@ -161,12 +216,12 @@
           </div>
 
           <div class="p-4 flex flex-col gap-4">
-            {#each availableApis as api}
+            {#each linkedApisList as api}
               {@const apiId = api.id?.toString() || ''}
               {@const currentHost = subEnv.api_hosts[apiId] || ''}
               {@const suggestion = getHostSuggestions(subEnvKey)[subEnvKey]}
               
-              <div class="grid grid-cols-[200px_1fr] gap-4 items-start p-4 bg-white border border-gray-200 rounded-md">
+              <div class="grid grid-cols-[200px_1fr_auto] gap-4 items-start p-4 bg-white border border-gray-200 rounded-md">
                 <div class="flex flex-col gap-1">
                   <div class="font-semibold text-gray-900 text-sm">{api.name}</div>
                   {#if api.description}
@@ -202,6 +257,20 @@
                     </button>
                   {/if}
                 </div>
+
+                <button 
+                  class="p-2 bg-red-50 text-red-600 border-0 rounded cursor-pointer transition-all duration-200 flex items-center justify-center hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  on:click={() => removeApiFromLinked(api.id!)}
+                  {disabled}
+                  type="button"
+                  title="Remove API from environment"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="15" y1="9" x2="9" y2="15"></line>
+                    <line x1="9" y1="9" x2="15" y2="15"></line>
+                  </svg>
+                </button>
               </div>
             {/each}
           </div>
@@ -218,13 +287,13 @@
             <div class="flex justify-between items-center mb-3">
               <span class="font-semibold text-gray-900">{subEnvKey}</span>
               <span class="text-xs text-gray-600">
-                {Object.keys(subEnv.api_hosts).length} of {availableApis.length} APIs configured
+                {Object.keys(subEnv.api_hosts).length} of {linkedApisList.length} APIs configured
               </span>
             </div>
             {#if Object.keys(subEnv.api_hosts).length > 0}
               <div class="flex flex-col gap-2">
                 {#each Object.entries(subEnv.api_hosts) as [apiId, hostUrl]}
-                  {@const api = availableApis.find(a => a.id?.toString() === apiId)}
+                  {@const api = linkedApisList.find(a => a.id?.toString() === apiId)}
                   <div class="flex justify-between items-center text-sm py-1 border-b border-gray-100 last:border-b-0">
                     <span class="font-medium text-gray-700">{api?.name || `API ${apiId}`}:</span>
                     <span class="font-mono text-gray-600 text-xs">{hostUrl}</span>
@@ -240,5 +309,53 @@
     </div>
   {/if}
 </div>
+
+<!-- API Selector Modal -->
+{#if showApiSelector}
+  <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" on:click={() => showApiSelector = false}>
+    <div class="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto" on:click|stopPropagation>
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-lg font-semibold text-gray-900 m-0">Add APIs to Environment</h3>
+        <button 
+          class="p-2 text-gray-400 hover:text-gray-600 transition-colors"
+          on:click={() => showApiSelector = false}
+          type="button"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      
+      {#if unlinkedApisList.length === 0}
+        <div class="text-center py-8 text-gray-600">
+          <p>All available APIs are already linked to this environment.</p>
+        </div>
+      {:else}
+        <div class="flex flex-col gap-3">
+          {#each unlinkedApisList as api}
+            <div class="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+              <div class="flex flex-col gap-1">
+                <div class="font-semibold text-gray-900">{api.name}</div>
+                {#if api.description}
+                  <div class="text-gray-600 text-sm">{api.description}</div>
+                {/if}
+                <div class="text-gray-400 text-xs font-mono">API ID: {api.id}</div>
+              </div>
+              <button 
+                class="bg-green-600 text-white border-0 px-4 py-2 rounded cursor-pointer hover:bg-green-700 transition-colors"
+                on:click={() => addApiToLinked(api.id!)}
+                type="button"
+              >
+                Add
+              </button>
+            </div>
+          {/each}
+        </div>
+      {/if}
+    </div>
+  </div>
+{/if}
 
 
