@@ -1,6 +1,6 @@
 import { fetchWithAuth } from './util';
 import { isDesktop } from '$lib/environment';
-import { uploadFileWithTauri, isTauriUploadAvailable } from '$lib/tauri/upload';
+import { uploadFileWithTauri, isTauriUploadAvailable } from '$lib/http_client/tauri/upload';
 import { apiUrl } from '$lib/api-config';
 import { authStore } from '$lib/store/auth';
 import type {

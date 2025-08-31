@@ -276,13 +276,21 @@ describe('Centralized Template Engine', () => {
 
     describe('response expressions', () => {
       it('should resolve simple response paths', () => {
-        expect(resolveTemplate('{{res:step1-0.$.id}}', context)).toBe('123');
+        // Unquoted single expressions should preserve data type
+        expect(resolveTemplate('{{res:step1-0.$.id}}', context)).toBe(123);
         expect(resolveTemplate('{{res:step1-0.$.name}}', context)).toBe('John');
+        // Quoted expressions should return strings
+        expect(resolveTemplate('"{{res:step1-0.$.id}}"', context)).toBe('123');
+        expect(resolveTemplate('"{{res:step1-0.$.name}}"', context)).toBe('John');
       });
 
       it('should resolve array access', () => {
-        expect(resolveTemplate('{{res:step1-0.$.items[0]}}', context)).toBe('1');
-        expect(resolveTemplate('{{res:step1-0.$.items[2]}}', context)).toBe('3');
+        // Unquoted single expressions should preserve data type  
+        expect(resolveTemplate('{{res:step1-0.$.items[0]}}', context)).toBe(1);
+        expect(resolveTemplate('{{res:step1-0.$.items[2]}}', context)).toBe(3);
+        // Quoted expressions should return strings
+        expect(resolveTemplate('"{{res:step1-0.$.items[0]}}"', context)).toBe('1');
+        expect(resolveTemplate('"{{res:step1-0.$.items[2]}}"', context)).toBe('3');
       });
 
       it('should preserve types with triple braces', () => {
@@ -300,10 +308,13 @@ describe('Centralized Template Engine', () => {
 
     describe('parameter expressions', () => {
       it('should resolve parameters', () => {
-        expect(resolveTemplate('{{param:userId}}', context)).toBe('456');
-        expect(resolveTemplate('"{{param:userId}}"', context)).toBe('456');
+        // Unquoted single expressions should preserve data type
+        expect(resolveTemplate('{{param:userId}}', context)).toBe(456);
         expect(resolveTemplate('{{param:name}}', context)).toBe('Test User');
+        // Quoted expressions should return strings
+        expect(resolveTemplate('"{{param:userId}}"', context)).toBe('456');
         expect(resolveTemplate('"{{param:name}}"', context)).toBe('Test User');
+        // Triple braces should preserve type
         expect(resolveTemplate('"{{{param:userId}}}"', context)).toBe(456);
         expect(resolveTemplate('"{{{param:name}}}"', context)).toBe('Test User');
       });

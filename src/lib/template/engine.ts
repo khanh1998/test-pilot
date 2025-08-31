@@ -102,14 +102,41 @@ function handleSingleExpression(
   context: TemplateContext,
   functions: Record<string, (...args: unknown[]) => unknown>
 ): TemplateResolutionResult | null {
-  // Check for single quoted triple-brace: "{{{expr}}}"
-  const quotedMatch = template.match(/^"\{\{\{[^}]+\}\}\}"$/);
+  // Check for single double-brace expression: "{{expr}}" or {{expr}}
+  const quotedMatch = template.match(/^"\{\{[^}]+\}\}"$/);
+  const unquotedMatch = template.match(/^\{\{[^}]+\}\}$/);
+  
   if (quotedMatch) {
+    // Quoted expression: remove quotes and treat as string context
     return resolveSingleExpression(
       quotedMatch[0].slice(1, -1), // Remove quotes
       template,
       context,
-      functions
+      functions,
+      true // forceString
+    );
+  }
+  
+  if (unquotedMatch) {
+    // Unquoted single expression: preserve original type
+    return resolveSingleExpression(
+      unquotedMatch[0],
+      template,
+      context,
+      functions,
+      false // preserveType
+    );
+  }
+  
+  // Check for single quoted triple-brace: "{{{expr}}}"
+  const quotedTripleMatch = template.match(/^"\{\{\{[^}]+\}\}\}"$/);
+  if (quotedTripleMatch) {
+    return resolveSingleExpression(
+      quotedTripleMatch[0].slice(1, -1), // Remove quotes
+      template,
+      context,
+      functions,
+      false // preserveType for triple braces
     );
   }
   
@@ -123,15 +150,28 @@ function resolveSingleExpression(
   expressionStr: string,
   originalTemplate: string,
   context: TemplateContext,
-  functions: Record<string, (...args: unknown[]) => unknown>
+  functions: Record<string, (...args: unknown[]) => unknown>,
+  forceString: boolean = false
 ): TemplateResolutionResult {
   const expression = parseTemplateExpression(expressionStr);
-  if (!expression?.preserveType) {
+  if (!expression) {
     return { value: originalTemplate, success: true };
   }
   
   try {
     const resolved = resolveExpressionBySource(expression, context, functions);
+    
+    // Handle string conversion based on context
+    if (forceString && typeof resolved !== 'string') {
+      return { value: String(resolved), success: true };
+    }
+    
+    // For triple braces or when preserveType is explicitly true, preserve type
+    if (expression.preserveType) {
+      return { value: resolved, success: true };
+    }
+    
+    // For double braces in single expression context, preserve type
     return { value: resolved, success: true };
   } catch (error) {
     return {

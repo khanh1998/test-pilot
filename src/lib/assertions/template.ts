@@ -53,7 +53,7 @@ export function validateAssertionExpectedValue(expectedValue: unknown, isTemplat
   }
 
   // Basic template syntax validation
-  const templateRegex = /\{\{[^}]+\}\}|\{\{\{[^}]+\}\}\}/g;
+  const templateRegex = /\{\{[^}]+\}\}/g;
   const matches = expectedValue.match(templateRegex);
   
   if (!matches) {
@@ -75,11 +75,19 @@ export function validateAssertionExpectedValue(expectedValue: unknown, isTemplat
 }
 
 /**
- * Validate a single template expression
+ * Validate a single template expression for assertions (double brackets only)
  */
 function validateTemplateExpression(expression: string): ValidationResult {
-  // Remove outer braces
-  const inner = expression.replace(/^\{\{\{?|\}\}\}?$/g, '');
+  // Check for triple brackets (not supported in assertions)
+  if (expression.startsWith('{{{') && expression.endsWith('}}}')) {
+    return {
+      valid: false,
+      error: `Triple bracket expressions are not supported in assertions: ${expression}`
+    };
+  }
+  
+  // Remove outer braces (double brackets only)
+  const inner = expression.replace(/^\{\{|\}\}$/g, '');
   
   if (!inner.includes(':')) {
     return {
@@ -90,7 +98,7 @@ function validateTemplateExpression(expression: string): ValidationResult {
 
   const [source] = inner.split(':');
   
-  if (!['res', 'proc', 'param', 'func'].includes(source)) {
+  if (!['res', 'proc', 'param', 'func', 'env'].includes(source)) {
     return {
       valid: false,
       error: `Unknown template source: ${source}`

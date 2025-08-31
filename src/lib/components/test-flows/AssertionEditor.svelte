@@ -128,7 +128,13 @@
   }
   
   // Get operators suitable for a given data type
-  function getOperatorsForType(assertionType: AssertionType, valueType?: ExpectedValueType): AssertionOperator[] {
+  function getOperatorsForType(assertionType: AssertionType, valueType?: ExpectedValueType, isTemplate = false): AssertionOperator[] {
+    // If using template expressions, return all available operators for the assertion type
+    // since templates can resolve to any value type at runtime
+    if (isTemplate) {
+      return operatorsByType[assertionType];
+    }
+    
     // If no specific value type or not json_body, return all operators for the assertion type
     if (!valueType || assertionType !== 'json_body') {
       return operatorsByType[assertionType];
@@ -419,7 +425,7 @@
     }
     
     // Check if the current operator is compatible with the new type
-    const validOperators = getOperatorsForType(assertion.assertion_type, newType);
+    const validOperators = getOperatorsForType(assertion.assertion_type, newType, assertion.is_template_expression);
     
     // If the current operator isn't valid for the new type, select a compatible one
     if (!validOperators.includes(assertion.operator)) {
@@ -793,7 +799,7 @@
                         handleAssertionChange();
                       }}
                     >
-                      {#each getOperatorsForType(assertion.assertion_type, assertion.expected_value_type) as op}
+                      {#each getOperatorsForType(assertion.assertion_type, assertion.expected_value_type, assertion.is_template_expression) as op}
                         <option value={op}>{getOperatorDisplayName(op)}</option>
                       {/each}
                     </select>
@@ -1147,7 +1153,7 @@
                 }
               }}
             >
-              {#each getOperatorsForType(newAssertion.assertion_type, newAssertion.expected_value_type) as op}
+              {#each getOperatorsForType(newAssertion.assertion_type, newAssertion.expected_value_type, newAssertion.is_template_expression) as op}
                 <option value={op}>{getOperatorDisplayName(op)}</option>
               {/each}
             </select>
@@ -1210,7 +1216,7 @@
                             }
                             
                             // Check if the current operator is compatible with the new type
-                            const validOperators = getOperatorsForType(newAssertion.assertion_type, newType);
+                            const validOperators = getOperatorsForType(newAssertion.assertion_type, newType, newAssertion.is_template_expression);
                             
                             // If the current operator isn't valid for the new type, select a compatible one
                             if (!validOperators.includes(newAssertion.operator)) {
