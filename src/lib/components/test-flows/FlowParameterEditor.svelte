@@ -4,6 +4,7 @@
   
   export let isOpen = false;
   export let parameters: FlowParameter[] = [];
+  export let currentValues: Record<string, unknown> = {};
   
   const dispatch = createEventDispatcher();
   
@@ -17,7 +18,6 @@
   let newParameter: FlowParameter = {
     name: '',
     type: 'string',
-    value: '',
     defaultValue: '',
     description: '',
     required: false
@@ -34,7 +34,6 @@
     newParameter = {
       name: '',
       type: 'string',
-      value: '',
       defaultValue: '',
       description: '',
       required: false
@@ -46,7 +45,6 @@
     newParameter = {
       name: '',
       type: 'string',
-      value: '',
       defaultValue: '',
       description: '',
       required: false
@@ -61,11 +59,6 @@
     
     if (!newParameter.type.trim()) {
       alert('Parameter type is required');
-      return;
-    }
-    
-    if (!newParameter.value || String(newParameter.value).trim() === '') {
-      alert('Current value is required');
       return;
     }
     
@@ -100,11 +93,6 @@
       return;
     }
     
-    if (!param.value || String(param.value).trim() === '') {
-      alert('Current value is required');
-      return;
-    }
-    
     dispatch('save', param);
     editingIndex = null;
   }
@@ -131,10 +119,10 @@
 >
   <!-- Panel -->
   <div
-    class="relative z-50 w-full max-w-2xl bg-white shadow-xl transition-transform duration-300 ease-in-out {isOpen ? 'translate-x-0' : 'translate-x-full'}"
+    class="relative z-50 w-full max-w-2xl bg-white shadow-xl transition-transform duration-300 ease-in-out flex flex-col h-full {isOpen ? 'translate-x-0' : 'translate-x-full'}"
   >
     <!-- Header -->
-    <div class="flex items-center justify-between border-b px-6 py-4">
+    <div class="flex items-center justify-between border-b px-6 py-4 flex-shrink-0">
       <h2 class="text-lg font-semibold">Flow Parameters</h2>
       <div class="flex items-center space-x-2">
         <button
@@ -159,7 +147,7 @@
     </div>
 
     <!-- Content -->
-    <div class="flex-1 overflow-y-auto p-6">
+    <div class="flex-1 overflow-y-auto p-6 min-h-0">
       <!-- Add Parameter Button -->
       <div class="mb-6">
         <button
@@ -197,15 +185,6 @@
                 <option value="object">Object</option>
                 <option value="array">Array</option>
               </select>
-            </div>
-            <div>
-              <div class="block text-sm font-medium text-gray-700 mb-1">Current Value <span class="text-red-500">*</span></div>
-              <input
-                type="text"
-                bind:value={newParameter.value}
-                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                placeholder="Current value"
-              />
             </div>
             <div>
               <div class="block text-sm font-medium text-gray-700 mb-1">Default Value</div>
@@ -286,14 +265,6 @@
                     </select>
                   </div>
                   <div>
-                    <div class="block text-sm font-medium text-gray-700 mb-1">Current Value <span class="text-red-500">*</span></div>
-                    <input
-                      type="text"
-                      bind:value={param.value}
-                      class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div>
                     <div class="block text-sm font-medium text-gray-700 mb-1">Default Value</div>
                     <input
                       type="text"
@@ -347,9 +318,11 @@
                     {/if}
                   </div>
                   <div>
-                    <div class="text-xs text-gray-600">Value:</div>
-                    <div class="text-sm font-mono break-all">{param.value || 'Not set'}</div>
-                    <div class="text-xs text-gray-600 mt-1">Default:</div>
+                    <div class="text-xs text-gray-600 mt-1">Current Value:</div>
+                    <div class="text-sm font-mono break-all text-blue-700 bg-blue-50 px-2 py-1 rounded">
+                      {currentValues[param.name] !== undefined ? JSON.stringify(currentValues[param.name]) : 'Not evaluated'}
+                    </div>
+                    <div class="text-xs text-gray-600 mt-2">Default:</div>
                     <div class="text-sm font-mono break-all">{param.defaultValue || 'Not set'}</div>
                     {#if param.description}
                       <div class="text-xs text-gray-600 mt-1">Description:</div>

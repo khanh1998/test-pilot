@@ -9,6 +9,9 @@
 
   // Import the components we created
   import TestFlowEditor from '$lib/components/test-flows/TestFlowEditor.svelte';
+  import EnvironmentLinkingManager from '$lib/components/environments/EnvironmentLinkingManager.svelte';
+  import { getEnvironments } from '$lib/http_client/environments';
+  import type { Environment } from '$lib/types/environment';
 
   let testFlowId = $derived(parseInt($page.params.id || '0'));
 
@@ -37,6 +40,9 @@
   let availableApis: any[] = $state([]);
   let showAddApiModal = $state(false);
 
+  // Environments for linking
+  let environments: Environment[] = $state([]);
+
   onMount(async () => {
     await fetchTestFlow();
 
@@ -45,8 +51,16 @@
       flowJson.settings.api_hosts = {};
     }
 
+    // Initialize linkedEnvironments if not existing
+    if (!flowJson.settings.linkedEnvironments) {
+      flowJson.settings.linkedEnvironments = [];
+    }
+
     // Load available APIs for the dropdown
     await loadAvailableApis();
+
+    // Load available environments for linking
+    await loadEnvironments();
   });
 
   // Update document title and breadcrumb when testFlow is loaded
@@ -123,6 +137,16 @@
       }
     } catch (err) {
       console.error('Error loading available APIs:', err);
+    }
+  }
+
+  async function loadEnvironments() {
+    try {
+      environments = await getEnvironments();
+      console.log('Environments loaded:', environments);
+    } catch (err) {
+      console.error('Error loading environments:', err);
+      environments = [];
     }
   }
   
@@ -398,9 +422,9 @@
               <h2 class="text-xl font-semibold">Test Flow Settings</h2>
             </div>
 
-            <div class="max-w-lg">
+            <div class="space-y-8">
               <!-- Flow Information -->
-              <div class="mb-8">
+              <div class="max-w-lg">
                 <h3 class="text-lg font-medium text-gray-800 mb-4">Flow Information</h3>
                 <div class="space-y-4">
                   <!-- Flow Name -->
@@ -540,6 +564,24 @@
                     </button>
                   </div>
                 {/if}
+              </div>
+
+              <!-- Environment Links Settings -->
+              <div class="mb-6">
+                <EnvironmentLinkingManager
+                  {environments}
+                  linkedEnvironments={flowJson.settings.linkedEnvironments || []}
+                  flowParameters={flowJson.parameters || []}
+                  disabled={isSaving}
+                  on:change={(event) => {
+                    const { linkedEnvironments } = event.detail;
+                    if (!flowJson.settings.linkedEnvironments) {
+                      flowJson.settings.linkedEnvironments = [];
+                    }
+                    flowJson.settings.linkedEnvironments = linkedEnvironments;
+                    markDirty();
+                  }}
+                />
               </div>
             </div>
           {/if}

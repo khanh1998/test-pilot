@@ -3,9 +3,12 @@
   import SmartEndpointSelector from './SmartEndpointSelector.svelte';
   import FlowRunner from './FlowRunner.svelte';
   import FlowOutputEditor from './FlowOutputEditor.svelte';
+  import SimplifiedEnvironmentSelector from '../environments/SimplifiedEnvironmentSelector.svelte';
   import { fade } from 'svelte/transition';
   import type { TestFlowData, Endpoint, ExecutionState, EndpointExecutionState, Parameter } from './types';
   import { getEndpointById, type EndpointDetails } from '$lib/http_client/endpoints';
+  import { getEnvironments } from '$lib/http_client/environments';
+  import type { Environment } from '$lib/types/environment';
 
   import { writable } from 'svelte/store';
   import { onMount, onDestroy } from 'svelte';
@@ -23,6 +26,12 @@
   let isRunning = false;
   let flowRunner: FlowRunner;
   let isLoadingEndpointDetails = false; // Add loading state for endpoint fetching
+
+  // Environment selection state
+  let environments: Environment[] = [];
+  let selectedEnvironmentId: number | null = null;
+  let selectedSubEnvironment: string | null = null;
+  let isLoadingEnvironments = false;
 
   // Create a store to track execution state changes - we'll use this directly
   // instead of maintaining a separate executionState variable
@@ -140,17 +149,57 @@
   }
 
   // Add event listener on mount
-  onMount(() => {
+  onMount(async () => {
+    // Load available environments for the environment selector
+    await loadEnvironments();
+    
     // Listen for custom events on the component's node
     const node = document.querySelector('svelte-component[this="TestFlowEditor"]');
     if (node) {
       node.addEventListener('showParametersPanel', handleshowParametersPanel as EventListener);
 
-      return () => {
+      onDestroy(() => {
         node.removeEventListener('showParametersPanel', handleshowParametersPanel as EventListener);
-      };
+      });
     }
   });
+
+  async function loadEnvironments() {
+    try {
+      isLoadingEnvironments = true;
+      environments = await getEnvironments();
+      
+      // Initialize environment selection from existing flowData
+      if (flowData.settings.environment) {
+        selectedEnvironmentId = flowData.settings.environment.environmentId;
+        selectedSubEnvironment = flowData.settings.environment.subEnvironment;
+      }
+    } catch (error) {
+      console.error('Failed to load environments:', error);
+      environments = [];
+    } finally {
+      isLoadingEnvironments = false;
+    }
+  }
+
+  function handleEnvironmentSelection(event: CustomEvent<{ environmentId: number | null; subEnvironment: string | null }>) {
+    const { environmentId, subEnvironment } = event.detail;
+    selectedEnvironmentId = environmentId;
+    selectedSubEnvironment = subEnvironment;
+    
+    // Update flowData with environment selection
+    if (!flowData.settings.environment) {
+      flowData.settings.environment = {
+        environmentId,
+        subEnvironment
+      };
+    } else {
+      flowData.settings.environment.environmentId = environmentId;
+      flowData.settings.environment.subEnvironment = subEnvironment;
+    }
+    
+    handleChange();
+  }
 
   function handleChange(event?: CustomEvent<{ flowData: TestFlowData }>) {
     // If event has flowData in detail, use it
@@ -371,28 +420,45 @@
 <div class="space-y-4">
   <!-- Top Control Bar with Run Button -->
   <div class="rounded-lg border bg-white p-4 shadow-sm">
-    <div class="flex flex-wrap items-center justify-between gap-2">
+    <div class="flex flex-wrap items-center justify-between gap-4">
       <div class="flex items-center">
         <h3 class="text-lg font-medium">Test Flow Execution</h3>
       </div>
 
-      <div class="flex items-center space-x-3">
-        <!-- Run Options Button -->
-        <button
-          class="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          on:click={() => (showExecutionOptions = !showExecutionOptions)}
-          disabled={isRunning}
-        >
-          <svg class="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"
+      <!-- Environment Selection -->
+      <div class="flex items-center space-x-4">
+        <div class="min-w-0 flex-1">
+          <div class="w-64">
+            <SimplifiedEnvironmentSelector
+              id="environment-selector"
+              {environments}
+              linkedEnvironments={flowData.settings.linkedEnvironments || []}
+              {selectedEnvironmentId}
+              {selectedSubEnvironment}
+              placeholder={isLoadingEnvironments ? "Loading environments..." : "Select environment..."}
+              disabled={isRunning || isLoadingEnvironments}
+              on:select={handleEnvironmentSelection}
             />
-          </svg>
-          Options
-        </button>
+          </div>
+        </div>
+
+        <div class="flex items-center space-x-3">
+          <!-- Run Options Button -->
+          <button
+            class="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            on:click={() => (showExecutionOptions = !showExecutionOptions)}
+            disabled={isRunning}
+          >
+            <svg class="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"
+              />
+            </svg>
+            Options
+          </button>
 
         <!-- Reset Button -->
         <button
@@ -506,6 +572,7 @@
             Run Flow
           {/if}
         </button>
+        </div>
       </div>
     </div>
 
@@ -610,6 +677,8 @@
       bind:preferences
       bind:showParametersPanel
       showButtons={false}
+      {environments}
+      selectedEnvironment={selectedEnvironmentId ? environments.find(env => env.id === selectedEnvironmentId) || null : null}
       on:reset={handleReset}
       on:change={(event: CustomEvent<{ flowData: TestFlowData }>) => {
         console.log('Change event from FlowRunner:', event.detail);

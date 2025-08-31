@@ -121,5 +121,6 @@ export interface TestFlowJson {
       url: string;
       name: string;
     }>;
+    environment_id?: number; // Link to environment
   };
 }

@@ -56,6 +56,11 @@
       icon: 'M8 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-2m-4-1v8m0 0l3-3m-3 3L9 8'
     },
     {
+      name: 'Environments',
+      href: '/dashboard/environments',
+      icon: 'M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9'
+    },
+    {
       name: 'Test Flows',
       href: '/dashboard/test-flows',
       icon: 'M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2'
@@ -97,6 +102,9 @@
             case 'apis':
               displayName = 'APIs';
               break;
+            case 'environments':
+              displayName = 'Environments';
+              break;
             case 'test-flows':
               displayName = 'Test Flows';
               break;
@@ -117,6 +125,9 @@
                   href = isLast ? fullPath : fullPath;
                 } else if (parentSegment === 'test-flows') {
                   displayName = 'Test Flow Details';
+                  href = isLast ? fullPath : fullPath;
+                } else if (parentSegment === 'environments') {
+                  displayName = 'Environment Details';
                   href = isLast ? fullPath : fullPath;
                 } else {
                   displayName = `#${segments[i]}`;

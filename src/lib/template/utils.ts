@@ -12,12 +12,14 @@ export function createTemplateContextFromFlowRunner(
   storedResponses: Record<string, unknown>,
   storedTransformations: Record<string, Record<string, unknown>>,
   parameterValues: Record<string, unknown>,
-  templateFunctions?: Record<string, (...args: unknown[]) => unknown>
+  templateFunctions?: Record<string, (...args: unknown[]) => unknown>,
+  environmentData?: Record<string, unknown>
 ): TemplateContext {
   return {
     responses: storedResponses,
     transformedData: storedTransformations,
     parameters: parameterValues,
+    environment: environmentData,
     functions: templateFunctions
   };
 }

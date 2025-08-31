@@ -55,6 +55,7 @@ export const testFlows = pgTable('test_flows', {
   description: text('description'),
   userId: integer('user_id').references(() => users.id),
   flowJson: jsonb('flow_json').notNull(), // Will store the entire flow structure including steps, inputs, assertions
+  environmentId: integer('environment_id').references(() => environments.id), // Link to environment for execution
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull()
 });
@@ -69,6 +70,48 @@ export const testFlowApis = pgTable('test_flow_apis', {
     .references(() => apis.id, { onDelete: 'cascade' })
   // Composite primary key is defined in relations.ts
 });
+
+// Environments table - stores all environment configurations in JSONB
+export const environments = pgTable(
+  'environments',
+  {
+    id: serial('id').primaryKey(),
+    name: text('name').notNull(),
+    description: text('description'),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    config: jsonb('config').notNull(), // Stores all environment configuration
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull()
+  },
+  (table) => [
+    // Indexes for efficient JSONB queries and relationships
+    index('environments_config_gin_idx').using('gin', table.config),
+    index('environments_user_id_idx').on(table.userId),
+    uniqueIndex('environments_user_name_unique_idx').on(table.userId, table.name) // Prevent duplicate environment names per user
+  ]
+);
+
+// Link table between environments and APIs
+export const environmentApis = pgTable(
+  'environment_apis',
+  {
+    id: serial('id').primaryKey(),
+    environmentId: integer('environment_id')
+      .notNull()
+      .references(() => environments.id, { onDelete: 'cascade' }),
+    apiId: integer('api_id')
+      .notNull()
+      .references(() => apis.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at').defaultNow().notNull()
+  },
+  (table) => [
+    index('environment_apis_env_id_idx').on(table.environmentId),
+    index('environment_apis_api_id_idx').on(table.apiId),
+    uniqueIndex('environment_apis_unique_idx').on(table.environmentId, table.apiId) // One relationship per environment-API pair
+  ]
+);
 
 // Endpoint embeddings table for vector similarity search
 export const endpointEmbeddings = pgTable(
