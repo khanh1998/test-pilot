@@ -264,7 +264,8 @@ import {
       return;
     }
 
-    // Prepare parameters and check if all required parameters have values
+    // Prepare ephemeral parameters for this execution (re-evaluated each time)
+    // Priority: Environment Variable → Default Value → User Input (if required and missing)
     prepareParameters();
     if (!checkRequiredParameters()) {
       // Show the Parameter input modal if there are missing required values
@@ -661,8 +662,17 @@ import {
               
               // Phase 2: Evaluate the expression if provided
               if (transform.expression && transform.expression.trim()) {
-                // Evaluate the expression using the transformation engine
-                const evaluatedResult = transformModule.transformResponse(responseData, transform.expression);
+                // Build template context for transformation
+                const templateContext = createTemplateContextFromFlowRunner(
+                  storedResponses,
+                  storedTransformations,
+                  parameterValues,
+                  templateFunctions,
+                  environmentVariables
+                );
+                
+                // Evaluate the expression using the transformation engine with template context
+                const evaluatedResult = transformModule.transformResponse(responseData, transform.expression, templateContext);
                 
                 if (evaluatedResult !== null && evaluatedResult !== undefined) {
                   // Update with the evaluated result
@@ -1093,78 +1103,118 @@ import {
 
   // Function to prepare parameters before executing the flow
   function prepareParameters() {
-    // Reset parameters values store
+    // Reset parameters values store - parameters are ephemeral and re-evaluated each execution
     parameterValues = {};
 
-    // Fill Parameter values from flowData.parameters with either values or defaults
+    // Get the current environment mapping if selected
+    const selectedEnvMapping = getSelectedEnvironmentMapping();
+
+    addLog('debug', `Evaluating parameters for execution. Environment mapping: ${selectedEnvMapping ? `${selectedEnvMapping.environmentName} (${Object.keys(selectedEnvMapping.parameterMappings).length} mappings)` : 'None'}`);
+
+    // Evaluate each parameter with priority: Environment Variable → Default Value
     flowData.parameters.forEach((parameter) => {
-      // If Parameter has a value, use it
-      if (parameter.value !== undefined && parameter.value !== null) {
-        parameterValues[parameter.name] = parameter.value;
+      let resolvedValue = null;
+      let source = 'none';
+
+      // Priority 1: Check if this parameter is mapped to an environment variable
+      if (selectedEnvMapping && selectedEnvMapping.parameterMappings[parameter.name]) {
+        const envVariableName = selectedEnvMapping.parameterMappings[parameter.name];
+        const envValue = environmentVariables[envVariableName];
+        
+        if (envValue !== undefined && envValue !== null) {
+          resolvedValue = envValue;
+          source = `environment variable '${envVariableName}'`;
+          addLog('debug', `Parameter '${parameter.name}' resolved from environment variable '${envVariableName}'`, String(envValue));
+        } else {
+          addLog('warning', `Environment variable '${envVariableName}' not found for parameter '${parameter.name}', falling back to default value`);
+        }
       }
-      // Otherwise use default value if available
-      else if (parameter.defaultValue !== undefined && parameter.defaultValue !== null) {
-        parameterValues[parameter.name] = parameter.defaultValue;
-        // Also set as current value
-        parameter.value = parameter.defaultValue;
+
+      // Priority 2: Use default value if no environment value was found
+      if (resolvedValue === null && parameter.defaultValue !== undefined && parameter.defaultValue !== null) {
+        resolvedValue = parameter.defaultValue;
+        source = 'default value';
+        addLog('debug', `Parameter '${parameter.name}' using default value`, String(parameter.defaultValue));
+      }
+
+      // Store the resolved value (ephemeral - not saved to database)
+      if (resolvedValue !== null) {
+        parameterValues[parameter.name] = resolvedValue;
+        addLog('info', `Parameter '${parameter.name}' = ${JSON.stringify(resolvedValue)} (from ${source})`);
+      } else {
+        addLog('warning', `Parameter '${parameter.name}' has no value - will be treated as missing if required`);
       }
     });
 
-    // Log the parameters for debugging
-    addLog('debug', 'Flow Parameters prepared', JSON.stringify(parameterValues, null, 2));
+    // Log the final parameter values for debugging
+    addLog('debug', 'Final ephemeral parameter values for this execution', JSON.stringify(parameterValues, null, 2));
   }
 
-  // Check if all required parameters have values
+  // Helper function to get the selected environment mapping
+  function getSelectedEnvironmentMapping() {
+    if (!flowData.settings.linkedEnvironments || !flowData.settings.environment) {
+      return null;
+    }
+
+    const selectedEnvId = flowData.settings.environment.environmentId;
+    return flowData.settings.linkedEnvironments.find(mapping => mapping.environmentId === selectedEnvId) || null;
+  }
+
+  // Check if all required parameters have values after ephemeral evaluation
   function checkRequiredParameters(): boolean {
     // Clear the missing values array
     parametersWithMissingValues = [];
 
-    // Check each Parameter
+    // Check each required parameter against the ephemeral parameterValues
     flowData.parameters.forEach((parameter) => {
-      if (
-        parameter.required &&
-        (parameter.value === undefined || parameter.value === null) &&
-        (parameter.defaultValue === undefined || parameter.defaultValue === null)
-      ) {
-        parametersWithMissingValues.push({ ...parameter });
+      if (parameter.required) {
+        const resolvedValue = parameterValues[parameter.name];
+        
+        // Parameter is missing if it's not in parameterValues or has null/undefined value
+        if (resolvedValue === undefined || resolvedValue === null) {
+          parametersWithMissingValues.push({ 
+            ...parameter,
+            value: null // Ensure we don't carry over any old values
+          });
+          addLog('warning', `Required parameter '${parameter.name}' is missing value after environment/default evaluation`);
+        }
       }
     });
+
+    if (parametersWithMissingValues.length > 0) {
+      addLog('info', `${parametersWithMissingValues.length} required parameters need manual input: ${parametersWithMissingValues.map(p => p.name).join(', ')}`);
+    }
 
     // Return true if no missing values
     return parametersWithMissingValues.length === 0;
   }
 
-  // Function to handle Parameter input form submission
+  // Function to handle Parameter input form submission for missing required parameters
   function handleParameterFormSubmit() {
-    // Update the Parameter values
+    // Update the ephemeral parameter values with user input
     parametersWithMissingValues.forEach((parameter) => {
-      // Find the corresponding Parameter in flowData.parameters
-      const originalVar = flowData.parameters.find((v) => v.name === parameter.name);
-      if (originalVar) {
-        originalVar.value = parameter.value;
+      if (parameter.value !== undefined && parameter.value !== null) {
+        // Store the user-provided value in the ephemeral parameterValues
         parameterValues[parameter.name] = parameter.value;
+        addLog('info', `User provided value for required parameter '${parameter.name}'`, String(parameter.value));
       }
     });
 
     // Close the modal
     showParameterInputModal = false;
 
-    // Continue with flow execution
-    executeFlowAfterParameterCheck();
+    // Re-check if all required parameters are now satisfied
+    if (checkRequiredParameters()) {
+      // All parameters are ready, execute the flow
+      executeFlowAfterParameterCheck();
+    } else {
+      // Still missing some parameters, show the modal again
+      addLog('error', 'Some required parameters are still missing values');
+      showParameterInputModal = true;
+    }
   }
 
   // Parameters management has been moved to FlowParameterEditor.svelte
-
-  // Update Parameter values when flowData.parameters change
-  $: {
-    parameterValues = {};
-    if (flowData.parameters) {
-      flowData.parameters.forEach((parameter) => {
-        parameterValues[parameter.name] =
-          parameter.value !== undefined ? parameter.value : parameter.defaultValue;
-      });
-    }
-  }
 
   // Parameters management has been moved to FlowParameterEditor.svelte
 </script>
@@ -1283,6 +1333,7 @@ import {
   <FlowParameterEditor
     isOpen={showParametersPanel}
     parameters={flowData.parameters || []}
+    currentValues={parameterValues}
     on:save={(e) => {
       // Handle saving a parameter
       const parameter = e.detail;

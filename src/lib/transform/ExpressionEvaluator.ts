@@ -3,6 +3,8 @@
  * A secure evaluator for expression language used in data transformations
  */
 import { SafeJSONPathEvaluator } from './JSONPathEvaluator';
+import { resolveTemplateExpression } from '../template/engine';
+import type { TemplateContext } from '../template/types';
 
 // Generic node type for AST
 type Node = {
@@ -28,6 +30,40 @@ type PipelineFunction = (data: unknown, ...args: unknown[]) => unknown;
 
 export class SafeExpressionEvaluator {
   private jsonPathEvaluator = new SafeJSONPathEvaluator();
+  private templateContext: TemplateContext = {
+    responses: {},
+    transformedData: {},
+    parameters: {},
+    environment: {},
+    functions: {}
+  };
+  
+  /**
+   * Set template context for template substitution
+   * @param context - Template context with responses, parameters, etc.
+   */
+  setTemplateContext(context: Partial<TemplateContext>): void {
+    this.templateContext = {
+      ...this.templateContext,
+      ...context
+    };
+  }
+  
+  /**
+   * Set parameters for template substitution (convenience method)
+   * @param params - Parameters to use for {{param:name}} substitution
+   */
+  setParameters(params: Record<string, unknown>): void {
+    this.templateContext.parameters = { ...params };
+  }
+  
+  /**
+   * Get current template context
+   * @returns Current template context
+   */
+  getTemplateContext(): TemplateContext {
+    return { ...this.templateContext };
+  }
   
   // Operators available in expressions
   private operators: Record<string, (...args: unknown[]) => unknown> = {
@@ -322,10 +358,17 @@ export class SafeExpressionEvaluator {
    * Evaluate an expression using the data context
    * @param expression - The expression to evaluate
    * @param data - The data context to evaluate against
+   * @param params - Optional parameters for template substitution
    * @returns The result of the evaluation
    */
-  evaluate(expression: string, data: unknown): unknown {
-    expression = expression.trim();
+  evaluate(expression: string, data: unknown, params?: Record<string, unknown>): unknown {
+    // Set parameters if provided
+    if (params) {
+      this.setParameters(params);
+    }
+    
+    // Substitute template expressions using the centralized template engine
+    expression = this.substituteTemplateExpressions(expression.trim());
     
     // Check for pipeline notation (| but not ||)
     if (this.isPipelineExpression(expression)) {
@@ -346,6 +389,31 @@ export class SafeExpressionEvaluator {
     } catch (error) {
       console.error('Error evaluating expression:', error);
       return null;
+    }
+  }
+  
+  /**
+   * Substitute template expressions using the centralized template engine
+   * Only supports "{{{...}}}" format (triple braces with double quotes)
+   * @param expression - Expression that may contain template expressions
+   * @returns Expression with template expressions substituted
+   */
+  private substituteTemplateExpressions(expression: string): string {
+    try {
+      const result = resolveTemplateExpression(expression, this.templateContext);
+      if (result.success) {
+        // If the result is a string and different from input, it was processed
+        if (typeof result.value === 'string') {
+          return result.value;
+        }
+        // If it's not a string, convert it to a string representation for the expression
+        return JSON.stringify(result.value);
+      }
+      // If template resolution failed, return original expression
+      return expression;
+    } catch (error) {
+      console.warn('Error processing template expressions:', error);
+      return expression;
     }
   }
   
@@ -649,6 +717,9 @@ export class SafeExpressionEvaluator {
    * @returns Result of the evaluation
    */
   private evaluateWithContext(expression: string, context: unknown): unknown {
+    // Substitute template expressions first
+    expression = this.substituteTemplateExpressions(expression);
+    
     // Check if it's a template expression (e.g., {{func:uuid()}})
     if (this.isTemplateExpression(expression)) {
       return expression; // Keep template expressions as-is
@@ -774,11 +845,12 @@ export class SafeExpressionEvaluator {
   
   /**
    * Check if a string is a template expression (e.g., {{func:uuid()}})
+   * With simplified template support, this is no longer needed for complex detection
    * @param str - String to check
    * @returns Whether the string is a template expression
    */
   private isTemplateExpression(str: string): boolean {
-    return typeof str === 'string' && str.includes('{{') && str.includes('}}');
+    return false; // Simplified - all template processing is handled by the engine
   }
   
   /**

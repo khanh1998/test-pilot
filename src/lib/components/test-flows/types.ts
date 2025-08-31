@@ -83,6 +83,12 @@ export type FlowOutput = {
   isTemplate?: boolean; // Whether the value is a template expression
 };
 
+export type EnvironmentMapping = {
+  environmentId: number;
+  environmentName: string; // Store environment name for display
+  parameterMappings: Record<string, string>; // flowParameterName -> environmentVariableName
+};
+
 export type FlowStep = {
   step_id: string;
   label: string;
@@ -108,6 +114,7 @@ export type TestFlowData = {
       environmentId: number | null;
       subEnvironment: string | null;
     };
+    linkedEnvironments?: EnvironmentMapping[]; // New: environment-parameter mappings
     // Other settings
   };
   parameters: FlowParameter[];

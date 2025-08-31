@@ -3,7 +3,7 @@
   import SmartEndpointSelector from './SmartEndpointSelector.svelte';
   import FlowRunner from './FlowRunner.svelte';
   import FlowOutputEditor from './FlowOutputEditor.svelte';
-  import EnvironmentSelector from '../environments/EnvironmentSelector.svelte';
+  import SimplifiedEnvironmentSelector from '../environments/SimplifiedEnvironmentSelector.svelte';
   import { fade } from 'svelte/transition';
   import type { TestFlowData, Endpoint, ExecutionState, EndpointExecutionState, Parameter } from './types';
   import { getEndpointById, type EndpointDetails } from '$lib/http_client/endpoints';
@@ -429,9 +429,10 @@
       <div class="flex items-center space-x-4">
         <div class="min-w-0 flex-1">
           <div class="w-64">
-            <EnvironmentSelector
+            <SimplifiedEnvironmentSelector
               id="environment-selector"
               {environments}
+              linkedEnvironments={flowData.settings.linkedEnvironments || []}
               {selectedEnvironmentId}
               {selectedSubEnvironment}
               placeholder={isLoadingEnvironments ? "Loading environments..." : "Select environment..."}

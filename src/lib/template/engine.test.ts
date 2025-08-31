@@ -301,8 +301,11 @@ describe('Centralized Template Engine', () => {
     describe('parameter expressions', () => {
       it('should resolve parameters', () => {
         expect(resolveTemplate('{{param:userId}}', context)).toBe('456');
+        expect(resolveTemplate('"{{param:userId}}"', context)).toBe('456');
         expect(resolveTemplate('{{param:name}}', context)).toBe('Test User');
+        expect(resolveTemplate('"{{param:name}}"', context)).toBe('Test User');
         expect(resolveTemplate('"{{{param:userId}}}"', context)).toBe(456);
+        expect(resolveTemplate('"{{{param:name}}}"', context)).toBe('Test User');
       });
     });
 
