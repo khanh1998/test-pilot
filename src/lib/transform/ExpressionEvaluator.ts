@@ -750,14 +750,6 @@ export class SafeExpressionEvaluator {
       return this.evaluatePipeline(expression, context);
     }
     
-    // Replace "item." with context path if needed - but only when it refers to the context item
-    // Use word boundary to avoid replacing "item." within other words like "terminal_menu_item."
-    if (/\bitem\./.test(expression)) {
-      const contextObj = { item: context };
-      expression = expression.replace(/\bitem\./g, '$.');
-      return this.jsonPathEvaluator.evaluate(expression, contextObj);
-    }
-    
     return this.evaluate(expression, context);
   }
   
@@ -877,9 +869,10 @@ export class SafeExpressionEvaluator {
    */
   private isPipelineExpression(expression: string): boolean {
     // Check if it contains | but not as part of ||
-    // We'll use a simple approach: look for | that's not preceded or followed by |
-    const regex = /(?<!\|)\|(?!\|)/;
-    return regex.test(expression);
+    // Use a more compatible approach without lookbehind/lookahead
+    // Replace all || with a placeholder, then check for remaining |
+    const withoutLogicalOr = expression.replace(/\|\|/g, '__LOGICAL_OR__');
+    return withoutLogicalOr.includes('|');
   }
   
   /**
