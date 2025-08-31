@@ -114,6 +114,25 @@ export async function createTestFlow(data: any) {
 	}
 }
 
+export async function cloneTestFlow(id: string | number, data: { name: string; description?: string }) {
+	try {
+		const response = await fetchWithAuth(`/api/test-flows/${id}/clone`, {
+			method: 'POST',
+			body: JSON.stringify(data)
+		});
+		
+		if (response.ok) {
+			return await response.json();
+		} else {
+			console.error(`Failed to clone test flow ${id}:`, response.statusText);
+			return null;
+		}
+	} catch (error) {
+		console.error(`Error cloning test flow ${id}:`, error);
+		return null;
+	}
+}
+
 export async function deleteTestFlow(id: string | number) {
 	try {
 		const response = await fetchWithAuth('/api/test-flows', {

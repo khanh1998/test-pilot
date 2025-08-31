@@ -294,3 +294,44 @@ export async function createTestFlowApis(testFlowId: number, apiIds: number[]): 
     );
   }
 }
+
+/**
+ * Create a new test flow
+ * @param testFlowData - The test flow data to create
+ * @returns The created test flow
+ */
+export async function createTestFlow(testFlowData: {
+  name: string;
+  description?: string | null;
+  userId: number;
+  flowJson: any;
+}): Promise<{
+  id: number;
+  name: string;
+  description: string | null;
+  flowJson: any;
+  userId: number | null;
+  createdAt: Date;
+  updatedAt: Date;
+}> {
+  const [newTestFlow] = await db
+    .insert(testFlows)
+    .values(testFlowData)
+    .returning();
+  
+  return newTestFlow;
+}
+
+/**
+ * Get API IDs associated with a test flow
+ * @param testFlowId - The test flow ID
+ * @returns Array of API IDs
+ */
+export async function getTestFlowApiIds(testFlowId: number): Promise<number[]> {
+  const apiAssociations = await db
+    .select({ apiId: testFlowApis.apiId })
+    .from(testFlowApis)
+    .where(eq(testFlowApis.testFlowId, testFlowId));
+
+  return apiAssociations.map((assoc) => assoc.apiId);
+}
