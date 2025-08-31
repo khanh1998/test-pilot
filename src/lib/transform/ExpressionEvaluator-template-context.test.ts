@@ -28,7 +28,7 @@ describe('Transformation with Template Context', () => {
     evaluator.setTemplateContext(templateContext);
 
     // Expression that uses a parameter in a where clause
-    const expression = '$.data | where(status == "{{{param:targetStatus}}}")';
+    const expression = '$.data | where(status == "{{param:targetStatus}}")';
     
     const result = evaluator.evaluate(expression, response);
     
@@ -61,7 +61,8 @@ describe('Transformation with Template Context', () => {
     evaluator.setTemplateContext(templateContext);
 
     // Expression that references a previous response using template with JSONPath syntax
-    const expression = '$.users | where(id == "{{{res:step1-0.$.targetId}}}")';
+    // Use unquoted template to preserve the number type
+    const expression = '$.users | where(id == {{res:step1-0.$.targetId}})';
     
     const result = evaluator.evaluate(expression, currentResponse);
     
@@ -94,7 +95,7 @@ describe('Transformation with Template Context', () => {
     evaluator.setTemplateContext(templateContext);
 
     // Expression that uses an environment variable
-    const expression = '$.items | where(category == "{{{env:filterCategory}}}")';
+    const expression = '$.items | where(category == "{{env:filterCategory}}")';
     
     const result = evaluator.evaluate(expression, response);
     
@@ -130,7 +131,8 @@ describe('Transformation with Template Context', () => {
     evaluator.setTemplateContext(templateContext);
 
     // Expression that uses a parameter in take() function
-    const expression = '$.data | take("{{{param:limit}}}")';
+    // Use unquoted template to preserve the number type
+    const expression = '$.data | take({{param:limit}})';
     
     const result = evaluator.evaluate(expression, response);
     
@@ -178,7 +180,7 @@ describe('Transformation with Template Context', () => {
     };
 
     // Test the transformResponse function with template context
-    const expression = '$.data | where(status == "{{{param:targetStatus}}}")';
+    const expression = '$.data | where(status == "{{param:targetStatus}}")';
     
     const result = transformResponse(response, expression, templateContext);
     
@@ -186,5 +188,46 @@ describe('Transformation with Template Context', () => {
       { id: 1, status: 'active' },
       { id: 3, status: 'active' }
     ]);
+  });
+
+  it('should handle complex pipeline with unquoted parameters preserving types', () => {
+    const testData = {
+      data: [
+        {
+          code: 'fusion-cafe',
+          terminals: [
+            { code: 'terminal_1', id: 1 },
+            { code: 'terminal_2', id: 2 }
+          ]
+        },
+        {
+          code: 'other-cafe',
+          terminals: [
+            { code: 'terminal_3', id: 3 }
+          ]
+        }
+      ]
+    };
+
+    const templateContext: TemplateContext = {
+      responses: {},
+      transformedData: {},
+      parameters: {
+        merchant_code: 'fusion-cafe',
+        terminal_code: 'terminal_1'
+      },
+      environment: {},
+      functions: {}
+    };
+
+    const evaluator = new SafeExpressionEvaluator();
+    evaluator.setTemplateContext(templateContext);
+
+    // Complex expression with unquoted parameters - they preserve original types
+    const expression = '$.data | where($.code == {{param:merchant_code}}) | map($.terminals) | flatten() | where($.code == {{param:terminal_code}}) | map($.id) | last()';
+    
+    const result = evaluator.evaluate(expression, testData);
+    
+    expect(result).toBe(1);
   });
 });

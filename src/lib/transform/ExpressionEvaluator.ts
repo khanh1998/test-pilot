@@ -5,25 +5,7 @@
 import { SafeJSONPathEvaluator } from './JSONPathEvaluator';
 import { resolveTemplateExpression } from '../template/engine';
 import type { TemplateContext } from '../template/types';
-
-// Generic node type for AST
-type Node = {
-  type: string;
-  [key: string]: unknown;
-};
-
-// Binary operation node
-type BinaryNode = Node & {
-  left: Node;
-  right: Node;
-  operator: string;
-};
-
-// Unary operation node
-type UnaryNode = Node & {
-  operand: Node;
-  operator: string;
-};
+import { ASTEvaluator, ExpressionParser } from './ExpressionParser';
 
 // Pipeline function signature
 type PipelineFunction = (data: unknown, ...args: unknown[]) => unknown;
@@ -274,15 +256,22 @@ export class SafeExpressionEvaluator {
     
     'at': (data: unknown, index: unknown): unknown => {
       if (!Array.isArray(data)) return undefined;
+      
+      // Handle null/undefined indices
+      if (index === null || index === undefined) return undefined;
+      
       const idx = Number(index);
       if (isNaN(idx)) return undefined;
       
+      // Convert float to integer by truncating
+      const intIdx = Math.floor(idx);
+      
       // Handle negative indices (e.g., -1 for last element)
-      if (idx < 0) {
-        return data[data.length + idx];
+      if (intIdx < 0) {
+        return data[data.length + intIdx];
       }
       
-      return data[idx];
+      return data[intIdx];
     },
     
     // Utility
@@ -367,8 +356,8 @@ export class SafeExpressionEvaluator {
       this.setParameters(params);
     }
     
-    // Substitute template expressions using the centralized template engine
-    expression = this.substituteTemplateExpressions(expression.trim());
+    // Don't substitute templates here - let the AST evaluator handle it per operand
+    expression = expression.trim();
     
     // Check for pipeline notation (| but not ||)
     if (this.isPipelineExpression(expression)) {
@@ -384,7 +373,7 @@ export class SafeExpressionEvaluator {
     try {
       const parser = new ExpressionParser();
       const ast = parser.parseExpression(expression);
-      const evaluator = new ASTEvaluator(this.operators, this.jsonPathEvaluator);
+      const evaluator = new ASTEvaluator(this.operators, this.jsonPathEvaluator, this.templateContext);
       return evaluator.evaluate(ast, data);
     } catch (error) {
       console.error('Error evaluating expression:', error);
@@ -394,27 +383,40 @@ export class SafeExpressionEvaluator {
   
   /**
    * Substitute template expressions using the centralized template engine
-   * Only supports "{{{...}}}" format (triple braces with double quotes)
+   * Only supports "{{...}}" and {{...}} formats - filters out triple braces "{{{...}}}"
    * @param expression - Expression that may contain template expressions
+   * @param context - Template context for substitution (optional, uses instance context if not provided)
    * @returns Expression with template expressions substituted
    */
-  private substituteTemplateExpressions(expression: string): string {
+  private substituteTemplateExpressions(expression: string, context?: TemplateContext): string {
     try {
-      const result = resolveTemplateExpression(expression, this.templateContext);
-      if (result.success) {
-        // If the result is a string and different from input, it was processed
-        if (typeof result.value === 'string') {
-          return result.value;
-        }
-        // If it's not a string, convert it to a string representation for the expression
-        return JSON.stringify(result.value);
-      }
-      // If template resolution failed, return original expression
-      return expression;
+      // Use provided context or fall back to instance context
+      const templateContext = context || this.templateContext;
+      
+      // Filter out triple-bracket expressions for transformations
+      const filteredExpression = this.filterTripleBrackets(expression);
+      
+      // Use the existing template engine - it already handles quoted vs unquoted correctly
+      const result = resolveTemplateExpression(filteredExpression, templateContext);
+      
+      return result.success ? String(result.value) : filteredExpression;
     } catch (error) {
       console.warn('Error processing template expressions:', error);
       return expression;
     }
+  }
+  
+  /**
+   * Filter out triple-bracket expressions to support only double brackets in transformations
+   * @param expression - Expression that may contain template expressions
+   * @returns Expression with triple-bracket expressions left as literals
+   */
+  private filterTripleBrackets(expression: string): string {
+    // Replace quoted triple-bracket expressions with placeholders to prevent processing
+    return expression.replace(/"\{\{\{[^}]+\}\}\}"/g, (match) => {
+      // For quoted triple brackets, return them as literal strings
+      return match;
+    });
   }
   
   /**
@@ -521,6 +523,30 @@ export class SafeExpressionEvaluator {
    * @param data - Current data in the pipeline
    * @returns Transformed data
    */
+  /**
+   * Evaluate an argument expression that might contain templates
+   * @param expression - Argument expression
+   * @param data - Data context
+   * @returns Evaluated result
+   */
+  private evaluateArgumentExpression(expression: string, data: unknown): unknown {
+    // If it's a simple number, return it directly
+    if (/^\d+$/.test(expression.trim())) {
+      return parseInt(expression.trim(), 10);
+    }
+    
+    // Use the AST evaluator for complex expressions including templates
+    try {
+      const parser = new ExpressionParser();
+      const ast = parser.parseExpression(expression.trim());
+      const evaluator = new ASTEvaluator(this.operators, this.jsonPathEvaluator, this.templateContext);
+      return evaluator.evaluate(ast, data);
+    } catch (error) {
+      // Fallback to string value
+      return expression;
+    }
+  }
+
   private executePipelineStep(step: string, data: unknown): unknown {
     // Parse function name and arguments
     const match = step.match(/^([a-zA-Z0-9_]+)\s*\((.*)\)$/);
@@ -581,8 +607,15 @@ export class SafeExpressionEvaluator {
         
       case 'take':
       case 'skip':
+        // Evaluate the argument properly to handle templates, but only filter triple brackets in transformation context
+        const evaluatedArg = this.templateContext ? this.evaluateArgumentExpression(argsString, data) : parseInt(argsString, 10);
+        args = [data, Number(evaluatedArg)];
+        break;
+        
       case 'at':
-        args = [data, parseInt(argsString, 10)];
+        // For 'at', don't automatically convert to number to preserve null/undefined handling
+        const atArg = this.templateContext ? this.evaluateArgumentExpression(argsString, data) : parseInt(argsString, 10);
+        args = [data, atArg];
         break;
         
       case 'flatten':
@@ -717,8 +750,8 @@ export class SafeExpressionEvaluator {
    * @returns Result of the evaluation
    */
   private evaluateWithContext(expression: string, context: unknown): unknown {
-    // Substitute template expressions first
-    expression = this.substituteTemplateExpressions(expression);
+    // Don't substitute templates here - let the AST evaluator handle it per operand
+    expression = expression.trim();
     
     // Check if it's a template expression (e.g., {{func:uuid()}})
     if (this.isTemplateExpression(expression)) {
@@ -998,418 +1031,5 @@ export class SafeExpressionEvaluator {
     
     // Default JavaScript truthiness for other types
     return Boolean(value);
-  }
-}
-
-/**
- * ExpressionParser
- * Parses expressions into AST (Abstract Syntax Tree)
- */
-class ExpressionParser {
-  private precedence: Record<string, number> = {
-    '||': 1,
-    '&&': 2,
-    '==': 3,
-    '!=': 3,
-    '<': 4,
-    '<=': 4,
-    '>': 4,
-    '>=': 4,
-    '+': 5,
-    '-': 5,
-    '*': 6,
-    '/': 6,
-    '%': 6,
-    '!': 7
-  };
-  
-  /**
-   * Parse an expression string into an AST
-   * @param expression - Expression to parse
-   * @returns AST representing the expression
-   */
-  parseExpression(expression: string): Node {
-    const tokens = this.tokenize(expression);
-    const ast = this.parseTokens(tokens);
-    return ast;
-  }
-  
-  /**
-   * Tokenize an expression into parts
-   * @param expression - Expression to tokenize
-   * @returns Array of tokens
-   */
-  private tokenize(expression: string): { type: string; value: string }[] {
-    const tokens: { type: string; value: string }[] = [];
-    // Match JSONPath, operators, identifiers, strings, numbers, and parentheses
-    const regex = /(\$[.\w\[\]'":*]+)|(\|\||&&|==|!=|>=|<=|>|<|!|\+|-|\*|\/|%)|([a-zA-Z_][a-zA-Z0-9_]*)|('[^']*')|("[^"]*")|(\d+(?:\.\d+)?)|(\(|\))/g;
-    
-    let match;
-    while ((match = regex.exec(expression)) !== null) {
-      const [, jsonPath, operator, identifier, singleQuote, doubleQuote, number, paren] = match;
-      
-      if (jsonPath) {
-        tokens.push({ type: 'jsonPath', value: jsonPath });
-      } else if (operator) {
-        tokens.push({ type: 'operator', value: operator });
-      } else if (identifier) {
-        tokens.push({ type: 'identifier', value: identifier });
-      } else if (singleQuote) {
-        tokens.push({ type: 'string', value: singleQuote });
-      } else if (doubleQuote) {
-        tokens.push({ type: 'string', value: doubleQuote });
-      } else if (number) {
-        tokens.push({ type: 'number', value: number });
-      } else if (paren) {
-        tokens.push({ type: 'paren', value: paren });
-      }
-    }
-    
-    return tokens;
-  }
-  
-  /**
-   * Parse tokens into an AST
-   * @param tokens - Tokens to parse
-   * @returns AST representing the expression
-   */
-  private parseTokens(tokens: { type: string; value: string }[]): Node {
-    // Implement a recursive descent parser
-    const { node } = this.parseExpression_(tokens, 0);
-    return node;
-  }
-  
-  /**
-   * Helper method for recursive parsing
-   * @param tokens - Tokens to parse
-   * @param index - Current index in the token stream
-   * @returns Parsed node and next index
-   */
-  private parseExpression_(tokens: { type: string; value: string }[], index: number, minPrecedence: number = 0): { node: Node; nextIndex: number } {
-    // Parse the left-hand side
-    let { node: left, nextIndex } = this.parsePrimary(tokens, index);
-    
-    // Parse binary operators with precedence
-    while (nextIndex < tokens.length) {
-      const token = tokens[nextIndex];
-      
-      if (token.type !== 'operator' || token.value === '!') {
-        break;
-      }
-      
-      const precedence = this.precedence[token.value];
-      if (precedence === undefined || precedence < minPrecedence) {
-        break;
-      }
-      
-      // Consume the operator
-      nextIndex++;
-      
-      // Parse the right-hand side with higher precedence
-      const { node: right, nextIndex: newIndex } = this.parseExpression_(tokens, nextIndex, precedence + 1);
-      
-      // Create binary node
-      left = {
-        type: 'binary',
-        operator: token.value,
-        left,
-        right
-      };
-      
-      nextIndex = newIndex;
-    }
-    
-    return { node: left, nextIndex };
-  }
-  
-  /**
-   * Parse a primary expression (literal, identifier, or parenthesized expression)
-   * @param tokens - Tokens to parse
-   * @param index - Current index in the token stream
-   * @returns Parsed node and next index
-   */
-  private parsePrimary(tokens: { type: string; value: string }[], index: number): { node: Node; nextIndex: number } {
-    if (index >= tokens.length) {
-      throw new Error('Unexpected end of input');
-    }
-    
-    const token = tokens[index];
-    
-    // Handle unary operators
-    if (token.type === 'operator' && token.value === '!') {
-      const { node: operand, nextIndex } = this.parsePrimary(tokens, index + 1);
-      return {
-        node: {
-          type: 'unary',
-          operator: '!',
-          operand
-        },
-        nextIndex
-      };
-    }
-    
-    // Handle parentheses
-    if (token.type === 'paren' && token.value === '(') {
-      const { node, nextIndex } = this.parseExpression_(tokens, index + 1);
-      
-      if (nextIndex >= tokens.length || tokens[nextIndex].value !== ')') {
-        throw new Error('Missing closing parenthesis');
-      }
-      
-      return { node, nextIndex: nextIndex + 1 };
-    }
-    
-    // Handle literals and identifiers
-    switch (token.type) {
-      case 'jsonPath':
-        return {
-          node: {
-            type: 'jsonPath',
-            path: token.value
-          },
-          nextIndex: index + 1
-        };
-        
-      case 'number':
-        return {
-          node: {
-            type: 'literal',
-            value: parseFloat(token.value)
-          },
-          nextIndex: index + 1
-        };
-        
-      case 'string':
-        return {
-          node: {
-            type: 'literal',
-            value: token.value.slice(1, -1) // Remove quotes
-          },
-          nextIndex: index + 1
-        };
-        
-      case 'identifier':
-        // Handle boolean literals
-        if (token.value === 'true') {
-          return {
-            node: { type: 'literal', value: true },
-            nextIndex: index + 1
-          };
-        } else if (token.value === 'false') {
-          return {
-            node: { type: 'literal', value: false },
-            nextIndex: index + 1
-          };
-        } else if (token.value === 'null') {
-          return {
-            node: { type: 'literal', value: null },
-            nextIndex: index + 1
-          };
-        }
-        
-        // Check for function calls
-        if (index + 1 < tokens.length && tokens[index + 1].type === 'paren' && tokens[index + 1].value === '(') {
-          return this.parseFunctionCall(tokens, index);
-        }
-        
-        return {
-          node: {
-            type: 'identifier',
-            name: token.value
-          },
-          nextIndex: index + 1
-        };
-        
-      default:
-        throw new Error(`Unexpected token: ${token.value}`);
-    }
-  }
-  
-  /**
-   * Parse a function call expression
-   * @param tokens - Tokens to parse
-   * @param index - Current index in the token stream
-   * @returns Parsed function call node and next index
-   */
-  private parseFunctionCall(tokens: { type: string; value: string }[], index: number): { node: Node; nextIndex: number } {
-    const functionName = tokens[index].value;
-    let nextIndex = index + 2; // Skip function name and opening paren
-    const args: Node[] = [];
-    
-    // Parse arguments until closing parenthesis
-    if (tokens[nextIndex].type !== 'paren' || tokens[nextIndex].value !== ')') {
-      while (true) {
-        const { node: arg, nextIndex: newIndex } = this.parseExpression_(tokens, nextIndex);
-        args.push(arg);
-        nextIndex = newIndex;
-        
-        // Check for end of arguments
-        if (nextIndex >= tokens.length) {
-          throw new Error('Unexpected end of input in function arguments');
-        }
-        
-        if (tokens[nextIndex].type === 'paren' && tokens[nextIndex].value === ')') {
-          break;
-        }
-        
-        // Expect a comma separator
-        if (tokens[nextIndex].value !== ',') {
-          throw new Error(`Expected ',' in function arguments but got ${tokens[nextIndex].value}`);
-        }
-        
-        nextIndex++; // Skip comma
-      }
-    }
-    
-    // Skip closing parenthesis
-    nextIndex++;
-    
-    return {
-      node: {
-        type: 'functionCall',
-        name: functionName,
-        arguments: args
-      },
-      nextIndex
-    };
-  }
-}
-
-/**
- * ASTEvaluator
- * Evaluates AST nodes against data
- */
-class ASTEvaluator {
-  constructor(
-    private operators: Record<string, (...args: unknown[]) => unknown>,
-    private jsonPathEvaluator: SafeJSONPathEvaluator
-  ) {}
-  
-  /**
-   * Evaluate an AST against data
-   * @param ast - AST to evaluate
-   * @param data - Data to evaluate against
-   * @returns Result of the evaluation
-   */
-  evaluate(ast: Node, data: unknown): unknown {
-    return this.evaluateNode(ast, data);
-  }
-  
-  /**
-   * Evaluate a single AST node
-   * @param node - Node to evaluate
-   * @param data - Data to evaluate against
-   * @returns Result of the evaluation
-   */
-  private evaluateNode(node: Node, data: unknown): unknown {
-    switch (node.type) {
-      case 'binary':
-        return this.evaluateBinary(node as BinaryNode, data);
-        
-      case 'unary':
-        return this.evaluateUnary(node as UnaryNode, data);
-        
-      case 'literal':
-        return node.value;
-        
-      case 'identifier':
-        // Handle identifiers - might represent variables in the data context
-        return this.evaluateIdentifier(node, data);
-        
-      case 'jsonPath':
-        return this.jsonPathEvaluator.evaluate(node.path as string, data);
-        
-      case 'functionCall':
-        return this.evaluateFunctionCall(node, data);
-        
-      default:
-        throw new Error(`Unknown node type: ${node.type}`);
-    }
-  }
-  
-  /**
-   * Evaluate a binary operation
-   * @param node - Binary node
-   * @param data - Data context
-   * @returns Result of the binary operation
-   */
-  private evaluateBinary(node: BinaryNode, data: unknown): unknown {
-    // Short-circuit evaluation for logical operators
-    if (node.operator === '&&') {
-      const left = this.evaluateNode(node.left, data);
-      if (!left) return false;
-      return Boolean(this.evaluateNode(node.right, data));
-    }
-    
-    if (node.operator === '||') {
-      const left = this.evaluateNode(node.left, data);
-      if (left) return true;
-      return Boolean(this.evaluateNode(node.right, data));
-    }
-    
-    // Regular evaluation for other operators
-    const left = this.evaluateNode(node.left, data);
-    const right = this.evaluateNode(node.right, data);
-    
-    const operator = this.operators[node.operator];
-    if (!operator) {
-      throw new Error(`Unknown operator: ${node.operator}`);
-    }
-    
-    return operator(left, right);
-  }
-  
-  /**
-   * Evaluate a unary operation
-   * @param node - Unary node
-   * @param data - Data context
-   * @returns Result of the unary operation
-   */
-  private evaluateUnary(node: UnaryNode, data: unknown): unknown {
-    const operand = this.evaluateNode(node.operand, data);
-    
-    const operator = this.operators[node.operator];
-    if (!operator) {
-      throw new Error(`Unknown unary operator: ${node.operator}`);
-    }
-    
-    return operator(operand);
-  }
-  
-  /**
-   * Evaluate an identifier
-   * @param node - Identifier node
-   * @param data - Data context
-   * @returns Value of the identifier
-   */
-  private evaluateIdentifier(node: Node, data: unknown): unknown {
-    const name = node.name as string;
-    
-    // Check if this is a reference to a property in the data object
-    if (typeof data === 'object' && data !== null && name in (data as Record<string, unknown>)) {
-      return (data as Record<string, unknown>)[name];
-    }
-    
-    // Otherwise treat as undefined
-    return undefined;
-  }
-  
-  /**
-   * Evaluate a function call
-   * @param node - Function call node
-   * @param data - Data context
-   * @returns Result of the function call
-   */
-  private evaluateFunctionCall(node: Node, data: unknown): unknown {
-    const functionName = node.name as string;
-    const args = (node.arguments as Node[]).map(arg => this.evaluateNode(arg, data));
-    
-    // Check for supported functions
-    const func = this.operators[functionName];
-    if (typeof func !== 'function') {
-      throw new Error(`Unknown function: ${functionName}`);
-    }
-    
-    return func(...args);
   }
 }

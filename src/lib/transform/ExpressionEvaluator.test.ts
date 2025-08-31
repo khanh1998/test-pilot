@@ -59,7 +59,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
   describe('Template Expression Substitution - Only "{{{var}}}" Format', () => {
     describe('Parameter Templates', () => {
       it('should substitute parameter templates with "{{{param:name}}}" format', () => {
-        const expression = '$.data | where($.code == "{{{param:merchant_code}}}")';
+        const expression = '$.data | where($.code == {{param:merchant_code}})';
         const result = evaluator.evaluate(expression, testData);
         
         // Should find the merchant with code 'ABC123'
@@ -67,7 +67,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
       });
 
       it('should handle numeric parameters with type preservation', () => {
-        const expression = '$.data | where($.user_id == "{{{param:user_id}}}")';
+        const expression = '$.data | where($.user_id == {{param:user_id}})';
         const dataWithUserId = {
           data: [
             { user_id: 42, name: 'Alice' },
@@ -83,7 +83,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
         templateContext.parameters.is_active = true;
         evaluator.setTemplateContext(templateContext);
         
-        const expression = '$.data | where($.active == "{{{param:is_active}}}")';
+        const expression = '$.data | where($.active == {{param:is_active}})';
         const dataWithBoolean = {
           data: [
             { active: true, name: 'Active Item' },
@@ -98,7 +98,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
 
     describe('Response Templates', () => {
       it('should substitute response templates with "{{{res:stepId.path}}}" format', () => {
-        const expression = '$.data | where($.user_id == "{{{res:step1-0.$.user.id}}}")';
+        const expression = '$.data | where($.user_id == {{res:step1-0.$.user.id}})';
         const dataWithUserId = {
           data: [
             { user_id: 42, name: 'Alice' },
@@ -111,7 +111,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
       });
 
       it('should handle nested response data', () => {
-        const expression = '$.data | where($.name == "{{{res:step1-0.$.user.name}}}")';
+        const expression = '$.data | where($.name == {{res:step1-0.$.user.name}})';
         const dataWithName = {
           data: [
             { name: 'Alice', age: 30 },
@@ -126,7 +126,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
 
     describe('Environment Templates', () => {
       it('should substitute environment variable templates with "{{{env:var}}}" format', () => {
-        const expression = '$.data | where($.timeout == "{{{env:TIMEOUT}}}")';
+        const expression = '$.data | where($.timeout == {{env:TIMEOUT}})';
         const dataWithTimeout = {
           data: [
             { timeout: 5000, name: 'Fast' },
@@ -139,7 +139,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
       });
 
       it('should handle string environment variables', () => {
-        const expression = '$.data | where($.url == "{{{env:API_URL}}}")';
+        const expression = '$.data | where($.url == {{env:API_URL}})';
         const dataWithUrl = {
           data: [
             { url: 'https://api.example.com', name: 'Production' },
@@ -154,7 +154,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
 
     describe('Transform Templates', () => {
       it('should substitute transform templates with "{{{proc:stepId.$.alias.path}}}" format', () => {
-        const expression = '$.data | where($.user_id == "{{{proc:step1-0.$.user_info.id}}}")';
+        const expression = '$.data | where($.user_id == {{proc:step1-0.$.user_info.id}})';
         const dataWithUserId = {
           data: [
             { user_id: 42, name: 'Alice' },
@@ -169,14 +169,14 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
 
     describe('Complex Pipeline with Templates', () => {
       it('should handle complex pipeline expression with multiple templates', () => {
-        const expression = '$.data | where($.code == "{{{param:merchant_code}}}") | map($.terminals) | flatten() | where($.code == "{{{param:terminal_code}}}") | map($.id) | last()';
+        const expression = '$.data | where($.code == {{param:merchant_code}}) | map($.terminals) | flatten() | where($.code == {{param:terminal_code}}) | map($.id) | last()';
         
         const result = evaluator.evaluate(expression, testData);
         expect(result).toBe('terminal_1');
       });
 
       it('should handle mixed template types in pipeline', () => {
-        const expression = '$.data | where($.code == "{{{param:merchant_code}}}") | where($.user_id == "{{{res:step1-0.$.user.id}}}")';
+        const expression = '$.data | where($.code == {{param:merchant_code}}) | where($.user_id == {{res:step1-0.$.user.id}})';
         const dataWithMixed = {
           data: [
             { code: 'ABC123', user_id: 42, name: 'Valid' },
@@ -218,7 +218,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
 
     describe('Type Preservation', () => {
       it('should preserve string types correctly', () => {
-        const expression = '$.data | where($.status == "{{{param:status}}}")';
+        const expression = '$.data | where($.status == {{param:status}})';
         const dataWithStatus = {
           data: [
             { status: 'active', name: 'Active Item' },
@@ -231,7 +231,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
       });
 
       it('should preserve numeric types correctly', () => {
-        const expression = '$.data | where($.count > "{{{param:user_id}}}")';
+        const expression = '$.data | where($.count > {{param:user_id}})';
         const dataWithCount = {
           data: [
             { count: 50, name: 'High Count' },
@@ -248,7 +248,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
         templateContext.parameters.is_disabled = false;
         evaluator.setTemplateContext(templateContext);
         
-        const expression = '$.data | where($.active == "{{{param:is_active}}}")';
+        const expression = '$.data | where($.active == {{param:is_active}})';
         const dataWithBoolean = {
           data: [
             { active: true, name: 'Active Item' },
@@ -264,7 +264,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
         templateContext.parameters.null_value = null;
         evaluator.setTemplateContext(templateContext);
         
-        const expression = '$.data | where($.value == "{{{param:null_value}}}")';
+        const expression = '$.data | where($.value == {{param:null_value}})';
         const dataWithNull = {
           data: [
             { value: null, name: 'Null Item' },
@@ -280,7 +280,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
         templateContext.parameters.undefined_value = undefined;
         evaluator.setTemplateContext(templateContext);
         
-        const expression = '$.data | where($.value == "{{{param:undefined_value}}}")';
+        const expression = '$.data | where($.value == {{param:undefined_value}})';
         const dataWithUndefined = {
           data: [
             { value: undefined, name: 'Undefined Item' },
@@ -330,7 +330,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
         templateContext.parameters.expected_theme = 'dark';
         evaluator.setTemplateContext(templateContext);
         
-        const simpleExpression = '$.data | where($.config.theme == "{{{param:expected_theme}}}")';
+        const simpleExpression = '$.data | where($.config.theme == "{{param:expected_theme}}")';
         const result = evaluator.evaluate(simpleExpression, dataWithObjects);
         expect(result).toEqual([{ config: { theme: 'dark', lang: 'en' }, name: 'Dark Theme' }]);
       });
@@ -347,33 +347,33 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
 
         // Test string preservation in a where clause
         let testData: any = { data: [{ value: 'hello', name: 'match' }, { value: 'world', name: 'no match' }] };
-        let result = evaluator.evaluate('$.data | where($.value == "{{{param:string_val}}}")', testData);
+        let result = evaluator.evaluate('$.data | where($.value == "{{param:string_val}}")', testData);
         expect(result).toEqual([{ value: 'hello', name: 'match' }]);
 
         // Test number preservation in a where clause
         testData = { data: [{ count: 42, name: 'match' }, { count: 24, name: 'no match' }] };
-        result = evaluator.evaluate('$.data | where($.count == "{{{param:number_val}}}")', testData);
+        result = evaluator.evaluate('$.data | where($.count == {{param:number_val}})', testData);
         expect(result).toEqual([{ count: 42, name: 'match' }]);
 
         // Test boolean preservation in a where clause
         testData = { data: [{ active: true, name: 'match' }, { active: false, name: 'no match' }] };
-        result = evaluator.evaluate('$.data | where($.active == "{{{param:boolean_val}}}")', testData);
+        result = evaluator.evaluate('$.data | where($.active == {{param:boolean_val}})', testData);
         expect(result).toEqual([{ active: true, name: 'match' }]);
 
         // Test null preservation in a where clause
         testData = { data: [{ value: null, name: 'match' }, { value: 'not null', name: 'no match' }] };
-        result = evaluator.evaluate('$.data | where($.value == "{{{param:null_val}}}")', testData);
+        result = evaluator.evaluate('$.data | where($.value == {{param:null_val}})', testData);
         expect(result).toEqual([{ value: null, name: 'match' }]);
 
         // Test that we can access nested object properties through the template
         testData = { data: [{ key: 'value', name: 'match' }, { key: 'other', name: 'no match' }] };
-        result = evaluator.evaluate('$.data | where($.key == "{{{param:object_val}}}".key)', testData);
+        result = evaluator.evaluate('$.data | where($.key == {{param:object_val}}.key)', testData);
         // This might not work due to expression complexity - the template engine should resolve object_val
         // But the expression evaluator might not handle property access on resolved objects
         // Let's test this with a simpler approach
         templateContext.parameters.expected_key = 'value';
         evaluator.setTemplateContext(templateContext);
-        result = evaluator.evaluate('$.data | where($.key == "{{{param:expected_key}}}")', testData);
+        result = evaluator.evaluate('$.data | where($.key == {{param:expected_key}})', testData);
         expect(result).toEqual([{ key: 'value', name: 'match' }]);
       });
 
@@ -388,7 +388,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
         };
         evaluator.setTemplateContext(templateContext);
         
-        const expression = '$.data | where($.theme == "{{{res:step1-0.$.user.profile.settings.theme}}}")';
+        const expression = '$.data | where($.theme == {{res:step1-0.$.user.profile.settings.theme}})';
         const dataWithTheme = {
           data: [
             { theme: 'dark', name: 'Dark Theme' },
@@ -405,7 +405,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
         templateContext.parameters.tax_rate = 0.08;
         evaluator.setTemplateContext(templateContext);
         
-        const expression = '$.data | where($.price == "{{{param:price}}}")';
+        const expression = '$.data | where($.price == {{param:price}})';
         const dataWithFloats = {
           data: [
             { price: 19.99, name: 'Correct Price' },
@@ -422,7 +422,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
         templateContext.parameters.empty_string = '';
         evaluator.setTemplateContext(templateContext);
         
-        const expression = '$.data | where($.count == "{{{param:zero_number}}}")';
+        const expression = '$.data | where($.count == {{param:zero_number}})';
         const dataWithZero = {
           data: [
             { count: 0, name: 'Zero Count' },
@@ -438,7 +438,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
         templateContext.parameters.large_number = 9007199254740991; // Number.MAX_SAFE_INTEGER
         evaluator.setTemplateContext(templateContext);
         
-        const expression = '$.data | where($.id == "{{{param:large_number}}}")';
+        const expression = '$.data | where($.id == {{param:large_number}})';
         const dataWithLargeNumbers = {
           data: [
             { id: 9007199254740991, name: 'Large ID' },
@@ -459,7 +459,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
         evaluator.setTemplateContext(templateContext);
         
         // Test simpler case - compare first item's id
-        const expression = '$.data | where($.items[0].id == "{{{param:expected_first_id}}}")';
+        const expression = '$.data | where($.items[0].id == {{param:expected_first_id}})';
         const dataWithNestedArrays = {
           data: [
             { items: [{ id: 1, values: [10, 20] }, { id: 2, values: [30, 40] }], name: 'Matching' },
