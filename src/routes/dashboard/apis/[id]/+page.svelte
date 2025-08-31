@@ -1,5 +1,6 @@
 <script lang="ts">
   import ApiEndpoints from '$lib/components/apis/ApiEndpoints.svelte';
+  import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { getApiDetails, deleteApi as deleteApiCall } from '$lib/http_client/apis';
@@ -21,6 +22,9 @@
   let apiDetails: ApiDetails | null = null;
   let loading = false;
   let error: string | null = null;
+
+  // Confirm dialog state
+  let showConfirmDialog = false;
 
   // Fetch API details on component mount
   // This is done here to get the API name for the header and delete confirmation
@@ -52,25 +56,29 @@
   }
   
   async function deleteApi() {
-    if (
-      confirm(
-        `Are you sure you want to delete "${apiName}" and all of its endpoints? This action cannot be undone.`
-      )
-    ) {
-      try {
-        loading = true;
-        error = null;
+    // Show confirmation dialog
+    showConfirmDialog = true;
+  }
 
-        await deleteApiCall(apiId);
-        
-        // Navigate back to the APIs list
-        goto('/dashboard/apis');
-      } catch (err: unknown) {
-        error = err instanceof Error ? err.message : 'Failed to delete API';
-      } finally {
-        loading = false;
-      }
+  async function confirmDeleteApi() {
+    try {
+      loading = true;
+      error = null;
+
+      await deleteApiCall(apiId);
+      
+      // Navigate back to the APIs list
+      goto('/dashboard/apis');
+    } catch (err: unknown) {
+      error = err instanceof Error ? err.message : 'Failed to delete API';
+    } finally {
+      loading = false;
+      showConfirmDialog = false;
     }
+  }
+
+  function cancelDeleteApi() {
+    showConfirmDialog = false;
   }
 </script>
 
@@ -150,3 +158,15 @@
 
   <ApiEndpoints {apiId} />
 </div>
+
+<!-- Confirm Delete Dialog -->
+<ConfirmDialog
+  bind:isOpen={showConfirmDialog}
+  title="Delete API"
+  message={`Are you sure you want to delete "${apiName}" and all of its endpoints? This action cannot be undone.`}
+  confirmText="Delete"
+  cancelText="Cancel"
+  confirmVariant="danger"
+  on:confirm={confirmDeleteApi}
+  on:cancel={cancelDeleteApi}
+/>

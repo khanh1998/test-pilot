@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getEnvironments } from '$lib/http_client/environments';
+  import { getEnvironments, deleteEnvironment } from '$lib/http_client/environments';
   import EnvironmentCreator from './EnvironmentCreator.svelte';
   import EnvironmentCard from './EnvironmentCard.svelte';
   import type { Environment } from '$lib/types/environment';
@@ -9,6 +9,7 @@
   let loading = true;
   let error: string | null = null;
   let showCreator = false;
+  let isDeleting = false;
 
   async function loadEnvironments() {
     try {
@@ -49,10 +50,27 @@
     window.location.href = `/dashboard/environments/${environment.id}/edit`;
   }
 
-  function handleEnvironmentDelete(event: CustomEvent<{ environment: Environment }>) {
+  async function handleEnvironmentDelete(event: CustomEvent<{ environment: Environment }>) {
     const { environment } = event.detail;
-    // TODO: Implement delete functionality with API call
-    console.log('Delete environment:', environment.name);
+    
+    try {
+      isDeleting = true;
+      error = null;
+      
+      const success = await deleteEnvironment(environment.id);
+      
+      if (success) {
+        // Remove the environment from the local list
+        environments = environments.filter(env => env.id !== environment.id);
+      } else {
+        error = 'Failed to delete environment';
+      }
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to delete environment';
+      console.error('Error deleting environment:', err);
+    } finally {
+      isDeleting = false;
+    }
   }
 </script>
 

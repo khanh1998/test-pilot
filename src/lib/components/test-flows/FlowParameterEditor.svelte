@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
+  import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
   import type { FlowParameter } from './types';
   
   export let isOpen = false;
@@ -13,6 +14,10 @@
   let editingIndex: number | null = null;
   let isAddingNew = false;
   let initialized = false;
+
+  // Confirm dialog state
+  let showConfirmDialog = false;
+  let pendingDeleteIndex: number | null = null;
 
   // New parameter template
   let newParameter: FlowParameter = {
@@ -98,11 +103,24 @@
   }
   
   function removeParameter(index: number) {
-    const param = workingParameters[index];
-    if (confirm(`Remove parameter "${param.name}"?`)) {
-      workingParameters = workingParameters.filter((_, i) => i !== index);
-      dispatch('remove', param);
-    }
+    pendingDeleteIndex = index;
+    showConfirmDialog = true;
+  }
+
+  function confirmDeleteParameter() {
+    if (pendingDeleteIndex === null) return;
+    
+    const param = workingParameters[pendingDeleteIndex];
+    workingParameters = workingParameters.filter((_, i) => i !== pendingDeleteIndex);
+    dispatch('remove', param);
+    
+    pendingDeleteIndex = null;
+    showConfirmDialog = false;
+  }
+
+  function cancelDeleteParameter() {
+    pendingDeleteIndex = null;
+    showConfirmDialog = false;
   }
   
   function closeEditor() {
@@ -358,3 +376,15 @@
     </div>
   </div>
 </div>
+
+<!-- Confirm Delete Dialog -->
+<ConfirmDialog
+  bind:isOpen={showConfirmDialog}
+  title="Remove Parameter"
+  message={pendingDeleteIndex !== null && workingParameters[pendingDeleteIndex] ? `Remove parameter "${workingParameters[pendingDeleteIndex].name}"?` : ''}
+  confirmText="Remove"
+  cancelText="Cancel"
+  confirmVariant="danger"
+  on:confirm={confirmDeleteParameter}
+  on:cancel={cancelDeleteParameter}
+/>

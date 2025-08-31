@@ -1,8 +1,12 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
+  import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
   import type { Environment } from '$lib/types/environment';
   
   export let environment: Environment;
+
+  // Confirm dialog state
+  let showConfirmDialog = false;
 
   const dispatch = createEventDispatcher<{
     edit: { environment: Environment };
@@ -15,9 +19,16 @@
   }
 
   function handleDelete() {
-    if (confirm(`Are you sure you want to delete "${environment.name}"?`)) {
-      dispatch('delete', { environment });
-    }
+    showConfirmDialog = true;
+  }
+
+  function confirmDelete() {
+    dispatch('delete', { environment });
+    showConfirmDialog = false;
+  }
+
+  function cancelDelete() {
+    showConfirmDialog = false;
   }
 
   function handleView() {
@@ -92,5 +103,17 @@
     </span>
   </div>
 </div>
+
+<!-- Confirm Delete Dialog -->
+<ConfirmDialog
+  bind:isOpen={showConfirmDialog}
+  title="Delete Environment"
+  message={`Are you sure you want to delete "${environment.name}"?`}
+  confirmText="Delete"
+  cancelText="Cancel"
+  confirmVariant="danger"
+  on:confirm={confirmDelete}
+  on:cancel={cancelDelete}
+/>
 
 

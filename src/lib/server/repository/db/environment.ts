@@ -114,7 +114,8 @@ export async function deleteEnvironmentRecord(
     .where(and(
       eq(environments.id, id),
       eq(environments.userId, userId)
-    ));
+    ))
+    .returning({ id: environments.id });
 
   return result.length > 0;
 }

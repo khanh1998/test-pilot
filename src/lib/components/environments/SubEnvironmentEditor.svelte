@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
+  import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
   import type { SubEnvironment, VariableDefinition } from '$lib/types/environment';
 
   export let subEnvironments: Record<string, SubEnvironment> = {};
@@ -12,6 +13,10 @@
 
   let newSubEnvName = '';
   let showAddForm = false;
+
+  // Confirm dialog state
+  let showConfirmDialog = false;
+  let pendingDeleteSubEnv: string | null = null;
 
   const commonSubEnvNames = ['dev', 'sit', 'uat', 'staging', 'prod'];
 
@@ -41,11 +46,24 @@
   }
 
   function removeSubEnvironment(name: string) {
-    if (confirm(`Are you sure you want to remove sub-environment "${name}"?`)) {
-      const { [name]: removed, ...rest } = subEnvironments;
-      subEnvironments = rest;
-      dispatch('change', { subEnvironments });
-    }
+    pendingDeleteSubEnv = name;
+    showConfirmDialog = true;
+  }
+
+  function confirmDeleteSubEnv() {
+    if (!pendingDeleteSubEnv) return;
+    
+    const { [pendingDeleteSubEnv]: removed, ...rest } = subEnvironments;
+    subEnvironments = rest;
+    dispatch('change', { subEnvironments });
+    
+    pendingDeleteSubEnv = null;
+    showConfirmDialog = false;
+  }
+
+  function cancelDeleteSubEnv() {
+    pendingDeleteSubEnv = null;
+    showConfirmDialog = false;
   }
 
   function updateSubEnvironments() {
@@ -256,4 +274,16 @@
     </div>
   {/if}
 </div>
+
+<!-- Confirm Delete Dialog -->
+<ConfirmDialog
+  bind:isOpen={showConfirmDialog}
+  title="Remove Sub-environment"
+  message={pendingDeleteSubEnv ? `Are you sure you want to remove sub-environment "${pendingDeleteSubEnv}"?` : ''}
+  confirmText="Remove"
+  cancelText="Cancel"
+  confirmVariant="danger"
+  on:confirm={confirmDeleteSubEnv}
+  on:cancel={cancelDeleteSubEnv}
+/>
 

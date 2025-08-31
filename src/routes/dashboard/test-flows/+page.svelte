@@ -3,6 +3,7 @@
   import { goto } from '$app/navigation';
   import * as testFlowClient from '$lib/http_client/test-flow';
   import * as apiClient from '$lib/http_client/apis';
+  import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 
   let testFlows: {
     id: number;
@@ -36,6 +37,10 @@
   
   // Available APIs
   let availableApis: { id: number; name: string; host: string; selected?: boolean }[] = [];
+
+  // Confirm dialog state
+  let showConfirmDialog = false;
+  let pendingDeleteFlow: { id: number; name: string } | null = null;
 
   onMount(async () => {
     await fetchTestFlows();
@@ -191,19 +196,19 @@
   }
 
   async function deleteTestFlow(id: number, name: string) {
-    if (
-      !confirm(
-        `Are you sure you want to delete the test flow "${name}"? This action cannot be undone.`
-      )
-    ) {
-      return;
-    }
+    // Show confirmation dialog
+    pendingDeleteFlow = { id, name };
+    showConfirmDialog = true;
+  }
+
+  async function confirmDeleteFlow() {
+    if (!pendingDeleteFlow) return;
 
     try {
       loading = true;
       error = null;
 
-      const result = await testFlowClient.deleteTestFlow(id);
+      const result = await testFlowClient.deleteTestFlow(pendingDeleteFlow.id);
       
       if (!result) {
         throw new Error('Failed to delete test flow');
@@ -216,7 +221,14 @@
       error = err instanceof Error ? err.message : 'An unknown error occurred';
     } finally {
       loading = false;
+      pendingDeleteFlow = null;
+      showConfirmDialog = false;
     }
+  }
+
+  function cancelDeleteFlow() {
+    pendingDeleteFlow = null;
+    showConfirmDialog = false;
   }
 </script>
 
@@ -496,6 +508,18 @@
     </div>
   </div>
 {/if}
+
+<!-- Confirm Delete Dialog -->
+<ConfirmDialog
+  bind:isOpen={showConfirmDialog}
+  title="Delete Test Flow"
+  message={pendingDeleteFlow ? `Are you sure you want to delete the test flow "${pendingDeleteFlow.name}"? This action cannot be undone.` : ''}
+  confirmText="Delete"
+  cancelText="Cancel"
+  confirmVariant="danger"
+  on:confirm={confirmDeleteFlow}
+  on:cancel={cancelDeleteFlow}
+/>
 
 
 

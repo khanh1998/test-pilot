@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { getApiList, deleteApi as deleteApiStore } from '$lib/http_client/apis';
+  import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
   import type { Api } from '$lib/types/api';
 
   let apis : Api[] = []; // Initialize with current store value
@@ -10,6 +11,10 @@
   let isDeleting = false;
   let deleteApiId: number | null = null;
   let deleteError: string | null = null;
+  
+  // Confirm dialog state
+  let showConfirmDialog = false;
+  let pendingDeleteApiId: number | null = null;
 
   async function loadApis() {
     try {
@@ -33,27 +38,36 @@
     // Prevent the click event from bubbling up to the parent container
     event.stopPropagation();
 
-    if (
-      confirm(
-        'Are you sure you want to delete this API and all of its endpoints? This action cannot be undone.'
-      )
-    ) {
-      try {
-        isDeleting = true;
-        deleteApiId = apiId;
-        deleteError = null;
+    // Show confirmation dialog
+    pendingDeleteApiId = apiId;
+    showConfirmDialog = true;
+  }
 
-        await deleteApiStore(apiId); // Use the deleteApi from the store
+  async function confirmDelete() {
+    if (pendingDeleteApiId === null) return;
 
-        // Reload the API list
-        await loadApis();
-      } catch (err) {
-        deleteError = err instanceof Error ? err.message : 'Failed to delete API';
-      } finally {
-        isDeleting = false;
-        deleteApiId = null;
-      }
+    try {
+      isDeleting = true;
+      deleteApiId = pendingDeleteApiId;
+      deleteError = null;
+
+      await deleteApiStore(pendingDeleteApiId); // Use the deleteApi from the store
+
+      // Reload the API list
+      await loadApis();
+    } catch (err) {
+      deleteError = err instanceof Error ? err.message : 'Failed to delete API';
+    } finally {
+      isDeleting = false;
+      deleteApiId = null;
+      pendingDeleteApiId = null;
+      showConfirmDialog = false;
     }
+  }
+
+  function cancelDelete() {
+    pendingDeleteApiId = null;
+    showConfirmDialog = false;
   }
 </script>
 
@@ -176,3 +190,15 @@
     </div>
   {/if}
 </div>
+
+<!-- Confirm Delete Dialog -->
+<ConfirmDialog
+  bind:isOpen={showConfirmDialog}
+  title="Delete API"
+  message="Are you sure you want to delete this API and all of its endpoints? This action cannot be undone."
+  confirmText="Delete"
+  cancelText="Cancel"
+  confirmVariant="danger"
+  on:confirm={confirmDelete}
+  on:cancel={cancelDelete}
+/>

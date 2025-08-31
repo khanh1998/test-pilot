@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
+  import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
   import type { VariableDefinition } from '$lib/types/environment';
 
   export let variableDefinitions: Record<string, VariableDefinition> = {};
@@ -11,6 +12,10 @@
 
   let newVariableName = '';
   let showAddForm = false;
+
+  // Confirm dialog state
+  let showConfirmDialog = false;
+  let pendingDeleteVariable: string | null = null;
 
   function addVariable() {
     if (!newVariableName.trim()) return;
@@ -38,11 +43,24 @@
   }
 
   function removeVariable(name: string) {
-    if (confirm(`Are you sure you want to remove variable "${name}"?`)) {
-      const { [name]: removed, ...rest } = variableDefinitions;
-      variableDefinitions = rest;
-      dispatch('change', { variableDefinitions });
-    }
+    pendingDeleteVariable = name;
+    showConfirmDialog = true;
+  }
+
+  function confirmDeleteVariable() {
+    if (!pendingDeleteVariable) return;
+    
+    const { [pendingDeleteVariable]: removed, ...rest } = variableDefinitions;
+    variableDefinitions = rest;
+    dispatch('change', { variableDefinitions });
+    
+    pendingDeleteVariable = null;
+    showConfirmDialog = false;
+  }
+
+  function cancelDeleteVariable() {
+    pendingDeleteVariable = null;
+    showConfirmDialog = false;
   }
 
   function updateVariableDefinitions() {
@@ -224,5 +242,17 @@
     </div>
   {/if}
 </div>
+
+<!-- Confirm Delete Dialog -->
+<ConfirmDialog
+  bind:isOpen={showConfirmDialog}
+  title="Remove Variable"
+  message={pendingDeleteVariable ? `Are you sure you want to remove variable "${pendingDeleteVariable}"?` : ''}
+  confirmText="Remove"
+  cancelText="Cancel"
+  confirmVariant="danger"
+  on:confirm={confirmDeleteVariable}
+  on:cancel={cancelDeleteVariable}
+/>
 
 
