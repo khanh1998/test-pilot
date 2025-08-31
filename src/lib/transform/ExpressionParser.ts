@@ -60,15 +60,17 @@ export class ExpressionParser {
    */
   private tokenize(expression: string): { type: string; value: string }[] {
     const tokens: { type: string; value: string }[] = [];
-    // Match quoted templates, unquoted templates, JSONPath, operators, identifiers, strings, numbers, and parentheses
-    const regex = /("\{\{[^}]+\}\}")|(\{\{[^}]+\}\})|(\$[.\w\[\]'":*]+)|(\|\||&&|==|!=|>=|<=|>|<|!|\+|-|\*|\/|%)|([a-zA-Z_][a-zA-Z0-9_]*)|('[^']*')|("[^"]*")|(\d+(?:\.\d+)?)|(\(|\))/g;
+    // Match quoted templates (double and single), unquoted templates, JSONPath, operators, identifiers, strings, numbers, and parentheses
+    const regex = /("\{\{[^}]+\}\}")|('\{\{[^}]+\}\}')|(\{\{[^}]+\}\})|(\$[.\w\[\]'":*]+)|(\|\||&&|==|!=|>=|<=|>|<|!|\+|-|\*|\/|%)|([a-zA-Z_][a-zA-Z0-9_]*)|('[^']*')|("[^"]*")|(\d+(?:\.\d+)?)|(\(|\))/g;
     
     let match;
     while ((match = regex.exec(expression)) !== null) {
-      const [, quotedTemplate, template, jsonPath, operator, identifier, singleQuote, doubleQuote, number, paren] = match;
+      const [, quotedTemplate, singleQuotedTemplate, template, jsonPath, operator, identifier, singleQuote, doubleQuote, number, paren] = match;
       
       if (quotedTemplate) {
         tokens.push({ type: 'quotedTemplate', value: quotedTemplate });
+      } else if (singleQuotedTemplate) {
+        tokens.push({ type: 'singleQuotedTemplate', value: singleQuotedTemplate });
       } else if (template) {
         tokens.push({ type: 'template', value: template });
       } else if (jsonPath) {
@@ -188,6 +190,15 @@ export class ExpressionParser {
         return {
           node: {
             type: 'quotedTemplate',
+            expression: token.value
+          },
+          nextIndex: index + 1
+        };
+        
+      case 'singleQuotedTemplate':
+        return {
+          node: {
+            type: 'singleQuotedTemplate',
             expression: token.value
           },
           nextIndex: index + 1
@@ -357,6 +368,9 @@ export class ASTEvaluator {
       case 'quotedTemplate':
         return this.evaluateTemplate(node, data);
         
+      case 'singleQuotedTemplate':
+        return this.evaluateTemplate(node, data);
+        
       case 'template':
         return this.evaluateTemplate(node, data);
         
@@ -468,14 +482,20 @@ export class ASTEvaluator {
    * @returns Result of the template evaluation
    */
   private evaluateTemplate(node: Node, data: unknown): unknown {
-    const templateExpression = node.expression as string;
-    
-    // Filter out all triple brackets for transformation context (both quoted and unquoted)
-    // This will replace {{{...}}} with null but leave {{...}} alone
-    const filteredExpression = templateExpression.replace(/\{\{\{[^}]+\}\}\}/g, 'null');
-    
+    var templateExpression = node.expression as string;
+
+    // Handle single quote template expressions: '{{expr}}' 
+    // Convert to double quote format since template engine supports "{{expr}}" but not '{{expr}}'
+    if (
+      node.type === 'singleQuotedTemplate' ||
+      (templateExpression.startsWith("'{{") && templateExpression.endsWith("}}'"))
+    ) {
+      // Convert single quotes to double quotes: '{{expr}}' -> "{{expr}}"
+      templateExpression = '"' + templateExpression.slice(1, -1) + '"';
+    }
+
     // Use the template engine to resolve the expression
-    const result = resolveTemplateExpression(filteredExpression, this.templateContext);
+    const result = resolveTemplateExpression(templateExpression, this.templateContext);
     
     return result.success ? result.value : templateExpression;
   }

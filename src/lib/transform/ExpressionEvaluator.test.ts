@@ -56,10 +56,18 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
     evaluator.setTemplateContext(templateContext);
   });
 
-  describe('Template Expression Substitution - Only "{{{var}}}" Format', () => {
+  describe('Template Expression - supporting {{var}} or "{{var}}" Format', () => {
     describe('Parameter Templates', () => {
-      it('should substitute parameter templates with "{{{param:name}}}" format', () => {
+      it('should substitute parameter templates with {{param:name}} format', () => {
         const expression = '$.data | where($.code == {{param:merchant_code}})';
+        const result = evaluator.evaluate(expression, testData);
+        
+        // Should find the merchant with code 'ABC123'
+        expect(result).toEqual([testData.data[0]]);
+      });
+
+      it('should substitute parameter templates with \'{{param:name}}\' format', () => {
+        const expression = '$.data | where($.code == \'{{param:merchant_code}}\')';
         const result = evaluator.evaluate(expression, testData);
         
         // Should find the merchant with code 'ABC123'
@@ -97,7 +105,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
     });
 
     describe('Response Templates', () => {
-      it('should substitute response templates with "{{{res:stepId.path}}}" format', () => {
+      it('should substitute response templates with {{res:stepId.path}} format', () => {
         const expression = '$.data | where($.user_id == {{res:step1-0.$.user.id}})';
         const dataWithUserId = {
           data: [
@@ -125,7 +133,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
     });
 
     describe('Environment Templates', () => {
-      it('should substitute environment variable templates with "{{{env:var}}}" format', () => {
+      it('should substitute environment variable templates with {{env:var}} format', () => {
         const expression = '$.data | where($.timeout == {{env:TIMEOUT}})';
         const dataWithTimeout = {
           data: [
@@ -153,7 +161,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
     });
 
     describe('Transform Templates', () => {
-      it('should substitute transform templates with "{{{proc:stepId.$.alias.path}}}" format', () => {
+      it('should substitute transform templates with {{proc:stepId.$.alias.path}} format', () => {
         const expression = '$.data | where($.user_id == {{proc:step1-0.$.user_info.id}})';
         const dataWithUserId = {
           data: [
@@ -472,6 +480,107 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
           items: [{ id: 1, values: [10, 20] }, { id: 2, values: [30, 40] }], 
           name: 'Matching' 
         }]);
+      });
+    });
+
+    describe('Single Quote to Double Quote Conversion', () => {
+      it('should convert single quoted templates to double quoted and return strings', () => {
+        // Single quoted templates should behave the same as double quoted templates (return strings)
+        const expression = '$.data | where($.code == \'{{param:merchant_code}}\')';
+        const result = evaluator.evaluate(expression, testData);
+        
+        // Should find the merchant with code 'ABC123'
+        expect(result).toEqual([testData.data[0]]);
+      });
+
+      it('should handle numeric parameters as strings when single quoted', () => {
+        templateContext.parameters.user_id_string = '42'; // String parameter that looks like a number
+        evaluator.setTemplateContext(templateContext);
+        
+        const expression = '$.data | where($.user_id == \'{{param:user_id_string}}\')';
+        const dataWithUserId = {
+          data: [
+            { user_id: '42', name: 'Alice' }, // String value in data
+            { user_id: 42, name: 'Bob' }      // Numeric value in data
+          ]
+        };
+        
+        const result = evaluator.evaluate(expression, dataWithUserId);
+        expect(result).toEqual([{ user_id: '42', name: 'Alice' }]);
+      });
+
+      it('should handle boolean parameters as strings when single quoted', () => {
+        templateContext.parameters.is_active_string = 'true'; // String parameter
+        evaluator.setTemplateContext(templateContext);
+        
+        const expression = '$.data | where($.active == \'{{param:is_active_string}}\')';
+        const dataWithBoolean = {
+          data: [
+            { active: 'true', name: 'Active Item' },  // String value in data
+            { active: true, name: 'Boolean Item' }    // Boolean value in data
+          ]
+        };
+        
+        const result = evaluator.evaluate(expression, dataWithBoolean);
+        expect(result).toEqual([{ active: 'true', name: 'Active Item' }]);
+      });
+
+      it('should demonstrate difference between quoted and unquoted templates', () => {
+        templateContext.parameters.test_number = 42;
+        evaluator.setTemplateContext(templateContext);
+        
+        // Test with numeric parameter
+        const dataWithNumber = {
+          data: [
+            { value: 42, type: 'number' },     // Numeric value
+            { value: '42', type: 'string' }    // String value
+          ]
+        };
+        
+        // Unquoted template should match numeric value (type preserved)
+        const unquotedResult = evaluator.evaluate('$.data | where($.value == {{param:test_number}})', dataWithNumber);
+        expect(unquotedResult).toEqual([{ value: 42, type: 'number' }]);
+        
+        // Single quoted template should convert to string and match string value
+        const singleQuotedResult = evaluator.evaluate('$.data | where($.value == \'{{param:test_number}}\')    ', dataWithNumber);
+        expect(singleQuotedResult).toEqual([{ value: '42', type: 'string' }]);
+        
+        // Double quoted template should also convert to string and match string value
+        const doubleQuotedResult = evaluator.evaluate('$.data | where($.value == "{{param:test_number}}")', dataWithNumber);
+        expect(doubleQuotedResult).toEqual([{ value: '42', type: 'string' }]);
+      });
+
+      it('should demonstrate equivalence between single and double quoted templates', () => {
+        const singleQuotedExpression = '$.data | where($.code == \'{{param:merchant_code}}\')';
+        const doubleQuotedExpression = '$.data | where($.code == "{{param:merchant_code}}")';
+        
+        const singleResult = evaluator.evaluate(singleQuotedExpression, testData);
+        const doubleResult = evaluator.evaluate(doubleQuotedExpression, testData);
+        
+        // Both should return the same result since both quoted forms return strings
+        expect(singleResult).toEqual(doubleResult);
+        expect(singleResult).toEqual([testData.data[0]]);
+      });
+
+      it('should handle complex nested expressions with single quotes', () => {
+        const expression = '$.data | where($.code == \'{{param:merchant_code}}\') | map($.terminals) | flatten() | where($.code == \'{{param:terminal_code}}\') | map($.id)';
+        
+        const result = evaluator.evaluate(expression, testData);
+        expect(result).toEqual(['terminal_1']);
+      });
+
+      it('should handle single quoted templates in multiple contexts', () => {
+        const expression = '$.data | where($.code == \'{{param:merchant_code}}\' && $.status == \'{{param:status}}\')';
+        const dataWithStatus = {
+          data: [
+            { code: 'ABC123', status: 'active', name: 'Match' },
+            { code: 'ABC123', status: 'inactive', name: 'No match - wrong status' },
+            { code: 'XYZ789', status: 'active', name: 'No match - wrong code' }
+          ]
+        };
+        
+        const result = evaluator.evaluate(expression, dataWithStatus);
+        expect(result).toEqual([{ code: 'ABC123', status: 'active', name: 'Match' }]);
       });
     });
   });
