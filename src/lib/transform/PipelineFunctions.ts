@@ -410,16 +410,23 @@ export function createPipelineFunctions(
       if (!Array.isArray(data)) return [];
       
       if (typeof transformer === 'string') {
-        // Simple mapping like map(item => item.name)
+        // Simple mapping like map($.name) or complex expression like map($.init_credit - $.used_credit)
         return data.map(item => {
           try {
-            return evaluateWithContext(transformer, item);
+            // Treat the transformer as a potential pipeline expression
+            if (transformer.includes('|')) {
+              // Use the main expression evaluator for pipeline expressions
+              return evaluateExpression(transformer, item);
+            } else {
+              // Use the template context evaluator for simple expressions
+              return evaluateWithContext(transformer, item);
+            }
           } catch {
             return null;
           }
         });
       } else if (typeof transformer === 'object' && transformer !== null) {
-        // Object mapping like map(name: item.name, age: item.age)
+        // Object mapping like map(name: $.name, age: $.age) or map(balance: $.balance | div(100))
         const transformMap = transformer as Record<string, unknown>;
         return data.map(item => {
           const result: Record<string, unknown> = {};
@@ -427,12 +434,32 @@ export function createPipelineFunctions(
           for (const [key, expr] of Object.entries(transformMap)) {
             try {
               if (typeof expr === 'string') {
-                result[key] = evaluateWithContext(expr, item);
+                // Only support the new clean syntax - no quoted JSONPath
+                if (expr.includes('|')) {
+                  // Pipeline expressions like "$.balance | div(100)"
+                  result[key] = evaluateExpression(expr, item);
+                } else if (expr.startsWith('$.')) {
+                  // Unquoted JSONPath expressions like "$.id" (new syntax only)
+                  result[key] = evaluateWithContext(expr, item);
+                } else if (expr.includes('{{') && expr.includes('}}')) {
+                  // Template expressions like "{{param:username}}"
+                  result[key] = evaluateWithContext(expr, item);
+                } else if ((expr.includes('-') || expr.includes('+') || expr.includes('*') || 
+                           expr.includes('/') || expr.includes('%')) && 
+                          (expr.includes('$.') || expr.includes('{{'))) {
+                  // Arithmetic expressions with variables like "$.init_credit - $.used_credit"
+                  result[key] = evaluateWithContext(expr, item);
+                } else {
+                  // Literal string values like "active", numbers, booleans
+                  result[key] = expr;
+                }
               } else {
+                // Non-string values (numbers, booleans, etc.) are used as-is
                 result[key] = expr;
               }
-            } catch {
-              result[key] = null;
+            } catch (error) {
+              // If evaluation fails, use the original value as-is (for literal strings)
+              result[key] = expr;
             }
           }
           

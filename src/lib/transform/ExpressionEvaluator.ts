@@ -366,26 +366,74 @@ export class SafeExpressionEvaluator {
   }
   
   /**
-   * Parse key-value arguments like "by: 'name', desc: true"
+   * Parse key-value arguments like "by: 'name', desc: true" or "id: $.id, balance: $.balance | div(100)"
    * @param argsString - Arguments string
    * @returns Object with key-value pairs
    */
   private parseKeyValueArguments(argsString: string): Record<string, unknown> {
     const result: Record<string, unknown> = {};
     
-    // Simple parsing - not handling nested structures
-    const entries = argsString.split(',').map(entry => entry.trim());
+    // Enhanced parsing to handle pipeline expressions in values
+    const entries = this.splitKeyValuePairs(argsString);
     
     for (const entry of entries) {
       const colonIndex = entry.indexOf(':');
       if (colonIndex > 0) {
         const key = entry.substring(0, colonIndex).trim();
-        const value = this.parseArgumentValue(entry.substring(colonIndex + 1).trim());
-        result[key] = value;
+        const valueString = entry.substring(colonIndex + 1).trim();
+        
+        // For map function, treat all string values as potential expressions (like add function)
+        // Let the map function itself decide how to evaluate them
+        result[key] = this.parseArgumentValue(valueString);
       }
     }
     
     return result;
+  }
+
+  /**
+   * Split key-value pairs while respecting pipeline expressions
+   * @param argsString - Arguments string
+   * @returns Array of key-value pair strings
+   */
+  private splitKeyValuePairs(argsString: string): string[] {
+    const pairs: string[] = [];
+    let current = '';
+    let parenthesesLevel = 0;
+    let insideQuotes = false;
+    let quoteChar = '';
+    
+    for (let i = 0; i < argsString.length; i++) {
+      const char = argsString[i];
+      
+      if (!insideQuotes && (char === '"' || char === "'")) {
+        insideQuotes = true;
+        quoteChar = char;
+        current += char;
+      } else if (insideQuotes && char === quoteChar) {
+        insideQuotes = false;
+        quoteChar = '';
+        current += char;
+      } else if (!insideQuotes && char === '(') {
+        parenthesesLevel++;
+        current += char;
+      } else if (!insideQuotes && char === ')') {
+        parenthesesLevel--;
+        current += char;
+      } else if (!insideQuotes && char === ',' && parenthesesLevel === 0) {
+        // Only split on comma when not inside quotes or parentheses
+        pairs.push(current.trim());
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    
+    if (current.trim()) {
+      pairs.push(current.trim());
+    }
+    
+    return pairs;
   }
   
   /**
@@ -409,12 +457,37 @@ export class SafeExpressionEvaluator {
   }
   
   /**
-   * Parse a single argument value, handling strings, numbers, booleans, arrays, and objects
+   * Parse a single argument value, handling strings, numbers, booleans, arrays, objects, and JSONPath
    * @param valueString - Value string
    * @returns Parsed value
    */
   private parseArgumentValue(valueString: string): unknown {
     valueString = valueString.trim();
+    
+    // Unquoted JSONPath expression (like $.id, $.balance) - keep as string for evaluation
+    if (valueString.startsWith('$.')) {
+      return valueString;
+    }
+    
+    // Pipeline expression (like $.balance | div(100)) - keep as string for evaluation
+    if (this.isPipelineExpression(valueString)) {
+      return valueString;
+    }
+    
+    // Template expression (like {{param:username}}) - keep as string for evaluation  
+    if (valueString.includes('{{') && valueString.includes('}}')) {
+      return valueString;
+    }
+    
+    // Arithmetic expressions - keep as string for evaluation
+    if (valueString.includes('-') || valueString.includes('+') || 
+        valueString.includes('*') || valueString.includes('/') || 
+        valueString.includes('%')) {
+      // Only treat as arithmetic if it contains JSONPath or template expressions
+      if (valueString.includes('$.') || valueString.includes('{{')) {
+        return valueString;
+      }
+    }
     
     // String literal
     if ((valueString.startsWith("'") && valueString.endsWith("'")) || 
@@ -453,14 +526,6 @@ export class SafeExpressionEvaluator {
     // Number
     if (/^-?\d+(\.\d+)?$/.test(valueString)) {
       return parseFloat(valueString);
-    }
-    
-    // Check if this contains a pipeline operation (template + pipeline)
-    // This handles cases like "{{res:step1-0.$.tax_rate}} | add(1)"
-    if (valueString.includes('{{') && valueString.includes('|')) {
-      // This is a pipeline expression that needs to be evaluated with the full context
-      // Return it as-is so the arithmetic function can evaluate it properly
-      return valueString;
     }
     
     // Default to string
