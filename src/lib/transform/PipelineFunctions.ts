@@ -499,9 +499,8 @@ export function createPipelineFunctions(
     
     'add': (data: unknown, expr: unknown): number | undefined => {
       // Only support math operations between numbers
-      const currentValue = Number(data);
-      if (isNaN(currentValue)) {
-        console.warn('add(): First operand is not a valid number:', data);
+      if (typeof data !== 'number') {
+        console.warn('add(): First operand is not a number:', data);
         return undefined;
       }
       
@@ -521,20 +520,18 @@ export function createPipelineFunctions(
         }
       }
       
-      const numAddValue = Number(addValue);
-      if (isNaN(numAddValue)) {
-        console.warn('add(): Second operand is not a valid number:', expr);
+      if (typeof addValue !== 'number') {
+        console.warn('add(): Second operand is not a number:', expr);
         return undefined;
       }
       
-      return currentValue + numAddValue;
+      return data + addValue;
     },
     
     'sub': (data: unknown, expr: unknown): number | undefined => {
       // Only support math operations between numbers
-      const currentValue = Number(data);
-      if (isNaN(currentValue)) {
-        console.warn('sub(): First operand is not a valid number:', data);
+      if (typeof data !== 'number') {
+        console.warn('sub(): First operand is not a number:', data);
         return undefined;
       }
       
@@ -554,20 +551,18 @@ export function createPipelineFunctions(
         }
       }
       
-      const numSubtractValue = Number(subtractValue);
-      if (isNaN(numSubtractValue)) {
-        console.warn('sub(): Second operand is not a valid number:', expr);
+      if (typeof subtractValue !== 'number') {
+        console.warn('sub(): Second operand is not a number:', expr);
         return undefined;
       }
       
-      return currentValue - numSubtractValue;
+      return data - subtractValue;
     },
     
     'mul': (data: unknown, expr: unknown): number | undefined => {
       // Only support math operations between numbers
-      const currentValue = Number(data);
-      if (isNaN(currentValue)) {
-        console.warn('mul(): First operand is not a valid number:', data);
+      if (typeof data !== 'number') {
+        console.warn('mul(): First operand is not a number:', data);
         return undefined;
       }
       
@@ -587,20 +582,18 @@ export function createPipelineFunctions(
         }
       }
       
-      const numMultiplyValue = Number(multiplyValue);
-      if (isNaN(numMultiplyValue)) {
-        console.warn('mul(): Second operand is not a valid number:', expr);
+      if (typeof multiplyValue !== 'number') {
+        console.warn('mul(): Second operand is not a number:', expr);
         return undefined;
       }
       
-      return currentValue * numMultiplyValue;
+      return data * multiplyValue;
     },
     
     'div': (data: unknown, expr: unknown): number | undefined => {
       // Only support math operations between numbers
-      const currentValue = Number(data);
-      if (isNaN(currentValue)) {
-        console.warn('div(): First operand is not a valid number:', data);
+      if (typeof data !== 'number') {
+        console.warn('div(): First operand is not a number:', data);
         return undefined;
       }
       
@@ -620,24 +613,22 @@ export function createPipelineFunctions(
         }
       }
       
-      const numDivideValue = Number(divideValue);
-      if (isNaN(numDivideValue)) {
-        console.warn('div(): Second operand is not a valid number:', expr);
+      if (typeof divideValue !== 'number') {
+        console.warn('div(): Second operand is not a number:', expr);
         return undefined;
       }
-      if (numDivideValue === 0) {
+      if (divideValue === 0) {
         console.warn('div(): Division by zero');
-        return currentValue >= 0 ? Infinity : -Infinity;
+        return data >= 0 ? Infinity : -Infinity;
       }
       
-      return currentValue / numDivideValue;
+      return data / divideValue;
     },
     
     'mod': (data: unknown, expr: unknown): number | undefined => {
       // Only support math operations between numbers
-      const currentValue = Number(data);
-      if (isNaN(currentValue)) {
-        console.warn('mod(): First operand is not a valid number:', data);
+      if (typeof data !== 'number') {
+        console.warn('mod(): First operand is not a number:', data);
         return undefined;
       }
       
@@ -657,17 +648,16 @@ export function createPipelineFunctions(
         }
       }
       
-      const numModValue = Number(modValue);
-      if (isNaN(numModValue)) {
-        console.warn('mod(): Second operand is not a valid number:', expr);
+      if (typeof modValue !== 'number') {
+        console.warn('mod(): Second operand is not a number:', expr);
         return undefined;
       }
-      if (numModValue === 0) {
+      if (modValue === 0) {
         console.warn('mod(): Modulo by zero');
         return undefined;
       }
       
-      return currentValue % numModValue;
+      return data % modValue;
     },
     
     'count': (data: unknown): number => {

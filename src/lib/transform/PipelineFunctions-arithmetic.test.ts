@@ -78,14 +78,24 @@ describe('Arithmetic Pipeline Functions', () => {
       expect(result).toBe(7);
     });
 
-    it('should handle string numbers', () => {
-      const result = evaluator.evaluate('10 | add("5")', {});
-      expect(result).toBe(15);
-    });
-
     it('should return undefined when adding invalid data', () => {
       const result = evaluator.evaluate('10 | add("invalid")', {});
       expect(result).toBeUndefined();
+    });
+
+    it('should return undefined when adding string numbers', () => {
+      const result = evaluator.evaluate('10 | add("5")', {});
+      expect(result).toBeUndefined();
+    });
+
+    it('should work with type casting', () => {
+      const result = evaluator.evaluate('10 | add("5" | int())', {});
+      expect(result).toBe(15);
+    });
+
+    it('should work with type casting float', () => {
+      const result = evaluator.evaluate('10.1 | add("5.5" | float())', {});
+      expect(result).toBe(15.6);
     });
 
     it('should return undefined when pipeline data is invalid', () => {
@@ -135,9 +145,9 @@ describe('Arithmetic Pipeline Functions', () => {
       expect(result).toBe(13);
     });
 
-    it('should handle string numbers', () => {
+    it('should return undefined when subtracting string numbers', () => {
       const result = evaluator.evaluate('10 | sub("3")', {});
-      expect(result).toBe(7);
+      expect(result).toBeUndefined();
     });
 
     it('should return undefined when subtracting invalid data', () => {
@@ -182,9 +192,9 @@ describe('Arithmetic Pipeline Functions', () => {
       expect(result).toBe(-20);
     });
 
-    it('should handle string numbers', () => {
+    it('should return undefined when multiplying string numbers', () => {
       const result = evaluator.evaluate('10 | mul("3")', {});
-      expect(result).toBe(30);
+      expect(result).toBeUndefined();
     });
 
     it('should work with template expressions', () => {
@@ -234,9 +244,9 @@ describe('Arithmetic Pipeline Functions', () => {
       expect(result).toBe(-5);
     });
 
-    it('should handle string numbers', () => {
+    it('should return undefined when dividing by string numbers', () => {
       const result = evaluator.evaluate('15 | div("3")', {});
-      expect(result).toBe(5);
+      expect(result).toBeUndefined();
     });
 
     it('should work with template expressions', () => {
@@ -281,9 +291,9 @@ describe('Arithmetic Pipeline Functions', () => {
       expect(result).toBe(-1);
     });
 
-    it('should handle string numbers', () => {
+    it('should return undefined when using string numbers', () => {
       const result = evaluator.evaluate('10 | mod("3")', {});
-      expect(result).toBe(1);
+      expect(result).toBeUndefined();
     });
 
     it('should work with template expressions', () => {
@@ -421,7 +431,7 @@ describe('Arithmetic Pipeline Functions', () => {
       });
       
       const result = evaluator.evaluate('10 | add({{res:null-step.$.value}})', {});
-      expect(result).toBe(10); // null converts to 0, so 10 + 0 = 10
+      expect(result).toBeUndefined(); // null is not a number, so should return undefined
     });
 
     it('should handle very large numbers', () => {
@@ -436,10 +446,10 @@ describe('Arithmetic Pipeline Functions', () => {
 
     it('should handle boolean to number conversion', () => {
       const result1 = evaluator.evaluate('true | add(5)', {});
-      expect(result1).toBe(6); // true converts to 1
+      expect(result1).toBeUndefined(); // booleans are not numbers
       
       const result2 = evaluator.evaluate('false | add(5)', {});
-      expect(result2).toBe(5); // false converts to 0
+      expect(result2).toBeUndefined(); // booleans are not numbers
     });
 
     it('should handle array to number conversion', () => {
