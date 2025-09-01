@@ -35,7 +35,7 @@
   }> = [];
   
   // Value types for assertion expected values
-  type ExpectedValueType = 'string' | 'number' | 'boolean' | 'object' | 'array';
+  type ExpectedValueType = 'string' | 'number' | 'boolean' | 'array';
 
   // New assertion template
   let newAssertion: {
@@ -127,6 +127,69 @@
     return op === 'exists' || op === 'is_null' || op === 'is_not_null' || op === 'is_empty' || op === 'is_not_empty';
   }
   
+  // Helper function to determine if an operator expects a numeric value
+  function isNumericOperator(op: string): boolean {
+    return ['greater_than', 'less_than', 'greater_than_or_equal', 'less_than_or_equal', 
+            'has_length', 'length_greater_than', 'length_less_than'].includes(op);
+  }
+  
+  // Helper function to determine if an operator expects a single text input
+  function isTextOperator(op: string): boolean {
+    return ['equals', 'not_equals', 'contains', 'not_contains', 'starts_with', 
+            'ends_with', 'matches_regex'].includes(op);
+  }
+  
+  // Helper function to validate JSON array input
+  function validateArrayInput(value: string): { isValid: boolean; parsed?: unknown; error?: string } {
+    if (!value.trim()) {
+      return { isValid: false, error: "Array cannot be empty" };
+    }
+    
+    try {
+      const parsed = JSON.parse(value);
+      if (!Array.isArray(parsed)) {
+        return { isValid: false, error: "Value must be an array" };
+      }
+      
+      // Check that all elements are primitive types (no objects or nested arrays)
+      for (const item of parsed) {
+        const itemType = typeof item;
+        if (item === null) {
+          continue; // null is allowed
+        }
+        if (itemType === 'object' || Array.isArray(item)) {
+          return { isValid: false, error: "Arrays can only contain primitive values (string, number, boolean, null)" };
+        }
+        if (itemType !== 'string' && itemType !== 'number' && itemType !== 'boolean') {
+          return { isValid: false, error: "Arrays can only contain primitive values (string, number, boolean, null)" };
+        }
+      }
+      
+      return { isValid: true, parsed };
+    } catch (e) {
+      return { isValid: false, error: "Invalid array" };
+    }
+  }
+  
+  // Track validation state for array inputs
+  let arrayValidationStates: Record<string, { isValid: boolean; error?: string }> = {};
+  
+  function updateArrayValidation(id: string, isValid: boolean, error?: string) {
+    arrayValidationStates[id] = { isValid, error };
+    arrayValidationStates = { ...arrayValidationStates }; // Trigger reactivity
+  }
+  
+  // Check if there are any validation errors that would prevent adding assertion
+  function hasValidationErrors(): boolean {
+    return Object.values(arrayValidationStates).some(state => !state.isValid);
+  }
+  
+  // Clear validation state for a specific input
+  function clearValidation(id: string) {
+    delete arrayValidationStates[id];
+    arrayValidationStates = { ...arrayValidationStates };
+  }
+  
   // Get operators suitable for a given data type
   function getOperatorsForType(assertionType: AssertionType, valueType?: ExpectedValueType, isTemplate = false): AssertionOperator[] {
     // If using template expressions, return all available operators for the assertion type
@@ -166,11 +229,6 @@
           'exists', 'has_length', 'length_greater_than', 'length_less_than',
           'contains_all', 'contains_any', 'not_contains_any', 'is_empty', 'is_not_empty',
           'is_null', 'is_not_null', 'is_type'
-        ] as AssertionOperator[];
-      
-      case 'object':
-        return [
-          'exists', 'is_empty', 'is_not_empty', 'is_null', 'is_not_null', 'is_type'
         ] as AssertionOperator[];
       
       default:
@@ -236,15 +294,15 @@
             }
           }
         }
-        // Convert string values to their proper types for object/array
-        else if (assertion.expected_value_type === 'object' || assertion.expected_value_type === 'array') {
+        // Convert string values to their proper types for array
+        else if (assertion.expected_value_type === 'array') {
           if (typeof assertion.expected_value === 'string') {
             try {
               assertion.expected_value = JSON.parse(assertion.expected_value as string);
             } catch (e) {
               console.error('Invalid JSON in assertion:', e);
-              // Use default empty object/array
-              assertion.expected_value = assertion.expected_value_type === 'object' ? {} : [];
+              // Use default empty array
+              assertion.expected_value = [];
             }
           }
         } else if (assertion.expected_value_type === 'number') {
@@ -301,7 +359,7 @@
             processedAssertion.expected_value = [processedAssertion.expected_value];
           }
         } catch (e) {
-          console.error('Invalid JSON array in assertion:', e);
+          console.error('InValid array in assertion:', e);
           processedAssertion.expected_value = []; // Default empty array
         }
       }
@@ -310,15 +368,15 @@
       if (!['string', 'number', 'boolean', 'array', 'object', 'null'].includes(String(processedAssertion.expected_value))) {
         processedAssertion.expected_value = 'string'; // Default type
       }
-    } else if (processedAssertion.expected_value_type === 'object' || processedAssertion.expected_value_type === 'array') {
-      // Parse JSON objects and arrays
+    } else if (processedAssertion.expected_value_type === 'array') {
+      // Parse JSON arrays
       if (typeof processedAssertion.expected_value === 'string') {
         try {
           processedAssertion.expected_value = JSON.parse(processedAssertion.expected_value);
         } catch (e) {
           console.error('Invalid JSON in new assertion:', e);
-          // Use default empty object/array
-          processedAssertion.expected_value = processedAssertion.expected_value_type === 'object' ? {} : [];
+          // Use default empty array
+          processedAssertion.expected_value = [];
         }
       }
     } else if (processedAssertion.expected_value_type === 'number') {
@@ -331,6 +389,10 @@
     
     // Add the assertion to the list
     assertions = [...assertions, processedAssertion];
+    
+    // Clear validation states for new assertion form
+    clearValidation('new-expected-value-array');
+    clearValidation('new-expected-value-type-array');
     
     // Reset the new assertion form with defaults
     newAssertion = {
@@ -378,7 +440,6 @@
         return value === '' ? null : Number(value);
       case 'boolean':
         return value.toLowerCase() === 'true';
-      case 'object':
       case 'array':
         try {
           return JSON.parse(value);
@@ -402,7 +463,7 @@
     
     // Convert the value to a string representation for the input
     if (currentValue !== null && currentValue !== undefined) {
-      if (newType === 'object' || newType === 'array') {
+      if (newType === 'array') {
         try {
           // If it's not already a string, try to stringify it
           if (typeof currentValue !== 'string') {
@@ -412,7 +473,7 @@
           JSON.parse(assertion.expected_value as string);
         } catch (e) {
           // Reset to empty valid JSON if invalid
-          assertion.expected_value = newType === 'object' ? '{}' : '[]';
+          assertion.expected_value = '[]';
         }
       } else if (newType === 'boolean') {
         assertion.expected_value = Boolean(currentValue).toString();
@@ -785,6 +846,24 @@
                   {/if}
 
                   <div>
+                    <!-- Type selector for json_body assertions -->
+                    {#if assertion.assertion_type === 'json_body'}
+                      <label for="type-{i}" class="block text-xs font-medium text-gray-500">
+                        Type:
+                      </label>
+                      <select
+                        id="type-{i}"
+                        class="w-full rounded border px-1.5 py-0.5 text-xs mb-2"
+                        value={assertion.expected_value_type || getDefaultValueType(assertion.assertion_type)}
+                        on:change={(e) => handleExpectedValueTypeChange(assertion, (e.target as HTMLSelectElement).value as ExpectedValueType)}
+                      >
+                        <option value="string">String</option>
+                        <option value="number">Number</option>
+                        <option value="boolean">Boolean</option>
+                        <option value="array">Array</option>
+                      </select>
+                    {/if}
+                    
                     <label for="operator-{i}" class="block text-xs font-medium text-gray-500">
                       Operator:
                     </label>
@@ -805,7 +884,7 @@
                     </select>
                   </div>
 
-                  {#if assertion.operator !== 'exists'}
+                  {#if !isNoValueOperator(assertion.operator)}
                     <div>
                       <div class="flex items-center justify-between mb-1">
                         <label for="expected-value-{i}" class="block text-xs font-medium text-gray-500">
@@ -838,23 +917,6 @@
                             />
                             Use Template
                           </label>
-                          
-                          {#if assertion.assertion_type === 'json_body' && !assertion.is_template_expression}
-                            <div class="flex items-center">
-                              <span class="text-xs text-gray-500 mr-1">Type:</span>
-                              <select
-                                class="text-xs border rounded px-1 py-0 bg-gray-50"
-                                value={assertion.expected_value_type || getDefaultValueType(assertion.assertion_type)}
-                                on:change={(e) => handleExpectedValueTypeChange(assertion, (e.target as HTMLSelectElement).value as ExpectedValueType)}
-                              >
-                                <option value="string">String</option>
-                                <option value="number">Number</option>
-                                <option value="boolean">Boolean</option>
-                                <option value="object">Object</option>
-                                <option value="array">Array</option>
-                              </select>
-                            </div>
-                          {/if}
                         </div>
                       </div>
                       
@@ -921,23 +983,43 @@
                         </div>
                       {:else if isArrayOperator(assertion.operator)}
                         <!-- Array of values -->
+                        {@const inputId = `expected-value-${i}`}
+                        {@const validationState = arrayValidationStates[inputId] || { isValid: true }}
                         <textarea
                           id="expected-value-{i}"
                           value={typeof assertion.expected_value === 'string' ? assertion.expected_value : JSON.stringify(assertion.expected_value)}
-                          class="w-full rounded border px-1.5 py-0.5 text-xs font-mono"
+                          class="w-full rounded border px-1.5 py-0.5 text-xs font-mono {validationState.isValid ? 'border-gray-300' : 'border-red-300 bg-red-50'}"
                           rows="3"
                           placeholder='[1, 2, 3] or ["a", "b", "c"]'
-                          on:change={(e) => {
-                            try {
-                              assertion.expected_value = JSON.parse(e.currentTarget.value);
-                            } catch (err) {
-                              // If not valid JSON, keep as string
-                              assertion.expected_value = e.currentTarget.value;
+                          on:input={(e) => {
+                            const value = e.currentTarget.value;
+                            const validation = validateArrayInput(value);
+                            updateArrayValidation(inputId, validation.isValid, validation.error);
+                            
+                            if (validation.isValid && validation.parsed) {
+                              assertion.expected_value = validation.parsed;
+                              handleAssertionChange();
+                            } else {
+                              // Keep the string value for user to fix
+                              assertion.expected_value = value;
                             }
-                            handleAssertionChange();
                           }}
                         ></textarea>
-                        <p class="mt-0.5 text-2xs text-gray-500">Enter valid JSON array</p>
+                        {#if validationState.error}
+                          <p class="mt-0.5 text-2xs text-red-600 flex items-center">
+                            <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                              <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                            </svg>
+                            {validationState.error}
+                          </p>
+                        {:else}
+                          <p class="mt-0.5 text-2xs text-gray-500 flex items-center">
+                            <svg class="w-3 h-3 mr-1 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                              <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                            </svg>
+                            Valid array
+                          </p>
+                        {/if}
                       {:else if isTypeOperator(assertion.operator)}
                         <!-- Type selection -->
                         <select 
@@ -966,17 +1048,55 @@
                           <option value="true">true</option>
                           <option value="false">false</option>
                         </select>
-                      {:else if assertion.expected_value_type === 'object' || assertion.expected_value_type === 'array' || 
-                               getDefaultValueType(assertion.assertion_type) === 'object' || getDefaultValueType(assertion.assertion_type) === 'array'}
+                      {:else if isNumericOperator(assertion.operator)}
+                        <!-- Numeric input for length and comparison operators -->
+                        <input
+                          id="expected-value-{i}"
+                          type="number"
+                          bind:value={assertion.expected_value}
+                          class="w-full rounded border px-1.5 py-0.5 text-xs"
+                          placeholder="Enter number"
+                          on:change={handleAssertionChange}
+                        />
+                      {:else if assertion.expected_value_type === 'array' || 
+                               getDefaultValueType(assertion.assertion_type) === 'array'}
+                        {@const inputId = `expected-value-type-array-${i}`}
+                        {@const validationState = arrayValidationStates[inputId] || { isValid: true }}
                         <textarea
                           id="expected-value-{i}"
                           bind:value={assertion.expected_value}
-                          class="w-full rounded border px-1.5 py-0.5 text-xs font-mono"
+                          class="w-full rounded border px-1.5 py-0.5 text-xs font-mono {validationState.isValid ? 'border-gray-300' : 'border-red-300 bg-red-50'}"
                           rows="3"
-                          placeholder={assertion.expected_value_type === 'object' ? '{"key": "value"}' : '[1,2,3]'}
-                          on:change={handleAssertionChange}
+                          placeholder='[1,2,3] or ["a","b"] - primitives only'
+                          on:input={(e) => {
+                            const value = e.currentTarget.value;
+                            const validation = validateArrayInput(value);
+                            updateArrayValidation(inputId, validation.isValid, validation.error);
+                            
+                            if (validation.isValid && validation.parsed) {
+                              assertion.expected_value = validation.parsed;
+                              handleAssertionChange();
+                            } else {
+                              // Keep the string value for user to fix
+                              assertion.expected_value = value;
+                            }
+                          }}
                         ></textarea>
-                        <p class="mt-0.5 text-2xs text-gray-500">Enter valid JSON</p>
+                        {#if validationState.error}
+                          <p class="mt-0.5 text-2xs text-red-600 flex items-center">
+                            <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                              <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                            </svg>
+                            {validationState.error}
+                          </p>
+                        {:else}
+                          <p class="mt-0.5 text-2xs text-gray-500 flex items-center">
+                            <svg class="w-3 h-3 mr-1 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                              <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                            </svg>
+                            Valid array
+                          </p>
+                        {/if}
                       {:else}
                         <input
                           id="expected-value-{i}"
@@ -1140,6 +1260,47 @@
           {/if}
 
           <div>
+            <!-- Type selector for json_body assertions -->
+            {#if newAssertion.assertion_type === 'json_body'}
+              <label for="new-type" class="block text-xs font-medium text-gray-500">
+                Type:
+              </label>
+              <select
+                id="new-type"
+                class="w-full rounded border px-1.5 py-0.5 text-xs mb-2"
+                bind:value={newAssertion.expected_value_type}
+                on:change={(e) => {
+                  if (e.target && 'value' in e.target) {
+                    const newType = e.target.value as ExpectedValueType;
+                    
+                    // Reset the expected value based on the new type
+                    if (newType === 'number') {
+                      newAssertion.expected_value = 0;
+                    } else if (newType === 'boolean') {
+                      newAssertion.expected_value = true;
+                    } else if (newType === 'array') {
+                      newAssertion.expected_value = '[]';
+                    } else {
+                      newAssertion.expected_value = '';
+                    }
+                    
+                    // Check if the current operator is compatible with the new type
+                    const validOperators = getOperatorsForType(newAssertion.assertion_type, newType, newAssertion.is_template_expression);
+                    
+                    // If the current operator isn't valid for the new type, select a compatible one
+                    if (!validOperators.includes(newAssertion.operator)) {
+                      newAssertion.operator = validOperators[0];
+                    }
+                  }
+                }}
+              >
+                <option value="string">String</option>
+                <option value="number">Number</option>
+                <option value="boolean">Boolean</option>
+                <option value="array">Array</option>
+              </select>
+            {/if}
+            
             <label for="new-operator" class="block text-xs font-medium text-gray-500">
               Operator:
             </label>
@@ -1159,7 +1320,7 @@
             </select>
           </div>
 
-          {#if newAssertion.operator !== 'exists'}
+          {#if !isNoValueOperator(newAssertion.operator)}
             <div>
               <div class="flex items-center justify-between mb-1">
                 <label for="new-expected-value" class="block text-xs font-medium text-gray-500">
@@ -1191,48 +1352,6 @@
                     />
                     Use Template
                   </label>
-                  
-                  {#if newAssertion.assertion_type === 'json_body' && !newAssertion.is_template_expression}
-                    <div class="flex items-center">
-                      <span class="text-xs text-gray-500 mr-1">Type:</span>
-                      <select
-                        class="text-xs border rounded px-1 py-0 bg-gray-50"
-                        bind:value={newAssertion.expected_value_type}
-                        on:change={(e) => {
-                          if (e.target && 'value' in e.target) {
-                            const newType = e.target.value as ExpectedValueType;
-                            
-                            // Reset the expected value based on the new type
-                            if (newType === 'number') {
-                              newAssertion.expected_value = 0;
-                            } else if (newType === 'boolean') {
-                              newAssertion.expected_value = true;
-                            } else if (newType === 'object') {
-                              newAssertion.expected_value = '{}';
-                            } else if (newType === 'array') {
-                              newAssertion.expected_value = '[]';
-                            } else {
-                              newAssertion.expected_value = '';
-                            }
-                            
-                            // Check if the current operator is compatible with the new type
-                            const validOperators = getOperatorsForType(newAssertion.assertion_type, newType, newAssertion.is_template_expression);
-                            
-                            // If the current operator isn't valid for the new type, select a compatible one
-                            if (!validOperators.includes(newAssertion.operator)) {
-                              newAssertion.operator = validOperators[0];
-                            }
-                          }
-                        }}
-                      >
-                        <option value="string">String</option>
-                        <option value="number">Number</option>
-                        <option value="boolean">Boolean</option>
-                        <option value="object">Object</option>
-                        <option value="array">Array</option>
-                      </select>
-                    </div>
-                  {/if}
                 </div>
               </div>
               
@@ -1294,24 +1413,44 @@
                 </div>
               {:else if isArrayOperator(newAssertion.operator)}
                 <!-- Array of values -->
+                {@const inputId = 'new-expected-value-array'}
+                {@const validationState = arrayValidationStates[inputId] || { isValid: true }}
                 <textarea
                   id="new-expected-value"
                   value={typeof newAssertion.expected_value === 'string' 
                     ? newAssertion.expected_value 
                     : JSON.stringify(newAssertion.expected_value)}
-                  class="w-full rounded border px-1.5 py-0.5 text-xs font-mono"
+                  class="w-full rounded border px-1.5 py-0.5 text-xs font-mono {validationState.isValid ? 'border-gray-300' : 'border-red-300 bg-red-50'}"
                   rows="3"
                   placeholder='[1, 2, 3] or ["a", "b", "c"]'
-                  on:change={(e) => {
-                    try {
-                      newAssertion.expected_value = JSON.parse(e.currentTarget.value);
-                    } catch (err) {
-                      // If not valid JSON, keep as string
-                      newAssertion.expected_value = e.currentTarget.value;
+                  on:input={(e) => {
+                    const value = e.currentTarget.value;
+                    const validation = validateArrayInput(value);
+                    updateArrayValidation(inputId, validation.isValid, validation.error);
+                    
+                    if (validation.isValid && validation.parsed) {
+                      newAssertion.expected_value = validation.parsed;
+                    } else {
+                      // Keep the string value for user to fix
+                      newAssertion.expected_value = value;
                     }
                   }}
                 ></textarea>
-                <p class="mt-0.5 text-2xs text-gray-500">Enter valid JSON array</p>
+                {#if validationState.error}
+                  <p class="mt-0.5 text-2xs text-red-600 flex items-center">
+                    <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                    </svg>
+                    {validationState.error}
+                  </p>
+                {:else}
+                  <p class="mt-0.5 text-2xs text-gray-500 flex items-center">
+                    <svg class="w-3 h-3 mr-1 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                    </svg>
+                    Valid array
+                  </p>
+                {/if}
               {:else if isTypeOperator(newAssertion.operator)}
                 <!-- Type selection -->
                 <select 
@@ -1338,15 +1477,52 @@
                   <option value="true">true</option>
                   <option value="false">false</option>
                 </select>
-              {:else if newAssertion.expected_value_type === 'object' || newAssertion.expected_value_type === 'array'}
+              {:else if isNumericOperator(newAssertion.operator)}
+                <!-- Numeric input for length and comparison operators -->
+                <input
+                  id="new-expected-value"
+                  type="number"
+                  bind:value={newAssertion.expected_value}
+                  class="w-full rounded border px-1.5 py-0.5 text-xs"
+                  placeholder="Enter number"
+                />
+              {:else if newAssertion.expected_value_type === 'array'}
+                {@const inputId = 'new-expected-value-type-array'}
+                {@const validationState = arrayValidationStates[inputId] || { isValid: true }}
                 <textarea
                   id="new-expected-value"
                   bind:value={newAssertion.expected_value}
-                  class="w-full rounded border px-1.5 py-0.5 text-xs font-mono"
+                  class="w-full rounded border px-1.5 py-0.5 text-xs font-mono {validationState.isValid ? 'border-gray-300' : 'border-red-300 bg-red-50'}"
                   rows="3"
-                  placeholder={newAssertion.expected_value_type === 'object' ? '{"key": "value"}' : '[1,2,3]'}
+                  placeholder='[1,2,3] or ["a","b"] - primitives only'
+                  on:input={(e) => {
+                    const value = e.currentTarget.value;
+                    const validation = validateArrayInput(value);
+                    updateArrayValidation(inputId, validation.isValid, validation.error);
+                    
+                    if (validation.isValid && validation.parsed) {
+                      newAssertion.expected_value = validation.parsed;
+                    } else {
+                      // Keep the string value for user to fix
+                      newAssertion.expected_value = value;
+                    }
+                  }}
                 ></textarea>
-                <p class="mt-0.5 text-2xs text-gray-500">Enter valid JSON</p>
+                {#if validationState.error}
+                  <p class="mt-0.5 text-2xs text-red-600 flex items-center">
+                    <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                    </svg>
+                    {validationState.error}
+                  </p>
+                {:else}
+                  <p class="mt-0.5 text-2xs text-gray-500 flex items-center">
+                    <svg class="w-3 h-3 mr-1 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                    </svg>
+                    Valid array
+                  </p>
+                {/if}
               {:else}
                 <input
                   id="new-expected-value"
@@ -1362,8 +1538,10 @@
         
         <div class="mt-3">
           <button
-            class="w-full rounded bg-green-600 py-1 text-sm font-medium text-white hover:bg-green-700"
+            class="w-full rounded py-1 text-sm font-medium transition-colors {hasValidationErrors() ? 'bg-gray-400 text-gray-700 cursor-not-allowed' : 'bg-green-600 text-white hover:bg-green-700'}"
             on:click={addAssertion}
+            disabled={hasValidationErrors()}
+            title={hasValidationErrors() ? 'Please fix validation errors before adding assertion' : 'Add assertion'}
           >
             Add Assertion
           </button>
