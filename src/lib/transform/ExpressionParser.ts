@@ -497,6 +497,17 @@ export class ASTEvaluator {
       templateExpression = '"' + templateExpression.slice(1, -1) + '"';
     }
 
+    // Check if this is a pipeline expression (contains | outside of template braces)
+    // e.g., "{{res:step1-0.$.tax_rate}} | add(1)"
+    const templateContent = templateExpression.startsWith('"') && templateExpression.endsWith('"') 
+      ? templateExpression.slice(1, -1)  // Remove surrounding quotes
+      : templateExpression;
+    
+    if (templateContent.includes('|')) {
+      // This is a pipeline expression, return it as-is for pipeline evaluation
+      return templateContent;
+    }
+
     // Use the template engine to resolve the expression
     const result = resolveTemplateExpression(templateExpression, this.templateContext);
     

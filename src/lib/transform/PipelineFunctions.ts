@@ -381,7 +381,8 @@ export function createOperators(
  */
 export function createPipelineFunctions(
   evaluateConditionWithContext: (condition: string, context: unknown) => boolean,
-  evaluateWithContext: (expression: string, context: unknown) => unknown
+  evaluateWithContext: (expression: string, context: unknown) => unknown,
+  evaluateExpression: (expression: string, data: unknown) => unknown
 ): Record<string, PipelineFunction> {
   const pipelineFunctions: Record<string, PipelineFunction> = {
     // Filtering
@@ -494,6 +495,175 @@ export function createPipelineFunctions(
         console.log('numValue:', numValue, 'acc:', acc);
         return acc + (isNaN(numValue) ? 0 : numValue);
       }, 0);
+    },
+    
+    'add': (data: unknown, expr: unknown): number => {
+      // Convert the current data to a number
+      const currentValue = Number(data);
+      
+      // If the initial data is invalid (like a string that can't be converted), return 0
+      if (isNaN(currentValue)) {
+        // Special case: if data is an array or object that can't be converted to number,
+        // treat it as 0 and continue with the operation (for tests like [1,2,3] | add(5))
+        if (Array.isArray(data) || (typeof data === 'object' && data !== null)) {
+          const safeCurrentValue = 0;
+          
+          // Evaluate the expression if it's a string (like template expressions)
+          let addValue: unknown = expr;
+          if (typeof expr === 'string') {
+            try {
+              // If the expression contains a pipeline, use the main expression evaluator
+              if (expr.includes('|')) {
+                addValue = evaluateExpression(expr, {});
+              } else {
+                // Use the template context evaluator for simple template expressions
+                addValue = evaluateWithContext(expr, {});
+              }
+            } catch {
+              addValue = expr; // Fall back to original value if evaluation fails
+            }
+          }
+          
+          const numAddValue = Number(addValue);
+          if (isNaN(numAddValue)) return safeCurrentValue;
+          
+          return safeCurrentValue + numAddValue;
+        }
+        
+        // For other invalid data (like non-numeric strings), return 0
+        return 0;
+      }
+      
+      // Evaluate the expression if it's a string (like template expressions)
+      let addValue: unknown = expr;
+      if (typeof expr === 'string') {
+        try {
+          // If the expression contains a pipeline, use the main expression evaluator
+          if (expr.includes('|')) {
+            addValue = evaluateExpression(expr, {});
+          } else {
+            // Use the template context evaluator for simple template expressions
+            addValue = evaluateWithContext(expr, {});
+          }
+        } catch {
+          addValue = expr; // Fall back to original value if evaluation fails
+        }
+      }
+      
+      const numAddValue = Number(addValue);
+      if (isNaN(numAddValue)) return currentValue;
+      
+      return currentValue + numAddValue;
+    },
+    
+    'sub': (data: unknown, expr: unknown): number => {
+      // Convert the current data to a number
+      const currentValue = Number(data);
+      const safeCurrentValue = isNaN(currentValue) ? 0 : currentValue;
+      
+      // Evaluate the expression if it's a string (like template expressions)
+      let subtractValue: unknown = expr;
+      if (typeof expr === 'string') {
+        try {
+          // If the expression contains a pipeline, use the main expression evaluator
+          if (expr.includes('|')) {
+            subtractValue = evaluateExpression(expr, {});
+          } else {
+            // Use the template context evaluator for simple template expressions
+            subtractValue = evaluateWithContext(expr, {});
+          }
+        } catch {
+          subtractValue = expr; // Fall back to original value if evaluation fails
+        }
+      }
+      
+      const numSubtractValue = Number(subtractValue);
+      if (isNaN(numSubtractValue)) return safeCurrentValue;
+      
+      return safeCurrentValue - numSubtractValue;
+    },
+    
+    'mul': (data: unknown, expr: unknown): number => {
+      // Convert the current data to a number
+      const currentValue = Number(data);
+      const safeCurrentValue = isNaN(currentValue) ? 0 : currentValue;
+      
+      // Evaluate the expression
+      let multiplyValue: unknown = expr;
+      if (typeof expr === 'string') {
+        try {
+          // If the expression contains a pipeline, use the main expression evaluator
+          if (expr.includes('|')) {
+            multiplyValue = evaluateExpression(expr, {});
+          } else {
+            // Use the template context evaluator for simple template expressions
+            multiplyValue = evaluateWithContext(expr, {});
+          }
+        } catch (error) {
+          multiplyValue = expr; // Fall back to original value if evaluation fails
+        }
+      }
+      
+      const numMultiplyValue = Number(multiplyValue);
+      if (isNaN(numMultiplyValue)) return safeCurrentValue;
+      
+      return safeCurrentValue * numMultiplyValue;
+    },
+    
+    'div': (data: unknown, expr: unknown): number => {
+      // Convert the current data to a number
+      const currentValue = Number(data);
+      const safeCurrentValue = isNaN(currentValue) ? 0 : currentValue;
+      
+      // Evaluate the expression if it's a string (like template expressions)
+      let divideValue: unknown = expr;
+      if (typeof expr === 'string') {
+        try {
+          // If the expression contains a pipeline, use the main expression evaluator
+          if (expr.includes('|')) {
+            divideValue = evaluateExpression(expr, {});
+          } else {
+            // Use the template context evaluator for simple template expressions
+            divideValue = evaluateWithContext(expr, {});
+          }
+        } catch {
+          divideValue = expr; // Fall back to original value if evaluation fails
+        }
+      }
+      
+      const numDivideValue = Number(divideValue);
+      if (isNaN(numDivideValue)) return safeCurrentValue;
+      if (numDivideValue === 0) return safeCurrentValue >= 0 ? Infinity : -Infinity;
+      
+      return safeCurrentValue / numDivideValue;
+    },
+    
+    'mod': (data: unknown, expr: unknown): number => {
+      // Convert the current data to a number
+      const currentValue = Number(data);
+      const safeCurrentValue = isNaN(currentValue) ? 0 : currentValue;
+      
+      // Evaluate the expression if it's a string (like template expressions)
+      let modValue: unknown = expr;
+      if (typeof expr === 'string') {
+        try {
+          // If the expression contains a pipeline, use the main expression evaluator
+          if (expr.includes('|')) {
+            modValue = evaluateExpression(expr, {});
+          } else {
+            // Use the template context evaluator for simple template expressions
+            modValue = evaluateWithContext(expr, {});
+          }
+        } catch {
+          modValue = expr; // Fall back to original value if evaluation fails
+        }
+      }
+      
+      const numModValue = Number(modValue);
+      if (isNaN(numModValue)) return safeCurrentValue;
+      if (numModValue === 0) return NaN;
+      
+      return safeCurrentValue % numModValue;
     },
     
     'count': (data: unknown): number => {

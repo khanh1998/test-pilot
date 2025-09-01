@@ -30,7 +30,8 @@ export class SafeExpressionEvaluator {
     
     this.pipelineFunctions = createPipelineFunctions(
       this.evaluateConditionWithContext.bind(this),
-      this.evaluateWithContext.bind(this)
+      this.evaluateWithContext.bind(this),
+      this.evaluate.bind(this)
     );
   }
   /**
@@ -138,7 +139,22 @@ export class SafeExpressionEvaluator {
           initialData = null;
         }
       } else {
-        initialData = null;
+        // Check if the first step is a template expression or literal value
+        if (firstStep.includes('{{') && firstStep.includes('}}')) {
+          // It's a template expression - evaluate it using AST evaluator
+          try {
+            const parser = new ExpressionParser();
+            const ast = parser.parseExpression(firstStep);
+            const evaluator = new ASTEvaluator(this.operators, this.jsonPathEvaluator, this.templateContext);
+            initialData = evaluator.evaluate(ast, data);
+          } catch (error) {
+            console.error('Error evaluating template in pipeline initial step:', error);
+            initialData = null;
+          }
+        } else {
+          // It's a literal value (number, string, boolean)
+          initialData = this.parseArgumentValue(firstStep);
+        }
       }
     }
     
@@ -211,6 +227,11 @@ export class SafeExpressionEvaluator {
     // If it's a simple number, return it directly
     if (/^\d+$/.test(expression.trim())) {
       return parseInt(expression.trim(), 10);
+    }
+    
+    // Check if this is a pipeline expression first
+    if (this.isPipelineExpression(expression)) {
+      return this.evaluatePipeline(expression, data);
     }
     
     // Use the AST evaluator for complex expressions including templates
@@ -304,6 +325,16 @@ export class SafeExpressionEvaluator {
         args = argsString ? [data, argsString] : [data];
         break;
         
+      case 'add':
+      case 'sub':
+      case 'mul':
+      case 'div':
+      case 'mod':
+        // Arithmetic functions with template evaluation
+        const evaluatedArithmeticArg = (this.templateContext && argsString.includes('{{')) ? this.evaluateArgumentExpression(argsString, data) : argsString;
+        args = [data, evaluatedArithmeticArg];
+        break;
+        
       case 'int':
       case 'float':
       case 'string':
@@ -378,11 +409,13 @@ export class SafeExpressionEvaluator {
   }
   
   /**
-   * Parse a single argument value, handling strings, numbers, booleans
+   * Parse a single argument value, handling strings, numbers, booleans, arrays, and objects
    * @param valueString - Value string
    * @returns Parsed value
    */
   private parseArgumentValue(valueString: string): unknown {
+    valueString = valueString.trim();
+    
     // String literal
     if ((valueString.startsWith("'") && valueString.endsWith("'")) || 
         (valueString.startsWith('"') && valueString.endsWith('"'))) {
@@ -397,9 +430,37 @@ export class SafeExpressionEvaluator {
     if (valueString === 'null') return null;
     if (valueString === 'undefined') return undefined;
     
+    // Array literal (like [1,2,3])
+    if (valueString.startsWith('[') && valueString.endsWith(']')) {
+      try {
+        return JSON.parse(valueString);
+      } catch {
+        // Fallback to string if JSON parsing fails
+        return valueString;
+      }
+    }
+    
+    // Object literal (like {})
+    if (valueString.startsWith('{') && valueString.endsWith('}')) {
+      try {
+        return JSON.parse(valueString);
+      } catch {
+        // Fallback to string if JSON parsing fails
+        return valueString;
+      }
+    }
+    
     // Number
     if (/^-?\d+(\.\d+)?$/.test(valueString)) {
       return parseFloat(valueString);
+    }
+    
+    // Check if this contains a pipeline operation (template + pipeline)
+    // This handles cases like "{{res:step1-0.$.tax_rate}} | add(1)"
+    if (valueString.includes('{{') && valueString.includes('|')) {
+      // This is a pipeline expression that needs to be evaluated with the full context
+      // Return it as-is so the arithmetic function can evaluate it properly
+      return valueString;
     }
     
     // Default to string
