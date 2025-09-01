@@ -39,7 +39,8 @@ export class ExpressionParser {
     '*': 6,
     '/': 6,
     '%': 6,
-    '!': 7
+    'unary!': 7,
+    'unary-': 7
   };
   
   /**
@@ -60,12 +61,12 @@ export class ExpressionParser {
    */
   private tokenize(expression: string): { type: string; value: string }[] {
     const tokens: { type: string; value: string }[] = [];
-    // Match quoted templates (double and single), unquoted templates, JSONPath, operators, identifiers, strings, numbers, and parentheses
-    const regex = /("\{\{[^}]+\}\}")|('\{\{[^}]+\}\}')|(\{\{[^}]+\}\})|(\$[.\w\[\]'":*]+)|(\|\||&&|==|!=|>=|<=|>|<|!|\+|-|\*|\/|%)|([a-zA-Z_][a-zA-Z0-9_]*)|('[^']*')|("[^"]*")|(\d+(?:\.\d+)?)|(\(|\))/g;
+    // Match quoted templates (double and single), unquoted templates, JSONPath, operators, identifiers, strings, numbers, parentheses, and commas
+    const regex = /("\{\{[^}]+\}\}")|('\{\{[^}]+\}\}')|(\{\{[^}]+\}\})|(\$[.\w\[\]'":*]+)|(\|\||&&|==|!=|>=|<=|>|<|!|\+|-|\*|\/|%)|([a-zA-Z_][a-zA-Z0-9_]*)|('[^']*')|("[^"]*")|(\d+(?:\.\d+)?)|(\(|\))|(,)/g;
     
     let match;
     while ((match = regex.exec(expression)) !== null) {
-      const [, quotedTemplate, singleQuotedTemplate, template, jsonPath, operator, identifier, singleQuote, doubleQuote, number, paren] = match;
+      const [, quotedTemplate, singleQuotedTemplate, template, jsonPath, operator, identifier, singleQuote, doubleQuote, number, paren, comma] = match;
       
       if (quotedTemplate) {
         tokens.push({ type: 'quotedTemplate', value: quotedTemplate });
@@ -87,6 +88,8 @@ export class ExpressionParser {
         tokens.push({ type: 'number', value: number });
       } else if (paren) {
         tokens.push({ type: 'paren', value: paren });
+      } else if (comma) {
+        tokens.push({ type: 'comma', value: ',' });
       }
     }
     
@@ -161,12 +164,12 @@ export class ExpressionParser {
     const token = tokens[index];
     
     // Handle unary operators
-    if (token.type === 'operator' && token.value === '!') {
+    if (token.type === 'operator' && (token.value === '!' || token.value === '-')) {
       const { node: operand, nextIndex } = this.parsePrimary(tokens, index + 1);
       return {
         node: {
           type: 'unary',
-          operator: '!',
+          operator: token.value,
           operand
         },
         nextIndex
@@ -305,7 +308,7 @@ export class ExpressionParser {
         }
         
         // Expect a comma separator
-        if (tokens[nextIndex].value !== ',') {
+        if (tokens[nextIndex].type !== 'comma') {
           throw new Error(`Expected ',' in function arguments but got ${tokens[nextIndex].value}`);
         }
         

@@ -3,6 +3,8 @@
  * Contains all the pipeline functions and operators used in data transformations
  */
 
+import { SafeJSONPathEvaluator } from './JSONPathEvaluator';
+
 // Pipeline function signature
 export type PipelineFunction = (data: unknown, ...args: unknown[]) => unknown;
 
@@ -212,6 +214,32 @@ export class PipelineHelpers {
     // Default JavaScript truthiness for other types
     return Boolean(value);
   }
+
+  /**
+   * Safely perform arithmetic operations
+   * @param a - First operand
+   * @param b - Second operand
+   * @param operation - Math operation function
+   * @returns Result or NaN if invalid
+   */
+  static safeMathOperation(a: unknown, b: unknown, operation: (x: number, y: number) => number): number {
+    const numA = Number(a);
+    const numB = Number(b);
+    if (isNaN(numA) || isNaN(numB)) return NaN;
+    return operation(numA, numB);
+  }
+
+  /**
+   * Safely perform unary math operations
+   * @param a - Operand
+   * @param operation - Math operation function
+   * @returns Result or NaN if invalid
+   */
+  static safeUnaryMathOperation(a: unknown, operation: (x: number) => number): number {
+    const num = Number(a);
+    if (isNaN(num)) return NaN;
+    return operation(num);
+  }
 }
 
 /**
@@ -238,6 +266,48 @@ export function createOperators(
     '||': (a: unknown, b: unknown): boolean => Boolean(a) || Boolean(b),
     '!': (a: unknown): boolean => !Boolean(a),
     
+    // Unary arithmetic
+    '-': (a: unknown, b?: unknown): number => {
+      // If called with two arguments, it's binary subtraction
+      if (b !== undefined) {
+        const numA = Number(a);
+        const numB = Number(b);
+        if (isNaN(numA) || isNaN(numB)) return NaN;
+        return numA - numB;
+      }
+      // If called with one argument, it's unary negation
+      const num = Number(a);
+      return isNaN(num) ? NaN : -num;
+    },
+    
+    // Arithmetic operators
+    '+': (a: unknown, b: unknown): number => {
+      const numA = Number(a);
+      const numB = Number(b);
+      if (isNaN(numA) || isNaN(numB)) return NaN;
+      return numA + numB;
+    },
+    '*': (a: unknown, b: unknown): number => {
+      const numA = Number(a);
+      const numB = Number(b);
+      if (isNaN(numA) || isNaN(numB)) return NaN;
+      return numA * numB;
+    },
+    '/': (a: unknown, b: unknown): number => {
+      const numA = Number(a);
+      const numB = Number(b);
+      if (isNaN(numA) || isNaN(numB)) return NaN;
+      if (numB === 0) return numA >= 0 ? Infinity : -Infinity;
+      return numA / numB;
+    },
+    '%': (a: unknown, b: unknown): number => {
+      const numA = Number(a);
+      const numB = Number(b);
+      if (isNaN(numA) || isNaN(numB)) return NaN;
+      if (numB === 0) return NaN;
+      return numA % numB;
+    },
+    
     // String operations
     'contains': (a: unknown, b: unknown): boolean => String(a).includes(String(b)),
     'startsWith': (a: unknown, b: unknown): boolean => String(a).startsWith(String(b)),
@@ -255,7 +325,51 @@ export function createOperators(
     'int': (a: unknown, defaultValue?: unknown): number | null => PipelineHelpers.castToInt(a, defaultValue),
     'float': (a: unknown, defaultValue?: unknown): number | null => PipelineHelpers.castToFloat(a, defaultValue),
     'string': (a: unknown, defaultValue?: unknown): string | null => PipelineHelpers.castToString(a, defaultValue),
-    'bool': (a: unknown, defaultValue?: unknown): boolean | null => PipelineHelpers.castToBool(a, defaultValue)
+    'bool': (a: unknown, defaultValue?: unknown): boolean | null => PipelineHelpers.castToBool(a, defaultValue),
+    
+    // Math functions
+    'abs': (a: unknown): number => {
+      const num = Number(a);
+      return isNaN(num) ? NaN : Math.abs(num);
+    },
+    'round': (a: unknown, digits?: unknown): number => {
+      const num = Number(a);
+      if (isNaN(num)) return NaN;
+      
+      if (digits === undefined) return Math.round(num);
+      
+      const d = Number(digits);
+      if (isNaN(d)) return Math.round(num);
+      
+      const factor = Math.pow(10, Math.floor(d));
+      return Math.round(num * factor) / factor;
+    },
+    'ceil': (a: unknown): number => {
+      const num = Number(a);
+      return isNaN(num) ? NaN : Math.ceil(num);
+    },
+    'floor': (a: unknown): number => {
+      const num = Number(a);
+      return isNaN(num) ? NaN : Math.floor(num);
+    },
+    'min': (a: unknown, b: unknown): number => {
+      const numA = Number(a);
+      const numB = Number(b);
+      if (isNaN(numA) || isNaN(numB)) return NaN;
+      return Math.min(numA, numB);
+    },
+    'max': (a: unknown, b: unknown): number => {
+      const numA = Number(a);
+      const numB = Number(b);
+      if (isNaN(numA) || isNaN(numB)) return NaN;
+      return Math.max(numA, numB);
+    },
+    'pow': (a: unknown, b: unknown): number => {
+      const numA = Number(a);
+      const numB = Number(b);
+      if (isNaN(numA) || isNaN(numB)) return NaN;
+      return Math.pow(numA, numB);
+    }
   };
 }
 
@@ -361,9 +475,23 @@ export function createPipelineFunctions(
       if (!Array.isArray(data)) return 0;
       const fieldStr = field !== undefined ? String(field) : undefined;
       
+      console.log('sum called with data:', data, 'field:', fieldStr);
+      
       return data.reduce((acc: number, item) => {
-        let value = fieldStr ? PipelineHelpers.getNestedValue(item, fieldStr) : item;
+        let value = item;
+        
+        if (fieldStr) {
+          // Use JSONPath evaluator only
+          const jsonPathEvaluator = new SafeJSONPathEvaluator();
+          // If field doesn't start with $, prepend it to make it a valid JSONPath
+          const jsonPath = fieldStr.startsWith('$') ? fieldStr : `$.${fieldStr}`;
+          console.log('evaluating jsonPath:', jsonPath, 'on item:', item);
+          value = jsonPathEvaluator.evaluate(jsonPath, item);
+          console.log('result value:', value);
+        }
+        
         const numValue = Number(value);
+        console.log('numValue:', numValue, 'acc:', acc);
         return acc + (isNaN(numValue) ? 0 : numValue);
       }, 0);
     },
