@@ -497,41 +497,12 @@ export function createPipelineFunctions(
       }, 0);
     },
     
-    'add': (data: unknown, expr: unknown): number => {
-      // Convert the current data to a number
+    'add': (data: unknown, expr: unknown): number | undefined => {
+      // Only support math operations between numbers
       const currentValue = Number(data);
-      
-      // If the initial data is invalid (like a string that can't be converted), return 0
       if (isNaN(currentValue)) {
-        // Special case: if data is an array or object that can't be converted to number,
-        // treat it as 0 and continue with the operation (for tests like [1,2,3] | add(5))
-        if (Array.isArray(data) || (typeof data === 'object' && data !== null)) {
-          const safeCurrentValue = 0;
-          
-          // Evaluate the expression if it's a string (like template expressions)
-          let addValue: unknown = expr;
-          if (typeof expr === 'string') {
-            try {
-              // If the expression contains a pipeline, use the main expression evaluator
-              if (expr.includes('|')) {
-                addValue = evaluateExpression(expr, {});
-              } else {
-                // Use the template context evaluator for simple template expressions
-                addValue = evaluateWithContext(expr, {});
-              }
-            } catch {
-              addValue = expr; // Fall back to original value if evaluation fails
-            }
-          }
-          
-          const numAddValue = Number(addValue);
-          if (isNaN(numAddValue)) return safeCurrentValue;
-          
-          return safeCurrentValue + numAddValue;
-        }
-        
-        // For other invalid data (like non-numeric strings), return 0
-        return 0;
+        console.warn('add(): First operand is not a valid number:', data);
+        return undefined;
       }
       
       // Evaluate the expression if it's a string (like template expressions)
@@ -551,15 +522,21 @@ export function createPipelineFunctions(
       }
       
       const numAddValue = Number(addValue);
-      if (isNaN(numAddValue)) return currentValue;
+      if (isNaN(numAddValue)) {
+        console.warn('add(): Second operand is not a valid number:', expr);
+        return undefined;
+      }
       
       return currentValue + numAddValue;
     },
     
-    'sub': (data: unknown, expr: unknown): number => {
-      // Convert the current data to a number
+    'sub': (data: unknown, expr: unknown): number | undefined => {
+      // Only support math operations between numbers
       const currentValue = Number(data);
-      const safeCurrentValue = isNaN(currentValue) ? 0 : currentValue;
+      if (isNaN(currentValue)) {
+        console.warn('sub(): First operand is not a valid number:', data);
+        return undefined;
+      }
       
       // Evaluate the expression if it's a string (like template expressions)
       let subtractValue: unknown = expr;
@@ -578,15 +555,21 @@ export function createPipelineFunctions(
       }
       
       const numSubtractValue = Number(subtractValue);
-      if (isNaN(numSubtractValue)) return safeCurrentValue;
+      if (isNaN(numSubtractValue)) {
+        console.warn('sub(): Second operand is not a valid number:', expr);
+        return undefined;
+      }
       
-      return safeCurrentValue - numSubtractValue;
+      return currentValue - numSubtractValue;
     },
     
-    'mul': (data: unknown, expr: unknown): number => {
-      // Convert the current data to a number
+    'mul': (data: unknown, expr: unknown): number | undefined => {
+      // Only support math operations between numbers
       const currentValue = Number(data);
-      const safeCurrentValue = isNaN(currentValue) ? 0 : currentValue;
+      if (isNaN(currentValue)) {
+        console.warn('mul(): First operand is not a valid number:', data);
+        return undefined;
+      }
       
       // Evaluate the expression
       let multiplyValue: unknown = expr;
@@ -605,15 +588,21 @@ export function createPipelineFunctions(
       }
       
       const numMultiplyValue = Number(multiplyValue);
-      if (isNaN(numMultiplyValue)) return safeCurrentValue;
+      if (isNaN(numMultiplyValue)) {
+        console.warn('mul(): Second operand is not a valid number:', expr);
+        return undefined;
+      }
       
-      return safeCurrentValue * numMultiplyValue;
+      return currentValue * numMultiplyValue;
     },
     
-    'div': (data: unknown, expr: unknown): number => {
-      // Convert the current data to a number
+    'div': (data: unknown, expr: unknown): number | undefined => {
+      // Only support math operations between numbers
       const currentValue = Number(data);
-      const safeCurrentValue = isNaN(currentValue) ? 0 : currentValue;
+      if (isNaN(currentValue)) {
+        console.warn('div(): First operand is not a valid number:', data);
+        return undefined;
+      }
       
       // Evaluate the expression if it's a string (like template expressions)
       let divideValue: unknown = expr;
@@ -632,16 +621,25 @@ export function createPipelineFunctions(
       }
       
       const numDivideValue = Number(divideValue);
-      if (isNaN(numDivideValue)) return safeCurrentValue;
-      if (numDivideValue === 0) return safeCurrentValue >= 0 ? Infinity : -Infinity;
+      if (isNaN(numDivideValue)) {
+        console.warn('div(): Second operand is not a valid number:', expr);
+        return undefined;
+      }
+      if (numDivideValue === 0) {
+        console.warn('div(): Division by zero');
+        return currentValue >= 0 ? Infinity : -Infinity;
+      }
       
-      return safeCurrentValue / numDivideValue;
+      return currentValue / numDivideValue;
     },
     
-    'mod': (data: unknown, expr: unknown): number => {
-      // Convert the current data to a number
+    'mod': (data: unknown, expr: unknown): number | undefined => {
+      // Only support math operations between numbers
       const currentValue = Number(data);
-      const safeCurrentValue = isNaN(currentValue) ? 0 : currentValue;
+      if (isNaN(currentValue)) {
+        console.warn('mod(): First operand is not a valid number:', data);
+        return undefined;
+      }
       
       // Evaluate the expression if it's a string (like template expressions)
       let modValue: unknown = expr;
@@ -660,10 +658,16 @@ export function createPipelineFunctions(
       }
       
       const numModValue = Number(modValue);
-      if (isNaN(numModValue)) return safeCurrentValue;
-      if (numModValue === 0) return NaN;
+      if (isNaN(numModValue)) {
+        console.warn('mod(): Second operand is not a valid number:', expr);
+        return undefined;
+      }
+      if (numModValue === 0) {
+        console.warn('mod(): Modulo by zero');
+        return undefined;
+      }
       
-      return safeCurrentValue % numModValue;
+      return currentValue % numModValue;
     },
     
     'count': (data: unknown): number => {

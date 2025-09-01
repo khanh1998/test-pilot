@@ -83,14 +83,14 @@ describe('Arithmetic Pipeline Functions', () => {
       expect(result).toBe(15);
     });
 
-    it('should return original value when adding invalid data', () => {
+    it('should return undefined when adding invalid data', () => {
       const result = evaluator.evaluate('10 | add("invalid")', {});
-      expect(result).toBe(10);
+      expect(result).toBeUndefined();
     });
 
-    it('should return 0 when pipeline data is invalid', () => {
+    it('should return undefined when pipeline data is invalid', () => {
       const result = evaluator.evaluate('"invalid" | add(5)', {});
-      expect(result).toBe(0);
+      expect(result).toBeUndefined();
     });
 
     it('should work with template expressions', () => {
@@ -140,9 +140,9 @@ describe('Arithmetic Pipeline Functions', () => {
       expect(result).toBe(7);
     });
 
-    it('should return original value when subtracting invalid data', () => {
+    it('should return undefined when subtracting invalid data', () => {
       const result = evaluator.evaluate('10 | sub("invalid")', {});
-      expect(result).toBe(10);
+      expect(result).toBeUndefined();
     });
 
     it('should work with template expressions', () => {
@@ -268,7 +268,7 @@ describe('Arithmetic Pipeline Functions', () => {
 
     it('should handle modulo by zero', () => {
       const result = evaluator.evaluate('10 | mod(0)', {});
-      expect(result).toBeNaN();
+      expect(result).toBeUndefined();
     });
 
     it('should handle decimal modulo', () => {
@@ -407,7 +407,7 @@ describe('Arithmetic Pipeline Functions', () => {
   describe('Error handling and edge cases', () => {
     it('should handle missing template values gracefully', () => {
       const result = evaluator.evaluate('10 | add({{res:nonexistent.$.value}})', {});
-      expect(result).toBe(10); // Should return original value when template fails
+      expect(result).toBeUndefined(); // Should return undefined when template fails
     });
 
     it('should handle null/undefined in templates', () => {
@@ -421,7 +421,7 @@ describe('Arithmetic Pipeline Functions', () => {
       });
       
       const result = evaluator.evaluate('10 | add({{res:null-step.$.value}})', {});
-      expect(result).toBe(10); // Should return original value
+      expect(result).toBe(10); // null converts to 0, so 10 + 0 = 10
     });
 
     it('should handle very large numbers', () => {
@@ -444,12 +444,12 @@ describe('Arithmetic Pipeline Functions', () => {
 
     it('should handle array to number conversion', () => {
       const result = evaluator.evaluate('[1,2,3] | add(5)', {});
-      expect(result).toBe(5); // Array converts to NaN, so returns 0, then 0 + 5 = 5
+      expect(result).toBeUndefined(); // Array is not a valid number
     });
 
     it('should handle object to number conversion', () => {
       const result = evaluator.evaluate('{} | add(5)', {});
-      expect(result).toBe(5); // Object converts to NaN, so returns 0, then 0 + 5 = 5
+      expect(result).toBeUndefined(); // Object is not a valid number
     });
   });
 
