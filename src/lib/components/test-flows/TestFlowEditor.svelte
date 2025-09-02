@@ -3,6 +3,7 @@
   import SmartEndpointSelector from './SmartEndpointSelector.svelte';
   import FlowRunner from './FlowRunner.svelte';
   import FlowOutputEditor from './FlowOutputEditor.svelte';
+  import FlowLogsViewer from './FlowLogsViewer.svelte';
   import SimplifiedEnvironmentSelector from '../environments/SimplifiedEnvironmentSelector.svelte';
   import { fade } from 'svelte/transition';
   import type { TestFlowData, Endpoint, ExecutionState, EndpointExecutionState, Parameter } from './types';
@@ -150,6 +151,16 @@
   let isOutputEditorMounted = false;
   let outputResults: Record<string, unknown> = {};
   let outputExecutionError: unknown = null;
+
+  // Flow logs viewer state
+  let isLogsViewerOpen = false;
+  let isLogsViewerMounted = false;
+  let executionLogs: Array<{
+    level: 'info' | 'debug' | 'error' | 'warning';
+    message: string;
+    details?: string;
+    timestamp: Date;
+  }> = [];
 
   // Execution preferences - default values
   let preferences = {
@@ -390,6 +401,9 @@
     outputResults = {};
     outputExecutionError = null;
 
+    // Clear execution logs
+    executionLogs = [];
+
     // Dispatch reset event to parent
     dispatch('reset');
   }
@@ -425,6 +439,17 @@
   }
 
   function handleLog(event: CustomEvent) {
+    const { level, message, details } = event.detail;
+    
+    // Add log to our local logs array with timestamp
+    executionLogs = [...executionLogs, {
+      level,
+      message,
+      details,
+      timestamp: new Date()
+    }];
+    
+    // Also dispatch to parent for any additional handling
     dispatch('log', event.detail);
   }
 
@@ -529,6 +554,32 @@
     handleChange();
   }
 
+  // Flow logs viewer functions
+  function openLogsViewer() {
+    isLogsViewerMounted = true;
+    isLogsViewerOpen = false;
+
+    // Add a class to the body to prevent scrolling while modal is open
+    document.body.classList.add('overflow-hidden');
+
+    // Use requestAnimationFrame to ensure the DOM is updated before applying the animation
+    requestAnimationFrame(() => {
+      isLogsViewerOpen = true;
+    });
+  }
+
+  function closeLogsViewer() {
+    isLogsViewerOpen = false;
+
+    // Add a small delay to allow for animation to complete before unmounting
+    setTimeout(() => {
+      isLogsViewerMounted = false;
+
+      // Remove the class from body to re-enable scrolling
+      document.body.classList.remove('overflow-hidden');
+    }, 300);
+  }
+
   // No longer needed - we use progress and currentStep directly from executionStore
   // This function was previously calculating progress and current step
   // but those values are already available in the executionStore
@@ -620,6 +671,28 @@
           </svg>
           Parameters
         </button>
+
+        <!-- View Logs Button (only show when logs are available) -->
+        {#if executionLogs.length > 0}
+          <button
+            class="mr-2 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+            on:click={openLogsViewer}
+            disabled={isRunning}
+          >
+            <svg class="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              />
+            </svg>
+            View Logs
+            <span class="ml-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-gray-100 text-xs font-medium text-gray-600">
+              {executionLogs.length}
+            </span>
+          </button>
+        {/if}
 
         <!-- Run Flow Button -->
         <button
@@ -951,5 +1024,15 @@
     hasExecutionData={Object.keys(outputResults).length > 0 || outputExecutionError !== null}
     on:close={closeOutputEditor}
     on:save={handleOutputSave}
+  />
+{/if}
+
+<!-- Flow Logs Viewer Slide-out Panel -->
+{#if isLogsViewerMounted}
+  <FlowLogsViewer
+    isOpen={isLogsViewerOpen}
+    isMounted={true}
+    logs={executionLogs}
+    on:close={closeLogsViewer}
   />
 {/if}
