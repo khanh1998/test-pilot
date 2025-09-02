@@ -30,9 +30,14 @@
       return;
     }
 
+    // Get the first sub-environment as default
+    const subEnvironments = Object.keys(selectedEnv.config.environments || {});
+    const defaultSubEnv = subEnvironments.length > 0 ? subEnvironments[0] : undefined;
+
     const newMapping: EnvironmentMapping = {
       environmentId: selectedEnvironmentId,
       environmentName: selectedEnv.name,
+      selectedSubEnvironment: defaultSubEnv,
       parameterMappings: {}
     };
 
@@ -56,6 +61,17 @@
     linkedEnvironments = linkedEnvironments.map(link => 
       link.environmentId === environmentId 
         ? { ...link, parameterMappings }
+        : link
+    );
+    
+    dispatch('change', { linkedEnvironments });
+  }
+
+  // Handle sub-environment selection change
+  function handleSubEnvironmentChange(environmentId: number, selectedSubEnvironment: string) {
+    linkedEnvironments = linkedEnvironments.map(link => 
+      link.environmentId === environmentId 
+        ? { ...link, selectedSubEnvironment }
         : link
     );
     
@@ -140,6 +156,12 @@
       {#each linkedEnvironments as link, index}
         {@const environment = environments.find(env => env.id === link.environmentId)}
         {#if environment}
+          {@const subEnvironments = Object.keys(environment.config.environments || {})}
+          {@const selectedSubEnv = link.selectedSubEnvironment || (subEnvironments.length > 0 ? subEnvironments[0] : undefined)}
+          <!-- Initialize selectedSubEnvironment if not set -->
+          {#if subEnvironments.length > 0 && !link.selectedSubEnvironment}
+            {(link.selectedSubEnvironment = subEnvironments[0], '')}
+          {/if}
           <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
             <div class="flex items-center justify-between mb-4">
               <div>
@@ -173,11 +195,39 @@
               </div>
             </div>
 
+            <!-- Sub-Environment Selection -->
+            {#if subEnvironments.length > 0}
+              <div class="mb-4 flex items-center gap-3">
+                <span class="text-sm font-medium text-gray-700">Sub-Environment:</span>
+                <div class="flex gap-1">
+                  {#each subEnvironments as subEnv}
+                    <button
+                      class="px-2 py-1 text-xs font-medium rounded transition-colors {selectedSubEnv === subEnv 
+                        ? 'bg-blue-600 text-white' 
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}"
+                      on:click={() => handleSubEnvironmentChange(link.environmentId, subEnv)}
+                      {disabled}
+                    >
+                      {environment.config.environments[subEnv]?.name || subEnv}
+                    </button>
+                  {/each}
+                </div>
+              </div>
+            {:else}
+              <div class="mb-4 flex items-center gap-2 text-sm text-yellow-700 bg-yellow-50 px-3 py-2 rounded">
+                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16c-.77.833.192 2.5 1.732 2.5z"></path>
+                </svg>
+                No sub-environments configured
+              </div>
+            {/if}
+
             <!-- Parameter Mapping Component -->
             <EnvironmentParameterMapper
               {environment}
               {flowParameters}
               parameterMappings={link.parameterMappings}
+              selectedSubEnvironment={selectedSubEnv}
               {disabled}
               on:change={handleParameterMappingChange}
             />

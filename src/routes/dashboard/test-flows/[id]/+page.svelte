@@ -423,147 +423,144 @@
             </div>
 
             <div class="space-y-8">
-              <!-- Flow Information -->
-              <div class="max-w-lg">
-                <h3 class="text-lg font-medium text-gray-800 mb-4">Flow Information</h3>
-                <div class="space-y-4">
-                  <!-- Flow Name -->
-                  <div>
-                    <label for="flowName" class="block text-sm font-medium text-gray-700 mb-2">
-                      Name <span class="text-red-500">*</span>
-                    </label>
-                    <input
-                      id="flowName"
-                      type="text"
-                      bind:value={testFlow.name}
-                      oninput={markDirty}
-                      class="w-full rounded-md border px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none
-                             {(!testFlow.name || !testFlow.name.trim()) ? 'border-red-300 bg-red-50' : 'border-gray-300'}"
-                      placeholder="Enter flow name"
-                      required
-                    />
-                    {#if !testFlow.name || !testFlow.name.trim()}
-                      <p class="mt-1 text-sm text-red-600">Flow name is required</p>
-                    {/if}
-                  </div>
-                  
-                  <!-- Flow Description -->
-                  <div>
-                    <label for="flowDescription" class="block text-sm font-medium text-gray-700 mb-2">
-                      Description
-                    </label>
-                    <textarea
-                      id="flowDescription"
-                      bind:value={testFlow.description}
-                      oninput={markDirty}
-                      rows="3"
-                      class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none resize-y"
-                      placeholder="Enter a description for this test flow"
-                    ></textarea>
+              <!-- Flow Information and API Hosts in one row -->
+              <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <!-- Flow Information -->
+                <div>
+                  <h3 class="text-lg font-medium text-gray-800 mb-4">Flow Information</h3>
+                  <div class="space-y-4">
+                    <!-- Flow Name -->
+                    <div>
+                      <label for="flowName" class="block text-sm font-medium text-gray-700 mb-2">
+                        Name <span class="text-red-500">*</span>
+                      </label>
+                      <input
+                        id="flowName"
+                        type="text"
+                        bind:value={testFlow.name}
+                        oninput={markDirty}
+                        class="w-full rounded-md border px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none
+                               {(!testFlow.name || !testFlow.name.trim()) ? 'border-red-300 bg-red-50' : 'border-gray-300'}"
+                        placeholder="Enter flow name"
+                        required
+                      />
+                      {#if !testFlow.name || !testFlow.name.trim()}
+                        <p class="mt-1 text-sm text-red-600">Flow name is required</p>
+                      {/if}
+                    </div>
+                    
+                    <!-- Flow Description -->
+                    <div>
+                      <label for="flowDescription" class="block text-sm font-medium text-gray-700 mb-2">
+                        Description
+                      </label>
+                      <textarea
+                        id="flowDescription"
+                        bind:value={testFlow.description}
+                        oninput={markDirty}
+                        rows="3"
+                        class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none resize-y"
+                        placeholder="Enter a description for this test flow"
+                      ></textarea>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <!-- API Hosts Settings -->
-              <div class="mb-6">
-                <div class="flex items-center justify-between mb-3">
-                  <h3 class="text-lg font-medium text-gray-800">API Hosts</h3>
-                  <button
-                    class="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700 flex items-center"
-                    onclick={() => showAddApiModal = true}
-                  >
-                    <svg class="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-                    </svg>
-                    Add API Host
-                  </button>
-                </div>
-                
-                <p class="mb-4 text-sm text-gray-600">
-                  Configure the hosts for each API used in this test flow. Each endpoint in your flow will use its corresponding API host.
-                </p>
-                
-                <!-- API Hosts List -->
-                {#if flowJson.settings.api_hosts && Object.keys(flowJson.settings.api_hosts).length > 0}
-                  <div class="rounded-lg border border-gray-200 overflow-hidden">
-                    <table class="min-w-full divide-y divide-gray-200">
-                      <thead class="bg-gray-50">
-                        <tr>
-                          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/3">API Name</th>
-                          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Host URL</th>
-                          <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-16">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody class="bg-white divide-y divide-gray-200">
-                        {#each Object.entries(flowJson.settings.api_hosts || {}) as [apiId, apiInfo], index}
-                          <tr class={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                            <td class="px-4 py-3 whitespace-nowrap">
-                              <div class="flex items-center">
-                                <input
-                                  type="text"
-                                  bind:value={apiInfo.name}
-                                  oninput={markDirty}
-                                  class="rounded border border-gray-300 px-3 py-1.5 text-sm w-full"
-                                  placeholder="API Name"
-                                />
-                              </div>
-                              <div class="text-xs text-gray-500 mt-1">ID: {apiId}</div>
-                            </td>
-                            <td class="px-4 py-3 whitespace-nowrap">
-                              <input
-                                type="text"
-                                bind:value={apiInfo.url}
-                                oninput={markDirty}
-                                class="w-full rounded border border-gray-300 px-3 py-1.5 text-sm"
-                                placeholder="https://api.example.com"
-                              />
-                            </td>
-                            <td class="px-4 py-3 whitespace-nowrap text-right">
-                              <button
-                                class="inline-flex items-center justify-center p-1.5 rounded-full text-red-600 hover:text-white hover:bg-red-600 transition-colors"
-                                onclick={() => {
-                                  if (flowJson.settings.api_hosts) {
-                                    delete flowJson.settings.api_hosts[apiId];
-                                    flowJson.settings.api_hosts = {...flowJson.settings.api_hosts};
-                                    markDirty();
-                                  }
-                                }}
-                                aria-label="Delete API host"
-                                title="Delete this API host"
-                              >
-                                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                                </svg>
-                              </button>
-                            </td>
-                          </tr>
-                        {/each}
-                      </tbody>
-                    </table>
-                  </div>
-                  <div class="mt-2 text-xs text-gray-500 flex items-center">
-                    <svg class="h-4 w-4 mr-1 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                    </svg>
-                    API hosts can be referenced in test steps by their ID
-                  </div>
-                {:else}
-                  <div class="flex flex-col items-center justify-center bg-gray-50 border border-gray-200 rounded-lg p-8 text-center">
-                    <svg class="h-12 w-12 text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path>
-                    </svg>
-                    <p class="mb-4 text-gray-600">No API hosts configured yet</p>
+                <!-- API Hosts Settings -->
+                <div>
+                  <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-lg font-medium text-gray-800">API Hosts</h3>
                     <button
-                      class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md flex items-center text-sm"
+                      class="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700 flex items-center"
                       onclick={() => showAddApiModal = true}
                     >
-                      <svg class="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg class="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
                       </svg>
-                      Add Your First API Host
+                      Add API Host
                     </button>
                   </div>
-                {/if}
+                  
+                  <p class="mb-4 text-sm text-gray-600">
+                    Configure the hosts for each API used in this test flow. Each endpoint in your flow will use its corresponding API host.
+                  </p>
+                  
+                  <!-- API Hosts List -->
+                  {#if flowJson.settings.api_hosts && Object.keys(flowJson.settings.api_hosts).length > 0}
+                    <div class="rounded-lg border border-gray-200 overflow-hidden">
+                      <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                          <tr>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">API Name</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Host URL</th>
+                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-16">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                          {#each Object.entries(flowJson.settings.api_hosts || {}) as [apiId, apiInfo], index}
+                            <tr class={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                              <td class="px-4 py-3 whitespace-nowrap">
+                                <div class="flex items-center space-x-2">
+                                  <input
+                                    type="text"
+                                    bind:value={apiInfo.name}
+                                    oninput={markDirty}
+                                    class="rounded border border-gray-300 px-3 py-1.5 text-sm flex-1"
+                                    placeholder="API Name"
+                                  />
+                                  <span class="text-xs text-gray-500 whitespace-nowrap">ID: {apiId}</span>
+                                </div>
+                              </td>
+                              <td class="px-4 py-3 whitespace-nowrap">
+                                <input
+                                  type="text"
+                                  bind:value={apiInfo.url}
+                                  oninput={markDirty}
+                                  class="w-full rounded border border-gray-300 px-3 py-1.5 text-sm"
+                                  placeholder="https://api.example.com"
+                                />
+                              </td>
+                              <td class="px-4 py-3 whitespace-nowrap text-right">
+                                <button
+                                  class="inline-flex items-center justify-center p-1.5 rounded-full text-red-600 hover:text-white hover:bg-red-600 transition-colors"
+                                  onclick={() => {
+                                    if (flowJson.settings.api_hosts) {
+                                      delete flowJson.settings.api_hosts[apiId];
+                                      flowJson.settings.api_hosts = {...flowJson.settings.api_hosts};
+                                      markDirty();
+                                    }
+                                  }}
+                                  aria-label="Delete API host"
+                                  title="Delete this API host"
+                                >
+                                  <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                  </svg>
+                                </button>
+                              </td>
+                            </tr>
+                          {/each}
+                        </tbody>
+                      </table>
+                    </div>
+                  {:else}
+                    <div class="flex flex-col items-center justify-center bg-gray-50 border border-gray-200 rounded-lg p-8 text-center">
+                      <svg class="h-12 w-12 text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path>
+                      </svg>
+                      <p class="mb-4 text-gray-600">No API hosts configured yet</p>
+                      <button
+                        class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md flex items-center text-sm"
+                        onclick={() => showAddApiModal = true}
+                      >
+                        <svg class="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                        </svg>
+                        Add Your First API Host
+                      </button>
+                    </div>
+                  {/if}
+                </div>
               </div>
 
               <!-- Environment Links Settings -->

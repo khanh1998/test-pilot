@@ -6,6 +6,7 @@
   export let environment: Environment;
   export let flowParameters: FlowParameter[] = [];
   export let parameterMappings: Record<string, string> = {};
+  export let selectedSubEnvironment: string | undefined = undefined;
   export let disabled: boolean = false;
 
   const dispatch = createEventDispatcher<{
@@ -34,6 +35,36 @@
     
     return Array.from(variables).sort();
   }
+
+  // Get the current value of an environment variable for the selected sub-environment
+  // Make this reactive to selectedSubEnvironment changes
+  $: getEnvironmentVariableValue = (variableName: string): string => {
+    if (!selectedSubEnvironment || !environment.config.environments[selectedSubEnvironment]) {
+      return 'No sub-environment selected';
+    }
+
+    const subEnv = environment.config.environments[selectedSubEnvironment];
+    
+    // Check if it's an API host variable
+    if (variableName.startsWith('api_host_')) {
+      const apiId = variableName.replace('api_host_', '');
+      return subEnv.api_hosts?.[apiId] || 'Not configured';
+    }
+    
+    // Check sub-environment variables
+    if (subEnv.variables && variableName in subEnv.variables) {
+      const value = subEnv.variables[variableName];
+      return typeof value === 'string' ? value : JSON.stringify(value);
+    }
+    
+    // Check default value from variable definitions
+    if (environment.config.variable_definitions?.[variableName]) {
+      const defaultValue = environment.config.variable_definitions[variableName].default_value;
+      return defaultValue ? (typeof defaultValue === 'string' ? defaultValue : JSON.stringify(defaultValue)) : 'No default value';
+    }
+    
+    return 'Not configured';
+  };
 
   // Handle parameter mapping change
   function handleMappingChange(parameterName: string, variableName: string) {
@@ -74,13 +105,14 @@
       </div>
     {:else}
       <div class="space-y-3">
-        <div class="grid grid-cols-2 gap-6 text-xs font-medium text-gray-500 uppercase tracking-wide">
+        <div class="grid grid-cols-3 gap-6 text-xs font-medium text-gray-500 uppercase tracking-wide">
           <div>Flow Parameter</div>
           <div>Environment Variable</div>
+          <div>Current Value</div>
         </div>
         
         {#each flowParameters as parameter}
-          <div class="grid grid-cols-2 gap-6 items-start">
+          <div class="grid grid-cols-3 gap-6 items-start">
             <div>
               <div class="flex items-center space-x-2">
                 <span class="inline-flex items-center rounded bg-gray-100 px-2 py-1 text-xs font-medium text-gray-800">
@@ -108,6 +140,20 @@
                 {/each}
               </select>
             </div>
+            
+            <div>
+              {#if parameterMappings[parameter.name]}
+                {@const mappedVariable = parameterMappings[parameter.name]}
+                {@const currentValue = getEnvironmentVariableValue(mappedVariable)}
+                <div class="flex items-center space-x-2">
+                  <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {currentValue === 'Not configured' || currentValue === 'No sub-environment selected' || currentValue === 'No default value' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}">
+                    {currentValue}
+                  </span>
+                </div>
+              {:else}
+                <span class="text-xs text-gray-400">No mapping selected</span>
+              {/if}
+            </div>
           </div>
         {/each}
       </div>
@@ -116,45 +162,56 @@
 
   <!-- Environment Details Section -->
   <div>
-    <h5 class="text-sm font-medium text-gray-900 mb-3">Environment Details</h5>
+    <h5 class="text-sm font-medium text-gray-900 mb-3">API Hosts</h5>
     
     <div class="space-y-4 text-sm">
-      <div>
-        <span class="font-medium text-gray-700">Sub-environments & API hosts:</span>
-        {#if subEnvironments.length > 0}
-          <div class="mt-2 space-y-3">
-            {#each subEnvironments as subEnv}
-              {@const subEnvConfig = environment.config.environments[subEnv]}
-              <div class="border border-gray-200 rounded-md p-3 bg-gray-50">
-                <div class="flex items-center justify-between mb-2">
-                  <span class="inline-flex items-center rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800">
-                    {subEnv}
-                  </span>
-                  <span class="text-xs text-gray-600">{subEnvConfig?.name || subEnv}</span>
-                </div>
-                
-                {#if subEnvConfig?.api_hosts && Object.keys(subEnvConfig.api_hosts).length > 0}
-                  <div class="space-y-1">
-                    <span class="text-xs font-medium text-gray-600">API hosts:</span>
-                    <div class="space-y-1">
-                      {#each Object.entries(subEnvConfig.api_hosts) as [apiId, hostUrl]}
-                        <div class="flex items-center justify-between text-xs">
-                          <span class="font-mono text-purple-700">api_host_{apiId}</span>
-                          <span class="text-gray-600 truncate ml-2">{hostUrl}</span>
-                        </div>
-                      {/each}
-                    </div>
-                  </div>
-                {:else}
-                  <div class="text-xs text-gray-500">No API hosts configured</div>
-                {/if}
+      {#if selectedSubEnvironment && environment.config.environments[selectedSubEnvironment]}
+        {@const subEnvConfig = environment.config.environments[selectedSubEnvironment]}
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="font-medium text-gray-700">Active Environment:</span>
+            <div class="group relative">
+              <svg class="h-4 w-4 text-gray-400 hover:text-gray-600 cursor-help" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              </svg>
+              <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
+                API hosts in this environment will override the default API hosts of the flow
+                <div class="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
               </div>
-            {/each}
+            </div>
           </div>
-        {:else}
-          <span class="text-gray-500">None configured</span>
-        {/if}
-      </div>
+          <div class="mt-2">
+            <div class="border border-gray-200 rounded-md p-3 bg-gray-50">
+              <div class="flex items-center justify-between mb-2">
+                <span class="inline-flex items-center rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800">
+                  {selectedSubEnvironment}
+                </span>
+                <span class="text-xs text-gray-600">{subEnvConfig?.name || selectedSubEnvironment}</span>
+              </div>
+              
+              {#if subEnvConfig?.api_hosts && Object.keys(subEnvConfig.api_hosts).length > 0}
+                <div class="space-y-1">
+                  <span class="text-xs font-medium text-gray-600">API hosts:</span>
+                  <div class="space-y-1">
+                    {#each Object.entries(subEnvConfig.api_hosts) as [apiId, hostUrl]}
+                      <div class="flex items-center justify-between text-xs">
+                        <span class="font-mono text-purple-700">api_host_{apiId}</span>
+                        <span class="text-gray-600 truncate ml-2">{hostUrl}</span>
+                      </div>
+                    {/each}
+                  </div>
+                </div>
+              {:else}
+                <div class="text-xs text-gray-500">No API hosts configured</div>
+              {/if}
+            </div>
+          </div>
+        </div>
+      {:else}
+        <div class="text-center py-4">
+          <span class="text-gray-500">No sub-environment selected</span>
+        </div>
+      {/if}
     </div>
   </div>
 </div>
