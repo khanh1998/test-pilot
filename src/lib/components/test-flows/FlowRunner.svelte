@@ -1,11 +1,8 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
-  import type { TestFlowData, FlowParameter, ExecutionState, FlowStep, StepEndpoint } from './types';
-  // Import assertion types (will be used when typing the endpoint.assertions array)
-  import type { Assertion } from '$lib/assertions/types';
-  import { runAssertions } from '$lib/assertions/engine';
-  import { resolveTemplate, createTemplateContextFromFlowRunner, type TemplateContext } from '$lib/template';
+  import { createEventDispatcher, onMount, onDestroy } from 'svelte';
+  import type { TestFlowData, FlowParameter, ExecutionState, FlowStep } from './types';
   import FlowParameterEditor from './FlowParameterEditor.svelte';
+  import { FlowRunner, type FlowRunnerOptions, type ExecutionPreferences } from '$lib/flow-runner';
 
   // Props
   export let flowData: TestFlowData = {
@@ -19,9 +16,9 @@
       }
     },
     steps: [],
-  }; // The complete test flow data
-  export let isRunning: boolean = false; // Whether the flow is currently running
-  export let executionState: ExecutionState = {}; // Execution state for each endpoint
+  };
+  export let isRunning: boolean = false;
+  export let executionState: ExecutionState = {};
 
   // Environment context for template resolution
   export let environments: import('$lib/types/environment').Environment[] = [];
@@ -40,7 +37,20 @@
   // Control visibility of buttons - set to false when used by TestFlowEditor
   export let showButtons = true;
 
-  // Computed Parameter values for template resolution
+  // Execution preferences
+  export let preferences: ExecutionPreferences = {
+    parallelExecution: true,
+    stopOnError: true,
+    serverCookieHandling: false,
+    retryCount: 0,
+    timeout: 30000
+  };
+
+  // Local state derived from flow runner
+  let currentStep = 0;
+  let totalSteps = 0;
+  let progress = 0;
+  let error: unknown = null;
   let parameterValues: Record<string, unknown> = {};
 
   // Computed environment variables for template resolution
@@ -54,7 +64,6 @@
     const envData: Record<string, unknown> = {};
     const subEnvironment = env.config.environments[subEnv];
 
-    // Add variable values from the selected sub-environment
     Object.entries(env.config.variable_definitions).forEach(([varName, varDef]) => {
       const value = subEnvironment.variables[varName];
       if (value !== undefined) {
@@ -64,7 +73,6 @@
       }
     });
 
-    // Add API hosts from the sub-environment
     if (subEnvironment.api_hosts) {
       Object.entries(subEnvironment.api_hosts).forEach(([apiId, hostUrl]) => {
         envData[`api_host_${apiId}`] = hostUrl;
@@ -74,63 +82,35 @@
     return envData;
   }
 
-  // Execution preferences
-  export let preferences = {
-    parallelExecution: true, // Whether to execute endpoints in parallel
-    stopOnError: true, // Whether to stop execution on error
-    serverCookieHandling: false, // Whether to use server for cookie handling
-    retryCount: 0, // Number of retries for failed requests
-    timeout: 30000 // Request timeout in ms
-  };
-
-  // Local state
-  let currentStep = 0;
-  let totalSteps = 0;
-  let progress = 0; // 0-100
-  let error: unknown = null;
-  let storedResponses: Record<string, unknown> = {}; // Stores responses by their names
-  let storedTransformations: Record<string, Record<string, unknown>> = {}; // Stores transformed values by endpoint id and alias
-  
-
-  // Parameters panel state
-  let newParameter = {
-    name: '',
-    type: 'string' as 'string' | 'number' | 'boolean' | 'object' | 'array' | 'null',
-    value: '',
-    defaultValue: '',
-    description: '',
-    required: false
-  };
-
-  import { isDesktop } from '$lib/environment';
-import {
-	executeDirectEndpoint,
-	executeProxiedEndpoint,
-	type RequestCookie
-} from '$lib/http_client/test-flow';
-
-  // Cookie management
-  let cookieStore: Map<string, Array<RequestCookie>> = new Map();
-  // Format: Map<"stepId-endpointIndex", Array<RequestCookie>>
+  // Flow runner instance
+  let flowRunner: FlowRunner;
+  let previousEnvironmentVariables: Record<string, unknown> = {};
 
   // Emitted events will be handled by the parent component
   const dispatch = createEventDispatcher();
 
   // Add a log entry to the execution logs
-  function addLog(
-    level: 'info' | 'debug' | 'error' | 'warning',
-    message: string,
-    details?: string
-  ) {
+  function addLog(level: 'info' | 'debug' | 'error' | 'warning', message: string, details?: string) {
     dispatch('log', { level, message, details });
   }
 
-  // Initialize when component mounts
+  // Initialize when component mounts or when flowData or environment changes
   $: if (flowData && flowData.steps) {
     totalSteps = flowData.steps.length;
+    initializeFlowRunner();
   }
 
-  // No need to check apiHost anymore as we only use api_hosts
+  // Re-initialize when environment variables change (but not on initial load)
+  $: if (flowRunner && environmentVariables) {
+    // Only reinitialize if environment variables actually changed
+    const envVarsChanged = JSON.stringify(previousEnvironmentVariables) !== JSON.stringify(environmentVariables);
+    
+    if (envVarsChanged && Object.keys(environmentVariables).length > 0) {
+      console.log('Environment variables changed, reinitializing FlowRunner');
+      previousEnvironmentVariables = { ...environmentVariables };
+      initializeFlowRunner();
+    }
+  }
 
   // Ensure endpoints are available
   $: if (!flowData.endpoints) {
@@ -143,11 +123,8 @@ import {
     flowData.parameters = [];
   }
 
-  // Note: outputs array is initialized in TestFlowEditor and should not be reset here
-
   // Watch executionState for changes and emit update events
   $: if (Object.keys(executionState).length > 0) {
-    // Only emit if we're not in initialization
     if (isRunning) {
       dispatch('executionStateUpdate', executionState);
     }
@@ -157,9 +134,44 @@ import {
   $: executionState.progress = progress;
   $: executionState.currentStep = currentStep;
 
-  // Add event listener for the global 'runFlow' event
-  import { onMount, onDestroy } from 'svelte';
+  function initializeFlowRunner() {
+    const options: FlowRunnerOptions = {
+      flowData,
+      preferences,
+      environments,
+      selectedEnvironment,
+      environmentVariables,
+      onLog: addLog,
+      onExecutionStateUpdate: (state) => {
+        executionState = state;
+        currentStep = state.currentStep || 0;
+        progress = state.progress || 0;
+        dispatch('executionStateUpdate', state);
+      },
+      onEndpointStateUpdate: (data) => {
+        dispatch('endpointStateUpdate', data);
+      },
+      onStepExecutionComplete: (data) => {
+        dispatch('stepExecutionComplete', data);
+      },
+      onExecutionStart: () => {
+        dispatch('executionStart');
+      },
+      onExecutionComplete: (data) => {
+        isRunning = false;
+        error = data.error;
+        parameterValues = data.parameterValues;
+        dispatch('executionComplete', data);
+      }
+    };
 
+    flowRunner = new FlowRunner(options);
+    
+    // Store current environment variables for comparison
+    previousEnvironmentVariables = { ...environmentVariables };
+  }
+
+  // Global event handlers
   function handleRunFlowEvent() {
     console.log('Received runFlow event, starting flow execution');
     runFlow();
@@ -171,1052 +183,97 @@ import {
   }
 
   onMount(() => {
-    // Add global event listeners
     window.addEventListener('runFlow', handleRunFlowEvent);
     window.addEventListener('stopFlow', handleStopFlowEvent);
   });
 
   onDestroy(() => {
-    // Clean up event listeners when the component is destroyed
     window.removeEventListener('runFlow', handleRunFlowEvent);
     window.removeEventListener('stopFlow', handleStopFlowEvent);
   });
 
-  // Execute a single step (exposed as a public method)
+  // Public methods
   export async function executeSingleStep(step: FlowStep, stepIndex?: number) {
-    if (!step || !step.step_id) {
-      console.error('Invalid step provided for execution');
+    if (!flowRunner) {
+      console.error('Flow runner not initialized');
       return;
     }
 
-    // Validate that at least one API host is configured
-    if (!validateApiHosts()) {
-      error = new Error(
-        'No API Hosts are configured. Please configure at least one API host before running the flow.'
-      );
-      dispatch('error', { message: 'No API Hosts are configured' });
-      return;
-    }
-
-    // Set a local running flag just for this step execution
-    const localIsRunning = isRunning;
     isRunning = true;
-
-    try {
-      // Log that we're executing a single step
-      addLog('info', `Executing step ${step.step_id} individually`, JSON.stringify(step));
-
-      // Execute the step
-      await executeStep(step);
-
-      // Notify step execution completed
-      dispatch('stepExecutionComplete', {
-        stepId: step.step_id,
-        stepIndex: stepIndex,
-        success: true
-      });
-    } catch (err: unknown) {
-      console.error(`Error executing step ${step.step_id}:`, err);
-
-      // Notify step execution failed
-      dispatch('stepExecutionComplete', {
-        stepId: step.step_id,
-        stepIndex: stepIndex,
-        success: false,
-        error: err
-      });
-    } finally {
-      // Restore original running state
-      isRunning = localIsRunning;
-    }
+    const result = await flowRunner.executeSingleStep(step, stepIndex);
+    isRunning = flowRunner.isRunning;
+    
+    return result;
   }
 
-  // Flag to signal execution should be stopped
-  let shouldStopExecution = false;
-
-  // Stop the flow execution
   export function stopExecution() {
-    if (isRunning) {
-      shouldStopExecution = true;
-      addLog('info', 'User requested to stop execution');
+    if (flowRunner) {
+      flowRunner.stopExecution();
     }
   }
 
-  // Start the flow execution
   export async function runFlow() {
-    // Reset state
-    resetExecution();
-    shouldStopExecution = false;
-
-    // Validate that at least one API host is configured
-    if (!validateApiHosts()) {
-      error = new Error(
-        'No API Hosts are configured. Please configure at least one API host before running the flow.'
-      );
-      isRunning = false;
-      dispatch('executionComplete', {
-        success: false,
-        error,
-        storedResponses,
-        parameterValues,
-        transformResponse,
-      });
+    if (!flowRunner) {
+      console.error('Flow runner not initialized');
       return;
     }
-
-    // Prepare ephemeral parameters for this execution (re-evaluated each time)
-    // Priority: Environment Variable → Default Value → User Input (if required and missing)
-    prepareParameters();
-    if (!checkRequiredParameters()) {
-      // Show the Parameter input modal if there are missing required values
-      addLog(
-        'info',
-        'Required parameters need input',
-        `${parametersWithMissingValues.length} required Parameter(s) need values`
-      );
-      showParameterInputModal = true;
-      return;
-    }
-
-    // All parameters are ready, execute the flow
-    executeFlowAfterParameterCheck();
-  }
-
-  // Execute flow after Parameter check
-  async function executeFlowAfterParameterCheck() {
-    // Notify parent that execution is starting
-    dispatch('executionStart');
 
     isRunning = true;
-    currentStep = 0;
-
-    try {
-      // Validate flow data
-      if (!flowData || !flowData.steps || !Array.isArray(flowData.steps)) {
-        throw new Error('Invalid flow data: missing steps array');
-      }
-
-      if (!flowData.endpoints || !Array.isArray(flowData.endpoints)) {
-        console.warn('Flow data is missing endpoints array');
-      }
-
-      // Execute steps in sequence
-      for (let i = 0; i < flowData.steps.length; i++) {
-        currentStep = i;
-        progress = Math.floor((i / totalSteps) * 100);
-
-        const step = flowData.steps[i];
-
-        // Execute this step
-        await executeStep(step);
-
-        // Check if we should continue after this step
-        if (error && preferences.stopOnError) {
-          break;
-        }
-
-        // Check for external stop signal
-        if (shouldStopExecution) {
-          addLog('info', 'Execution stopped by user');
-          break;
-        }
-      }
-
-      progress = 100;
-      
-      // Evaluate flow outputs if execution completed successfully
-      let flowOutputs: Record<string, unknown> = {};
-      if (!error) {
-        flowOutputs = evaluateFlowOutputs();
-      }
-    } catch (err: unknown) {
-      error = err;
-      console.error('Flow execution error:', err);
-    } finally {
+    const result = await flowRunner.runFlow();
+    
+    if (result.parametersWithMissingValues) {
+      parametersWithMissingValues = result.parametersWithMissingValues;
+      showParameterInputModal = true;
       isRunning = false;
-      dispatch('executionComplete', {
-        success: !error,
-        error,
-        storedResponses,
-        parameterValues,
-        transformResponse,
-        flowOutputs: !error ? evaluateFlowOutputs() : {},
-      });
-    }
-  }
-
-  // Execute a single step
-  async function executeStep(step: FlowStep) {
-    if (!step || !step.step_id) {
-      console.warn('Encountered invalid step:', step);
       return;
     }
 
-    if (!step.endpoints || !Array.isArray(step.endpoints) || step.endpoints.length === 0) {
-      console.log(`Step ${step.step_id} has no endpoints, skipping`);
-      return; // Skip empty steps
-    }
-
-    try {
-      if (preferences.parallelExecution) {
-        // Execute all endpoints in parallel and wait for all to complete
-        const promises = step.endpoints.map((endpoint: StepEndpoint, index: number) =>
-          executeEndpoint(endpoint, step.step_id, index)
-        );
-
-        await Promise.all(promises);
-      } else {
-        // Execute endpoints sequentially
-        for (let i = 0; i < step.endpoints.length; i++) {
-          await executeEndpoint(step.endpoints[i], step.step_id, i);
-
-          // Check if we should continue
-          if (error && preferences.stopOnError) {
-            break;
-          }
-
-          // Check for external stop signal
-          if (shouldStopExecution) {
-            addLog('info', 'Execution stopped by user');
-            break;
-          }
-        }
-      }
-    } catch (err: unknown) {
-      console.error(`Error executing step ${step.step_id}:`, err);
-      error = err;
-
-      // Propagate the error if stopOnError is true
-      if (preferences.stopOnError) {
-        throw err;
-      }
-    }
+    // Update local state from flow runner
+    isRunning = flowRunner.isRunning;
+    currentStep = flowRunner.currentStep;
+    progress = flowRunner.progress;
+    error = flowRunner.error;
+    executionState = flowRunner.executionState;
+    parameterValues = flowRunner.parameterValues;
   }
 
-  // Execute a single endpoint request
-  async function executeEndpoint(endpoint: StepEndpoint, stepId: string, endpointIndex: number) {
-    if (!endpoint || !endpoint.endpoint_id) {
-      console.error('Invalid endpoint configuration', endpoint);
-      return;
-    }
-
-    // Use stepId-endpointIndex format for easier reference by users in templates
-    // This makes it more intuitive than using the internal endpoint_id which users don't see
-    const endpointId = `${stepId}-${endpointIndex}`;
-
-    // Set initial status - create a new object to trigger reactivity
-    updateExecutionState(endpointId, {
-      status: 'running',
-      request: {},
-      response: null,
-      timing: 0
-    });
-
-    try {
-      // Make sure endpoints array exists
-      if (!flowData.endpoints || !Array.isArray(flowData.endpoints)) {
-        throw new Error(`No endpoints defined in the flow data`);
-      }
-
-      // Find the endpoint definition
-      const endpointDef = flowData.endpoints.find((e) => e.id === endpoint.endpoint_id);
-      if (!endpointDef) {
-        throw new Error(`Endpoint definition not found for ID: ${endpoint.endpoint_id}`);
-      }
-      
-      // Get the API host for this endpoint
-      let endpointHost = '';
-      
-      // First, check if the selected environment provides API host override
-      if (selectedEnvironment && flowData.settings.environment?.subEnvironment) {
-        const subEnv = flowData.settings.environment.subEnvironment;
-        const subEnvironmentConfig = selectedEnvironment.config.environments[subEnv];
-        
-        if (subEnvironmentConfig?.api_hosts && endpoint.api_id) {
-          const envHost = subEnvironmentConfig.api_hosts[String(endpoint.api_id)];
-          if (envHost) {
-            endpointHost = envHost;
-            addLog('debug', `Using environment host override for API ID ${endpoint.api_id}: ${endpointHost}`, `Environment: ${selectedEnvironment.name} (${subEnv})`);
-          }
-        }
-      }
-      
-      // Fallback to flow's api_hosts if no environment override
-      if (!endpointHost && endpoint.api_id && flowData.settings && flowData.settings.api_hosts) {
-        const apiHostInfo = flowData.settings.api_hosts[endpoint.api_id];
-        if (apiHostInfo && apiHostInfo.url) {
-          endpointHost = apiHostInfo.url;
-          addLog('debug', `Using flow host for API ID ${endpoint.api_id}: ${endpointHost}`);
-        } else {
-          addLog('warning', `API host not found for ID: ${endpoint.api_id}`);
-        }
-      }
-      
-      if (!endpointHost) {
-        addLog('error', 'No API host available for endpoint', `Endpoint ID: ${endpoint.endpoint_id}, API ID: ${endpoint.api_id}`);
-        throw new Error(`No API host available for endpoint ${endpoint.endpoint_id}`);
-      }
-      
-      // Build the URL with path parameters
-      let url = endpointHost + endpointDef.path;
-
-      // Replace path parameters
-      if (endpoint.pathParams && typeof endpoint.pathParams === 'object') {
-        try {
-          Object.entries(endpoint.pathParams).forEach(([name, value]) => {
-            // Replace template values using centralized engine
-            const resolvedValue = resolveTemplateValueUnified(value as string);
-            url = url.replace(`{${name}}`, encodeURIComponent(resolvedValue));
-          });
-        } catch (err: unknown) {
-          console.error('Error processing path parameters:', err);
-        }
-      }
-
-      // Add query parameters
-      if (
-        endpoint.queryParams &&
-        typeof endpoint.queryParams === 'object' &&
-        Object.keys(endpoint.queryParams).length > 0
-      ) {
-        try {
-          const queryParams = new URLSearchParams();
-          Object.entries(endpoint.queryParams).forEach(([name, value]) => {
-            const resolvedValue = resolveTemplateValueUnified(value as string);
-            queryParams.append(name, resolvedValue);
-          });
-          url += `?${queryParams.toString()}`;
-        } catch (err: unknown) {
-          console.error('Error processing query parameters:', err);
-        }
-      }
-
-      // Prepare headers
-      const headers: Record<string, string> = {};
-      if (endpoint.headers) {
-        endpoint.headers
-          .filter((h: { enabled: boolean }) => h.enabled)
-          .forEach((h: { name: string; value: string }) => {
-            headers[h.name] = resolveTemplateValueUnified(h.value);
-          });
-      }
-
-      // Prepare body
-      let body = null;
-      if (endpoint.body) {
-        body = resolveTemplateObjectUnified(endpoint.body);
-      }
-
-      // Record the request details for debugging - create a new object for reactivity
-      updateExecutionState(endpointId, {
-        request: {
-          url,
-          method: endpointDef.method,
-          headers,
-          body,
-          pathParams: endpoint.pathParams,
-          queryParams: endpoint.queryParams
-        }
-      });
-
-      // Start timer
-      const startTime = performance.now();
-
-      // Add request debug logs
-      addRequestDebugLogs(endpointDef.path, headers);
-
-      // Make the request
-      let response;
-
-      if (preferences.serverCookieHandling) {
-        // Use server proxy for cookie handling
-        const targetUrl = new URL(url);
-        const domain = targetUrl.hostname;
-
-        let requestCookies: RequestCookie[] = [];
-
-        // Gather all cookies from previous steps regardless of domain (temporary solution)
-        for (const [_key, cookies] of cookieStore.entries()) {
-          // Add all cookies regardless of domain
-          if (cookies.length > 0) {
-            for (const cookie of cookies) {
-              if (cookie.value.length > 0) {
-                requestCookies.push(cookie);
-              }
-            }
-          } 
-        }
-
-        // Log the cookies being sent
-        addLog(
-          'debug',
-          `Sending ${requestCookies.length} cookies with request`,
-          `Target domain: ${domain}`
-        );
-
-        const proxiedResult = await executeProxiedEndpoint(
-          endpointDef,
-          url,
-          headers,
-          body,
-          requestCookies,
-          preferences.timeout
-        );
-
-        response = proxiedResult.response;
-        const responseCookies = proxiedResult.cookies;
-
-        // Store cookies from the response
-        if (responseCookies && responseCookies.length > 0) {
-          const endpointKey = endpointId;
-          cookieStore.set(
-            endpointKey,
-            responseCookies.map((c: RequestCookie) => ({
-              name: c.name,
-              value: c.value,
-              domain: c.domain || targetUrl.hostname,
-              path: c.path
-            }))
-          );
-          
-        }
-
-        addLog(
-          'info',
-          'Request proxied through server for cookie handling',
-          `Original URL: ${url}\nProxy URL: /api/proxy/request`
-        );
-      } else {
-        // Direct fetch without proxy
-        response = await executeDirectEndpoint(
-          endpointDef,
-          url,
-          headers,
-          body,
-          preferences.timeout,
-          cookieStore,  // Pass the cookieStore for cookie management
-          endpointId    // Pass the endpointId for storage reference
-        );
-        
-        // Check for cookies in the response if we're in desktop mode
-        if (isDesktop) {
-          // The cookies are already stored inside executeDirectEndpoint if in desktop mode
-          addLog(
-            'debug',
-            `Desktop mode: cookies managed via Tauri HTTP client`,
-            `Cookies for ${endpointId}: ${cookieStore.has(endpointId) ? cookieStore.get(endpointId)?.length : 0} cookies`
-          );
-        }
-      }
-
-      // Calculate timing - create a new object for reactivity
-      const endTime = performance.now();
-      const timing = Math.round(endTime - startTime);
-      updateExecutionState(endpointId, { timing });
-
-      // Process response
-      const responseData = await getResponseData(response);
-
-      
-
-      // Store response details - create a new object for reactivity
-      updateExecutionState(endpointId, {
-        response: {
-          status: response.status,
-          statusText: response.statusText,
-          headers: Object.fromEntries([...response.headers.entries()]),
-          body: responseData
-        }
-      });
-
-      // Always store response with endpointId for reference by templates
-      storedResponses[endpointId] = responseData;
-      
-      // Log the stored response for debugging
-      addLog(
-        'debug',
-        `Stored response for endpoint: ${endpointId}`,
-        `Response data type: ${responseData ? typeof responseData : 'undefined'}`
-      );
-      
-      // Debug log all stored responses
-      addLog(
-        'debug', 
-        'Currently stored responses:', 
-        `Available keys: ${JSON.stringify(Object.keys(storedResponses))}`
-      );
-      
-      // Process transformations if configured for this endpoint
-      if (endpoint.transformations && endpoint.transformations.length > 0) {
-        const transformedData: Record<string, unknown> = {};
-        
-        try {
-          // Import the transformation module
-          const transformModule = await import('$lib/transform');
-          
-          // Phase 1 & 2: Store and evaluate transformations
-          for (const transform of endpoint.transformations) {
-            try {
-              // Phase 1: Store the raw response under the alias
-              transformedData[transform.alias] = responseData;
-              
-              // Phase 2: Evaluate the expression if provided
-              if (transform.expression && transform.expression.trim()) {
-                // Build template context for transformation
-                const templateContext = createTemplateContextFromFlowRunner(
-                  storedResponses,
-                  storedTransformations,
-                  parameterValues,
-                  templateFunctions,
-                  environmentVariables
-                );
-                
-                // Evaluate the expression using the transformation engine with template context
-                const evaluatedResult = transformModule.transformResponse(responseData, transform.expression, templateContext);
-                
-                if (evaluatedResult !== null && evaluatedResult !== undefined) {
-                  // Update with the evaluated result
-                  transformedData[transform.alias] = evaluatedResult;
-                  
-                  addLog(
-                    'debug',
-                    `Applied transformation: ${transform.alias}`,
-                    `Expression: ${transform.expression} evaluated successfully, value: ${JSON.stringify(evaluatedResult)}`
-                  );
-                } else {
-                  addLog(
-                    'warning',
-                    `Transformation evaluation returned null/undefined: ${transform.alias}`,
-                    `Expression: ${transform.expression}`
-                  );
-                }
-              } else {
-                addLog(
-                  'debug',
-                  `Applied transformation: ${transform.alias}`,
-                  `No expression provided, using raw response`
-                );
-              }
-            } catch (error: unknown) {
-              addLog(
-                'error',
-                `Failed to apply transformation: ${transform.alias}`,
-                `Expression: ${transform.expression}\nError: ${error instanceof Error ? error.message : String(error)}`
-              );
-            }
-          }
-        } catch (error: unknown) {
-          addLog(
-            'error',
-            `Failed to load transformation module`,
-            `Error: ${error instanceof Error ? error.message : String(error)}`
-          );
-          
-          // Fallback to Phase 1 only if transformation module fails to load
-          for (const transform of endpoint.transformations) {
-            transformedData[transform.alias] = responseData;
-            
-            addLog(
-              'debug',
-              `Applied transformation (fallback): ${transform.alias}`,
-              `Expression: ${transform.expression} (evaluation skipped)`
-            );
-          }
-        }
-        
-        // Store all transformations for this endpoint
-        storedTransformations[endpointId] = transformedData;
-        
-        // Also store transformations in execution state for UI access
-        updateExecutionState(endpointId, {
-          transformations: transformedData
-        });
-        
-        addLog(
-          'info',
-          `Stored ${endpoint.transformations.length} transformations for endpoint: ${endpointId}`,
-          `Available aliases: ${Object.keys(transformedData).join(', ')}`
-        );
-      }
-
-      // Run assertions if configured for this endpoint
-      if (endpoint.assertions && endpoint.assertions.length > 0) {
-        addLog(
-          'info',
-          `Running ${endpoint.assertions.length} assertions for endpoint: ${endpointId}`
-        );
-        
-        try {
-          // Import the assertion engine module
-          const assertionModule = await import('$lib/assertions');
-          
-          // Build template context for template expressions in assertions
-          const templateContext = createTemplateContextFromFlowRunner(
-            storedResponses,
-            storedTransformations,
-            parameterValues,
-            templateFunctions,
-            environmentVariables
-          );
-          
-          // Run all assertions
-          const transformedDataForEndpoint = storedTransformations[endpointId] || null;
-          const assertionResults = await assertionModule.runAssertions(
-            endpoint.assertions,
-            response,
-            responseData,
-            transformedDataForEndpoint,
-            timing,
-            templateContext
-          );
-          
-          // Store assertion results in execution state for UI access
-          updateExecutionState(endpointId, {
-            assertions: assertionResults
-          });
-          
-          // Process the results
-          for (const result of assertionResults.results) {
-            // Create detailed log message with template info
-            let logDetails = `Actual value: ${JSON.stringify(result.actualValue)}`;
-            if (result.originalExpectedValue && result.originalExpectedValue !== result.expectedValue) {
-              logDetails += `, Template: ${result.originalExpectedValue} → ${JSON.stringify(result.expectedValue)}`;
-            } else {
-              logDetails += `, Expected: ${JSON.stringify(result.expectedValue)}`;
-            }
-            
-            // Log each assertion result
-            addLog(
-              result.passed ? 'debug' : 'error',
-              result.message || '',
-              logDetails
-            );
-            
-            // Show any template resolution errors
-            if (result.error) {
-              addLog('error', 'Template Error:', result.error);
-            }
-          }
-          
-          addLog(
-            'info',
-            `Assertion evaluation completed for endpoint: ${endpointId}`,
-            `${assertionResults.results.length} assertions processed, Overall: ${assertionResults.passed ? 'PASSED' : 'FAILED'}`
-          );
-          
-          // Update status based on overall assertion results
-          if (!assertionResults.passed) {
-            // Update execution state with failed assertion
-            updateExecutionState(endpointId, {
-              status: 'failed',
-              error: assertionResults.failureMessage || 'Assertion failed'
-            });
-            
-            // Set error if stopOnError is true
-            if (preferences.stopOnError) {
-              error = new Error(assertionResults.failureMessage || 'Assertion failed');
-            }
-            
-            return;
-          }
-        } catch (error) {
-          const errorMessage = `Failed to run assertions: ${error instanceof Error ? error.message : String(error)}`;
-          
-          // Update execution state with the error
-          updateExecutionState(endpointId, {
-            status: 'failed',
-            error: errorMessage
-          });
-          
-          // Set error if stopOnError is true
-          if (preferences.stopOnError) {
-            error = new Error(errorMessage);
-          }
-          
-          // Log the error
-          addLog('error', errorMessage);
-          
-          return;
-        }
-      }
-
-      // Update status - create a new object for reactivity
-      // Check if we should skip the default 2xx status check
-      const shouldSkipDefaultCheck = endpoint.skipDefaultStatusCheck === true;
-      
-      if (shouldSkipDefaultCheck) {
-        // When skipping default check, always mark as completed regardless of status code
-        // The user will use explicit status code assertions to validate the response
-        updateExecutionState(endpointId, { status: 'completed' }, true);
-        addLog(
-          'debug',
-          `Skipped default status check for endpoint ${endpointId}`,
-          `Response status: ${response.status} - using explicit assertions only`
-        );
-      } else if (response.ok) {
-        updateExecutionState(endpointId, { status: 'completed' }, true);
-      } else {
-        updateExecutionState(endpointId, {
-          status: 'failed',
-          error: `Request failed with status ${response.status}: ${response.statusText}`
-        }, true);
-
-        // Set error if stopOnError is true
-        if (preferences.stopOnError) {
-          error = new Error(
-            `Request failed with status ${response.status}: ${response.statusText}`
-          );
-        }
-      }
-    } catch (err: unknown) {
-      // Handle network errors or timeouts - create a new object for reactivity
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      updateExecutionState(endpointId, {
-        status: 'failed',
-        error: errorMessage
-      });
-
-      if (preferences.stopOnError) {
-        error = err;
-      }
-    }
-
-    // Final execution state update (this ensures any missed updates are emitted)
-    dispatch('executionStateUpdate', executionState);
-  }
-
-  // Reset execution state
   export function resetExecution() {
-    currentStep = 0;
-    progress = 0;
-    error = null;
-    storedResponses = {};
-    storedTransformations = {};
-    executionState = {};
-    isRunning = false;
-    
-    parameterValues = {}; // Clear Parameter values
-    showParameterInputModal = false; // Close the Parameter input modal
-
-    // Reset cookies if user wants to start fresh
-    if (preferences.serverCookieHandling) {
-      cookieStore.clear();
+    if (flowRunner) {
+      flowRunner.resetExecution();
+      isRunning = false;
+      currentStep = 0;
+      progress = 0;
+      error = null;
+      executionState = {};
+      parameterValues = {};
+      showParameterInputModal = false;
     }
-
-    
-
-    // Removed dispatch('reset') to prevent infinite recursion
   }
 
-  // Handle reset button click
   export function handleReset() {
-    // Call resetExecution to clear all execution state
     resetExecution();
-    // Emit reset event to notify parent components
     dispatch('reset');
   }
 
-  // Helper function to get response data based on content type
-  async function getResponseData(response: Response): Promise<unknown> {
-    try {
-      const contentType = response.headers.get('content-type') || '';
-      let data: unknown;
+  // Handle parameter form submission
+  async function handleParameterFormSubmit() {
+    if (!flowRunner) return;
 
-      addLog(
-        'debug',
-        'Response content type:',
-        contentType || 'No content-type header'
-      );
-
-      // Handle different content types
-      if (contentType.includes('application/json')) {
-        data = await response.json();
-        addLog('debug', 'Response parsed as JSON');
-      } else if (contentType.includes('text/html')) {
-        data = await response.text();
-        addLog('debug', 'Response parsed as HTML');
-      } else if (contentType.includes('text/')) {
-        data = await response.text();
-        addLog('debug', 'Response parsed as text');
-      } else if (contentType.includes('application/xml') || contentType.includes('text/xml')) {
-        data = await response.text();
-        addLog('debug', 'Response parsed as XML');
-      } else {
-        // Try to parse as JSON first
-        try {
-          data = await response.json();
-          addLog('debug', 'Response auto-detected as JSON');
-        } catch (_e: unknown) {
-          // Then try as text
-          data = await response.text();
-          addLog('debug', 'Response auto-detected as text');
-        }
-      }
-
-      return data;
-    } catch (_error: unknown) {
-      addLog(
-        'error',
-        'Failed to parse response:',
-        _error instanceof Error ? _error.message : String(_error)
-      );
-      return 'Unable to parse response data';
-    }
-  }
-
-  import { createTemplateFunctions, defaultTemplateFunctions } from '$lib/template';
-  import { transformResponse } from '$lib/transform';
-
-  // Create template functions for use in template resolution
-  const templateFunctions = createTemplateFunctions({
-    responses: {},
-    transformedData: {},
-    parameters: {},
-    functions: defaultTemplateFunctions
-  });
-
-  // Unified template resolution using centralized engine
-  function resolveTemplateValueUnified(value: string): string {
-    try {
-      const context = createTemplateContextFromFlowRunner(
-        storedResponses,
-        storedTransformations,
-        parameterValues,
-        templateFunctions,
-        environmentVariables
-      );
-      
-      const result = resolveTemplate(value, context);
-      return result !== undefined && result !== null ? String(result) : '';
-    } catch (error) {
-      addLog('error', `Template resolution failed for "${value}"`, error instanceof Error ? error.message : String(error));
-      return value; // Return original value on error
-    }
-  }
-
-  // Unified template resolution for objects using centralized engine
-  function resolveTemplateObjectUnified(obj: unknown): unknown {
-    try {
-      const context = createTemplateContextFromFlowRunner(
-        storedResponses,
-        storedTransformations,
-        parameterValues,
-        templateFunctions,
-        environmentVariables
-      );
-      
-      if (obj === null || obj === undefined) {
-        return obj;
-      }
-
-      let objString = JSON.stringify(obj);
-      const result = resolveTemplate(objString, context);
-      
-      if (typeof result === 'string') {
-        return JSON.parse(result);
-      }
-      
-      return result;
-    } catch (error) {
-      addLog('error', 'Template object resolution failed', error instanceof Error ? error.message : String(error));
-      return obj; // Return original object on error
-    }
-  }
-
-  // Function for adding debug logs about requests
-  function addRequestDebugLogs(path: string, reqHeaders: Record<string, string>) {
-    
-  }
-
-  // Evaluate flow outputs at the end of execution
-  function evaluateFlowOutputs(): Record<string, unknown> {
-    const results: Record<string, unknown> = {};
-    
-    if (!flowData.outputs || flowData.outputs.length === 0) {
-      return results;
-    }
-
-    addLog('info', 'Evaluating flow outputs', `${flowData.outputs.length} outputs to evaluate`);
-
-    for (const output of flowData.outputs) {
-      try {
-        if (output.isTemplate && output.value) {
-          // Use template resolution for template expressions
-          const result = resolveTemplateValueUnified(output.value);
-          
-          // Try to parse as JSON if it looks like JSON
-          try {
-            if (result.startsWith('{') || result.startsWith('[') || result.startsWith('"')) {
-              results[output.name] = JSON.parse(result);
-            } else {
-              results[output.name] = result;
-            }
-          } catch {
-            results[output.name] = result;
-          }
-        } else {
-          // For non-template values, use as-is
-          results[output.name] = output.value;
-        }
-        
-        addLog('debug', `Output "${output.name}" evaluated successfully`, String(results[output.name]));
-      } catch (outputError: unknown) {
-        const errorMessage = outputError instanceof Error ? outputError.message : String(outputError);
-        addLog('error', `Failed to evaluate output "${output.name}"`, errorMessage);
-        results[output.name] = null;
-      }
-    }
-
-    return results;
-  }
-
-  // Utility function to validate API hosts configuration
-  function validateApiHosts(): boolean {
-    return !!(flowData.settings && 
-      flowData.settings.api_hosts && 
-      Object.values(flowData.settings.api_hosts).some(host => host.url && host.url.trim() !== ''));
-  }
-
-  // Utility function to update execution state immutably
-  function updateExecutionState(endpointId: string, updates: Partial<any>, emitEndpointUpdate: boolean = false) {
-    const updatedEndpointState = {
-      ...executionState[endpointId],
-      ...updates
-    };
-    
-    executionState = {
-      ...executionState,
-      [endpointId]: updatedEndpointState
-    };
-    
-    // Emit execution state update event
-    dispatch('executionStateUpdate', executionState);
-    
-    // Optionally emit specific endpoint update event
-    if (emitEndpointUpdate) {
-      dispatch('endpointStateUpdate', {
-        endpointId,
-        state: updatedEndpointState
-      });
-    }
-  }
-
-  // Function to prepare parameters before executing the flow
-  function prepareParameters() {
-    // Reset parameters values store - parameters are ephemeral and re-evaluated each execution
-    parameterValues = {};
-
-    // Get the current environment mapping if selected
-    const selectedEnvMapping = getSelectedEnvironmentMapping();
-
-    addLog('debug', `Evaluating parameters for execution. Environment mapping: ${selectedEnvMapping ? `${selectedEnvMapping.environmentName} (${Object.keys(selectedEnvMapping.parameterMappings).length} mappings)` : 'None'}`);
-
-    // Evaluate each parameter with priority: Environment Variable → Default Value
-    flowData.parameters.forEach((parameter) => {
-      let resolvedValue = null;
-      let source = 'none';
-
-      // Priority 1: Check if this parameter is mapped to an environment variable
-      if (selectedEnvMapping && selectedEnvMapping.parameterMappings[parameter.name]) {
-        const envVariableName = selectedEnvMapping.parameterMappings[parameter.name];
-        const envValue = environmentVariables[envVariableName];
-        
-        if (envValue !== undefined && envValue !== null) {
-          resolvedValue = envValue;
-          source = `environment variable '${envVariableName}'`;
-          addLog('debug', `Parameter '${parameter.name}' resolved from environment variable '${envVariableName}'`, String(envValue));
-        } else {
-          addLog('warning', `Environment variable '${envVariableName}' not found for parameter '${parameter.name}', falling back to default value`);
-        }
-      }
-
-      // Priority 2: Use default value if no environment value was found
-      if (resolvedValue === null && parameter.defaultValue !== undefined && parameter.defaultValue !== null) {
-        resolvedValue = parameter.defaultValue;
-        source = 'default value';
-        addLog('debug', `Parameter '${parameter.name}' using default value`, String(parameter.defaultValue));
-      }
-
-      // Store the resolved value (ephemeral - not saved to database)
-      if (resolvedValue !== null) {
-        parameterValues[parameter.name] = resolvedValue;
-        addLog('info', `Parameter '${parameter.name}' = ${JSON.stringify(resolvedValue)} (from ${source})`);
-      } else {
-        addLog('warning', `Parameter '${parameter.name}' has no value - will be treated as missing if required`);
-      }
-    });
-
-    // Log the final parameter values for debugging
-    addLog('debug', 'Final ephemeral parameter values for this execution', JSON.stringify(parameterValues, null, 2));
-  }
-
-  // Helper function to get the selected environment mapping
-  function getSelectedEnvironmentMapping() {
-    if (!flowData.settings.linkedEnvironments || !flowData.settings.environment) {
-      return null;
-    }
-
-    const selectedEnvId = flowData.settings.environment.environmentId;
-    return flowData.settings.linkedEnvironments.find(mapping => mapping.environmentId === selectedEnvId) || null;
-  }
-
-  // Check if all required parameters have values after ephemeral evaluation
-  function checkRequiredParameters(): boolean {
-    // Clear the missing values array
-    parametersWithMissingValues = [];
-
-    // Check each required parameter against the ephemeral parameterValues
-    flowData.parameters.forEach((parameter) => {
-      if (parameter.required) {
-        const resolvedValue = parameterValues[parameter.name];
-        
-        // Parameter is missing if it's not in parameterValues or has null/undefined value
-        if (resolvedValue === undefined || resolvedValue === null) {
-          parametersWithMissingValues.push({ 
-            ...parameter,
-            value: null // Ensure we don't carry over any old values
-          });
-          addLog('warning', `Required parameter '${parameter.name}' is missing value after environment/default evaluation`);
-        }
-      }
-    });
-
-    if (parametersWithMissingValues.length > 0) {
-      addLog('info', `${parametersWithMissingValues.length} required parameters need manual input: ${parametersWithMissingValues.map(p => p.name).join(', ')}`);
-    }
-
-    // Return true if no missing values
-    return parametersWithMissingValues.length === 0;
-  }
-
-  // Function to handle Parameter input form submission for missing required parameters
-  function handleParameterFormSubmit() {
-    // Update the ephemeral parameter values with user input
-    parametersWithMissingValues.forEach((parameter) => {
-      if (parameter.value !== undefined && parameter.value !== null) {
-        // Store the user-provided value in the ephemeral parameterValues
-        parameterValues[parameter.name] = parameter.value;
-        addLog('info', `User provided value for required parameter '${parameter.name}'`, String(parameter.value));
-      }
-    });
-
-    // Close the modal
+    flowRunner.updateParameterValues(parametersWithMissingValues);
     showParameterInputModal = false;
 
-    // Re-check if all required parameters are now satisfied
-    if (checkRequiredParameters()) {
-      // All parameters are ready, execute the flow
-      executeFlowAfterParameterCheck();
-    } else {
-      // Still missing some parameters, show the modal again
-      addLog('error', 'Some required parameters are still missing values');
-      showParameterInputModal = true;
-    }
+    // Continue with flow execution
+    isRunning = true;
+    await flowRunner.executeFlowAfterParameterCheck();
+    
+    // Update local state
+    isRunning = flowRunner.isRunning;
+    currentStep = flowRunner.currentStep;
+    progress = flowRunner.progress;
+    error = flowRunner.error;
+    executionState = flowRunner.executionState;
+    parameterValues = flowRunner.parameterValues;
   }
-
-  // Parameters management has been moved to FlowParameterEditor.svelte
-
-  // Parameters management has been moved to FlowParameterEditor.svelte
 </script>
 
 <!-- Parameter Input Modal - Only shown when required parameters are missing -->
