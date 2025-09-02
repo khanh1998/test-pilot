@@ -391,6 +391,27 @@
     handleChange();
   }
 
+  // Insert a new step after a specific step index
+  function insertStepAfter(afterStepIndex: number) {
+    const previousStep = flowData.steps[afterStepIndex];
+    const previousStepId = previousStep.step_id;
+    
+    // Generate new step ID based on previous step's ID
+    // For example: step1 -> step1.1, step2 -> step2.1, etc.
+    const newStepId = `${previousStepId}.1`;
+    
+    const newStep = {
+      step_id: newStepId,
+      label: `Step ${newStepId}`,
+      endpoints: []
+    };
+
+    // Insert the new step at the correct position
+    flowData.steps.splice(afterStepIndex + 1, 0, newStep);
+
+    handleChange();
+  }
+
   // Handle execution state reset
   function handleReset() {
     // Reset the execution state store
@@ -903,7 +924,7 @@
   <!-- Existing Steps -->
   {#if flowData && flowData.steps && flowData.steps.length > 0}
     {#each flowData.steps as step, stepIndex (step.step_id)}
-            <div class="mb-4">
+      <div class="mb-4">
         <StepEditor
           {step}
           {endpoints}
@@ -938,6 +959,29 @@
           </div>
         </StepEditor>
       </div>
+      
+      <!-- Add Step Button (between steps) -->
+      {#if stepIndex < flowData.steps.length - 1}
+        <div class="mb-4 flex justify-center">
+          <button
+            class="group flex h-8 w-8 items-center justify-center rounded-full border border-gray-300 bg-white text-gray-400 shadow-sm hover:bg-gray-50 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            on:click={() => insertStepAfter(stepIndex)}
+            disabled={isRunning}
+            title="Insert step after {step.step_id}"
+            class:opacity-50={isRunning}
+            class:cursor-not-allowed={isRunning}
+          >
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+              />
+            </svg>
+          </button>
+        </div>
+      {/if}
     {/each}
   {:else}
     <div class="mb-4 rounded-lg border border-yellow-100 bg-yellow-50 p-4 text-center">
