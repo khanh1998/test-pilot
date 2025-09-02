@@ -9,6 +9,9 @@
   import { getEndpointById, type EndpointDetails } from '$lib/http_client/endpoints';
   import { getEnvironments } from '$lib/http_client/environments';
   import type { Environment } from '$lib/types/environment';
+  import { createTemplateContextFromFlowRunner } from '$lib/template/utils';
+  import { createTemplateFunctions } from '$lib/template/functions';
+  import type { TemplateContext } from '$lib/template/types';
 
   import { writable } from 'svelte/store';
   import { onMount, onDestroy } from 'svelte';
@@ -22,6 +25,81 @@
   $: if (flowData && !flowData.outputs) {
     flowData.outputs = [];
   }
+
+  // Compute template context from current execution state
+  $: templateContext = (() => {
+    try {
+      // Extract stored responses and transformations from execution store
+      const storedResponses: Record<string, unknown> = {};
+      const storedTransformations: Record<string, Record<string, unknown>> = {};
+
+      Object.entries($executionStore).forEach(([key, state]) => {
+        // Skip non-endpoint entries (progress, currentStep)
+        if (typeof state === 'object' && state !== null && !Array.isArray(state)) {
+          if (state.response?.body) {
+            storedResponses[key] = state.response.body;
+          }
+          if (state.transformations) {
+            storedTransformations[key] = state.transformations;
+          }
+        }
+      });
+
+      // Compute parameter values (basic default values for preview)
+      const parameterValues: Record<string, unknown> = {};
+      (flowData.parameters || []).forEach(param => {
+        if (param.defaultValue !== undefined && param.defaultValue !== null) {
+          parameterValues[param.name] = param.defaultValue;
+        }
+      });
+
+      // Compute environment variables from selected environment
+      const environmentVariables: Record<string, unknown> = {};
+      if (selectedEnvironmentId && selectedSubEnvironment) {
+        const selectedEnv = environments.find(env => env.id === selectedEnvironmentId);
+        if (selectedEnv && selectedEnv.config.environments[selectedSubEnvironment]) {
+          const subEnvConfig = selectedEnv.config.environments[selectedSubEnvironment];
+          
+          // Add variable values from the selected sub-environment
+          Object.entries(selectedEnv.config.variable_definitions).forEach(([varName, varDef]) => {
+            const value = subEnvConfig.variables[varName];
+            if (value !== undefined) {
+              environmentVariables[varName] = value;
+            } else if (varDef.default_value !== undefined) {
+              environmentVariables[varName] = varDef.default_value;
+            }
+          });
+
+          // Add API hosts from the sub-environment
+          if (subEnvConfig.api_hosts) {
+            Object.entries(subEnvConfig.api_hosts).forEach(([apiId, hostUrl]) => {
+              environmentVariables[`api_host_${apiId}`] = hostUrl;
+            });
+          }
+        }
+      }
+
+      // Create template functions
+      const templateFunctions = createTemplateFunctions({
+        responses: storedResponses,
+        transformedData: storedTransformations,
+        parameters: parameterValues,
+        environment: environmentVariables
+      });
+
+      // Create full template context
+      return createTemplateContextFromFlowRunner(
+        storedResponses,
+        storedTransformations,
+        parameterValues,
+        templateFunctions,
+        environmentVariables
+      );
+    } catch (error) {
+      console.warn('Failed to create template context:', error);
+      return null;
+    }
+  })() as TemplateContext | null;
 
   let isRunning = false;
   let flowRunner: FlowRunner;
@@ -721,6 +799,7 @@
           isLastStep={stepIndex === flowData.steps.length - 1}
           {isRunning}
           executionStore={$executionStore}
+          {templateContext}
           on:removeStep={handleRemoveStep}
           on:removeEndpoint={handleRemoveEndpoint}
           on:moveStep={handleMoveStep}

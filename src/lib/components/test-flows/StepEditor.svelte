@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import type { Endpoint, StepEndpoint, ExecutionState } from './types';
+  import type { TemplateContext } from '$lib/template/types';
   import EndpointCard from './EndpointCard.svelte';
   import ParameterEditor from './ParameterEditor.svelte';
   import ResponseViewer from './ResponseViewer.svelte';
@@ -19,6 +20,7 @@
   export let isLastStep: boolean = false;
   export let isRunning: boolean = false; // Flag from parent to indicate if test flow execution is in progress
   export let executionStore: ExecutionState = {}; // Store from parent for better reactivity
+  export let templateContext: TemplateContext | null = null; // Template context for resolving template expressions
 
   // Emitted events will be handled by the parent component
   const dispatch = createEventDispatcher();
@@ -570,13 +572,12 @@
       isMounted={true}
       endpoint={activeEndpoint}
       stepEndpoint={step.endpoints[safeIndex]}
-      {stepIndex}
-      endpointIndex={safeIndex}
       {duplicateCount}
       {instanceIndex}
       transformationResults={executionStore[`${step.step_id}-${safeIndex}`]?.transformations || {}}
       rawResponse={executionStore[`${step.step_id}-${safeIndex}`]?.response?.body}
       hasExecutionData={!!executionStore[`${step.step_id}-${safeIndex}`]?.response}
+      {templateContext}
       on:close={closeTransformationEditor}
       on:change={handleTransformationChange}
     />
