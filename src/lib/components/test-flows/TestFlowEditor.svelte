@@ -17,6 +17,7 @@
   import { writable } from 'svelte/store';
   import { onMount, onDestroy } from 'svelte';
   import { createEventDispatcher } from 'svelte';
+  import { generateStepId, generateStepIdBetween } from './step-id-utils.js';
 
   // flowData includes settings.api_hosts which contains multiple API host configurations
   export let flowData: TestFlowData;
@@ -46,10 +47,12 @@
         }
       });
 
-      // Compute parameter values (basic default values for preview)
-      const parameterValues: Record<string, unknown> = {};
+      // Compute parameter values - use current values from FlowRunner if available, otherwise use defaults
+      const parameterValues: Record<string, unknown> = { ...currentParameterValues };
+      
+      // Fill in any missing values with defaults from flow definition
       (flowData.parameters || []).forEach(param => {
-        if (param.defaultValue !== undefined && param.defaultValue !== null) {
+        if (!(param.name in parameterValues) && param.defaultValue !== undefined && param.defaultValue !== null) {
           parameterValues[param.name] = param.defaultValue;
         }
       });
@@ -129,6 +132,9 @@
   let isRunning = false;
   let flowRunner: FlowRunner;
   let isLoadingEndpointDetails = false; // Add loading state for endpoint fetching
+  
+  // Bind to FlowRunner's current parameter values to use in template context
+  let currentParameterValues: Record<string, unknown> = {};
 
   // Environment selection state
   let environments: Environment[] = [];
@@ -377,14 +383,14 @@
 
   // Add a new step to the flow
   function addNewStep() {
-    // Use consistent step ID format matching the parent component
-    // This step_id is important as it's used to create the endpointId (${stepId}-${endpointIndex})
-    // which is used for referencing responses in templates
-    const newStepId = `step${flowData.steps.length + 1}`;
+    // Use the systematic step ID generation approach
+    const allStepIds = flowData.steps.map(s => s.step_id);
+    const lastStepId = flowData.steps.length > 0 ? flowData.steps[flowData.steps.length - 1].step_id : null;
+    const newStepId = generateStepId(allStepIds, lastStepId, null);
 
     flowData.steps.push({
       step_id: newStepId,
-      label: `Step ${flowData.steps.length + 1}`,
+      label: `Step ${newStepId}`,
       endpoints: []
     });
 
@@ -393,12 +399,7 @@
 
   // Insert a new step after a specific step index
   function insertStepAfter(afterStepIndex: number) {
-    const previousStep = flowData.steps[afterStepIndex];
-    const previousStepId = previousStep.step_id;
-    
-    // Generate new step ID based on previous step's ID
-    // For example: step1 -> step1.1, step2 -> step2.1, etc.
-    const newStepId = `${previousStepId}.1`;
+    const newStepId = generateStepIdBetweenLocal(afterStepIndex, afterStepIndex + 1);
     
     const newStep = {
       step_id: newStepId,
@@ -410,6 +411,29 @@
     flowData.steps.splice(afterStepIndex + 1, 0, newStep);
 
     handleChange();
+  }
+
+  // Insert a new step before the first step
+  function insertStepAtBeginning() {
+    const allStepIds = flowData.steps.map(s => s.step_id);
+    const newStepId = generateStepId(allStepIds, null, flowData.steps[0]?.step_id || null);
+    
+    const newStep = {
+      step_id: newStepId,
+      label: `Step ${newStepId}`,
+      endpoints: []
+    };
+
+    // Insert the new step at the beginning
+    flowData.steps.unshift(newStep);
+
+    handleChange();
+  }
+
+  // Generate a step ID that fits between two existing steps
+  function generateStepIdBetweenLocal(afterIndex: number, beforeIndex: number): string {
+    const steps = flowData.steps;
+    return generateStepIdBetween(steps, afterIndex, beforeIndex);
   }
 
   // Handle execution state reset
@@ -886,6 +910,7 @@
       bind:this={flowRunner}
       {flowData}
       bind:isRunning
+      bind:parameterValues={currentParameterValues}
       executionState={$executionStore}
       bind:preferences
       bind:showParametersPanel
@@ -923,6 +948,27 @@
 
   <!-- Existing Steps -->
   {#if flowData && flowData.steps && flowData.steps.length > 0}
+    <!-- Add Step Button (before first step) -->
+    <div class="mb-4 flex justify-center">
+      <button
+        class="group flex h-8 w-8 items-center justify-center rounded-full border border-gray-300 bg-white text-gray-400 shadow-sm hover:bg-gray-50 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+        on:click={insertStepAtBeginning}
+        disabled={isRunning}
+        title="Insert step before {flowData.steps[0].step_id}"
+        class:opacity-50={isRunning}
+        class:cursor-not-allowed={isRunning}
+      >
+        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+          />
+        </svg>
+      </button>
+    </div>
+    
     {#each flowData.steps as step, stepIndex (step.step_id)}
       <div class="mb-4">
         <StepEditor

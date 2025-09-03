@@ -51,7 +51,9 @@
   let totalSteps = 0;
   let progress = 0;
   let error: unknown = null;
-  let parameterValues: Record<string, unknown> = {};
+  
+  // Export parameterValues so parent components can access current parameter values
+  export let parameterValues: Record<string, unknown> = {};
 
   // Computed environment variables for template resolution
   $: environmentVariables = computeEnvironmentVariables(selectedEnvironment, flowData.settings.environment?.subEnvironment || null);

@@ -170,7 +170,28 @@
     try {
       // Immediate evaluation - no timeout
       // Pass template context if available to support template expressions
-      const result = transformResponse(rawResponse, expression.trim(), templateContext || undefined);
+      // If templateContext is null, provide a default empty context with empty parameters
+      const defaultContext = {
+        responses: {},
+        transformedData: {},
+        parameters: {},
+        environment: {},
+        functions: {}
+      };
+      const contextToUse = templateContext || defaultContext;
+      
+      // Debug logging to understand what parameters are available
+      if (expression.includes('{{param:')) {
+        console.log('Evaluating expression with parameters:', {
+          expression,
+          alias,
+          hasTemplateContext: !!templateContext,
+          availableParameters: Object.keys(contextToUse.parameters),
+          parameterValues: contextToUse.parameters
+        });
+      }
+      
+      const result = transformResponse(rawResponse, expression.trim(), contextToUse);
       liveResults = {
         ...liveResults,
         [alias]: {
