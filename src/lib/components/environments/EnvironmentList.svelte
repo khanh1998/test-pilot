@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { goto } from '$app/navigation';
   import { getEnvironments, deleteEnvironment } from '$lib/http_client/environments';
   import EnvironmentCreator from './EnvironmentCreator.svelte';
   import EnvironmentCard from './EnvironmentCard.svelte';
@@ -42,12 +43,12 @@
 
   function handleEnvironmentView(event: CustomEvent<{ environment: Environment }>) {
     const { environment } = event.detail;
-    window.location.href = `/dashboard/environments/${environment.id}`;
+    goto(`/dashboard/environments/${environment.id}`);
   }
 
   function handleEnvironmentEdit(event: CustomEvent<{ environment: Environment }>) {
     const { environment } = event.detail;
-    window.location.href = `/dashboard/environments/${environment.id}/edit`;
+    goto(`/dashboard/environments/${environment.id}/edit`);
   }
 
   async function handleEnvironmentDelete(event: CustomEvent<{ environment: Environment }>) {

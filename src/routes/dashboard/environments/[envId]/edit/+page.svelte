@@ -1,16 +1,16 @@
 <script lang="ts">
   import type { Environment } from '$lib/types/environment';
   import EnvironmentEditor from '$lib/components/environments/EnvironmentEditor.svelte';
-  import { updateEnvironment, getEnvironment } from '$lib/http_client/environments';
+  import { getEnvironment, updateEnvironment } from '$lib/http_client/environments';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { onMount, onDestroy } from 'svelte';
   import { setBreadcrumbOverride, clearBreadcrumbOverride } from '$lib/store/breadcrumb';
   
-  let environment: Environment | null = null;
-  let isLoading = true;
-  let isSubmitting = false;
-  let error: string | null = null;
+  let environment: Environment | null = $state(null);
+  let isLoading = $state(true);
+  let isSubmitting = $state(false);
+  let error: string | null = $state(null);
 
   const envId = parseInt($page.params.envId || '0');
 
@@ -108,7 +108,7 @@
             </svg>
             <span>{error}</span>
           </div>
-          <button class="text-red-700 hover:bg-red-100 p-1 rounded transition-colors" on:click={() => error = null} aria-label="Close error message">
+          <button class="text-red-700 hover:bg-red-100 p-1 rounded transition-colors" onclick={() => error = null} aria-label="Close error message">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="18" y1="6" x2="6" y2="18"></line>
               <line x1="6" y1="6" x2="18" y2="18"></line>
