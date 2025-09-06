@@ -391,7 +391,8 @@
     flowData.steps.push({
       step_id: newStepId,
       label: `Step ${newStepId}`,
-      endpoints: []
+      endpoints: [],
+      clearCookiesBeforeExecution: false // Default to false
     });
 
     handleChange();
@@ -404,7 +405,8 @@
     const newStep = {
       step_id: newStepId,
       label: `Step ${newStepId}`,
-      endpoints: []
+      endpoints: [],
+      clearCookiesBeforeExecution: false // Default to false
     };
 
     // Insert the new step at the correct position
@@ -421,7 +423,8 @@
     const newStep = {
       step_id: newStepId,
       label: `Step ${newStepId}`,
-      endpoints: []
+      endpoints: [],
+      clearCookiesBeforeExecution: false // Default to false
     };
 
     // Insert the new step at the beginning

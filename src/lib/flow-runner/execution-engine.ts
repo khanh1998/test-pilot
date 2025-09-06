@@ -53,6 +53,12 @@ export class FlowExecutionEngine {
       return;
     }
 
+    // Clear cookies if the step has this flag enabled (do this before checking endpoints)
+    if (step.clearCookiesBeforeExecution === true) {
+      this.context.cookieStore.clear();
+      this.context.addLog('info', `🍪 Cookies cleared before step ${step.step_id}`, 'All stored cookies removed as configured for this step - starting fresh for new user role');
+    }
+
     if (!step.endpoints || !Array.isArray(step.endpoints) || step.endpoints.length === 0) {
       console.log(`Step ${step.step_id} has no endpoints, skipping`);
       return;

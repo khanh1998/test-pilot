@@ -12,6 +12,7 @@
     step_id: string;
     label: string;
     endpoints: StepEndpoint[];
+    clearCookiesBeforeExecution?: boolean;
   };
   export let endpoints: Endpoint[] = [];
   export let apiHosts: Record<string | number, { url: string; name?: string; description?: string }> = {};
@@ -47,6 +48,9 @@
 
   // Step execution state
   let stepExecutionState = { status: 'none' };
+
+  // Computed property to handle undefined clearCookiesBeforeExecution values
+  $: clearCookiesEnabled = step.clearCookiesBeforeExecution === true;
 
   // Helper to determine step execution state
   $: {
@@ -366,6 +370,35 @@
           </svg>
           Run Step
         </button>
+
+        <!-- Clear Cookies Toggle - only show from step 2 onwards -->
+        {#if stepIndex >= 1}
+          <div class="ml-3 flex items-center">
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                bind:checked={clearCookiesEnabled}
+                class="sr-only peer"
+                disabled={isRunning}
+                on:change={() => {
+                  step.clearCookiesBeforeExecution = clearCookiesEnabled;
+                  dispatch('change');
+                }}
+              />
+              <div
+                class="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-orange-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-orange-500"
+                class:opacity-50={isRunning}
+                class:cursor-not-allowed={isRunning}
+              ></div>
+              <span
+                class="ml-2 text-xs text-gray-600"
+                title="Clear all stored cookies before this step executes. Useful when you need to test different user roles (e.g., Step 1: Login as customer, Step 2: Clear cookies + Login as admin)"
+              >
+                🍪 Clear before this step
+              </span>
+            </label>
+          </div>
+        {/if}
       {/if}
     </h3>
     <div class="flex items-center space-x-2">
@@ -449,8 +482,7 @@
         <div
           class="invisible absolute right-0 z-10 w-64 translate-y-2 transform rounded bg-gray-800 p-2 text-xs text-white opacity-0 shadow-lg transition-all group-hover:visible group-hover:opacity-100"
         >
-          You can add the same endpoint multiple times to test different scenarios or parameter
-          combinations.
+          All endpoints in the same step are executed concurrently by default
         </div>
       </div>
     </div>

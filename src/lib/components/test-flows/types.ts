@@ -105,6 +105,7 @@ export type FlowStep = {
   label: string;
   endpoints: StepEndpoint[];
   timeout?: number;
+  clearCookiesBeforeExecution?: boolean; // Flag to clear cookies before executing this step
   // Other step properties
 };
 

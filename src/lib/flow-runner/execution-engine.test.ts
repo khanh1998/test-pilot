@@ -435,4 +435,82 @@ describe('FlowExecutionEngine Template Resolution', () => {
       expect(mockContext.parameterValues).toEqual(newParameterValues);
     });
   });
+
+  describe('clearCookiesBeforeExecution', () => {
+    it('should clear cookies when step has clearCookiesBeforeExecution flag enabled', async () => {
+      // Setup: Add some cookies to the store
+      mockContext.cookieStore.set('step1-0', [
+        { name: 'sessionId', value: 'abc123', domain: 'example.com' }
+      ]);
+      mockContext.cookieStore.set('step2-0', [
+        { name: 'userId', value: '456', domain: 'example.com' }
+      ]);
+
+      expect(mockContext.cookieStore.size).toBe(2);
+
+      // Create a step with clearCookiesBeforeExecution enabled (no endpoints needed)
+      const stepWithClearCookies = {
+        step_id: 'step3',
+        label: 'Login as different user',
+        endpoints: [],
+        clearCookiesBeforeExecution: true
+      };
+
+      // Execute the step
+      await engine.executeStep(stepWithClearCookies);
+
+      // Verify cookies were cleared
+      expect(mockContext.cookieStore.size).toBe(0);
+      expect(mockContext.addLog).toHaveBeenCalledWith(
+        'info',
+        '🍪 Cookies cleared before step step3',
+        'All stored cookies removed as configured for this step - starting fresh for new user role'
+      );
+    });
+
+    it('should not clear cookies when step has clearCookiesBeforeExecution flag disabled', async () => {
+      // Setup: Add some cookies to the store
+      mockContext.cookieStore.set('step1-0', [
+        { name: 'sessionId', value: 'abc123', domain: 'example.com' }
+      ]);
+
+      expect(mockContext.cookieStore.size).toBe(1);
+
+      // Create a step with clearCookiesBeforeExecution disabled
+      const stepWithoutClearCookies = {
+        step_id: 'step2',
+        label: 'Continue with existing session',
+        endpoints: [],
+        clearCookiesBeforeExecution: false
+      };
+
+      // Execute the step
+      await engine.executeStep(stepWithoutClearCookies);
+
+      // Verify cookies were NOT cleared
+      expect(mockContext.cookieStore.size).toBe(1);
+    });
+
+    it('should not clear cookies when step has no clearCookiesBeforeExecution property', async () => {
+      // Setup: Add some cookies to the store
+      mockContext.cookieStore.set('step1-0', [
+        { name: 'sessionId', value: 'abc123', domain: 'example.com' }
+      ]);
+
+      expect(mockContext.cookieStore.size).toBe(1);
+
+      // Create a step without clearCookiesBeforeExecution property (undefined)
+      const stepWithUndefinedFlag = {
+        step_id: 'step2',
+        label: 'Legacy step without flag',
+        endpoints: []
+      };
+
+      // Execute the step
+      await engine.executeStep(stepWithUndefinedFlag);
+
+      // Verify cookies were NOT cleared
+      expect(mockContext.cookieStore.size).toBe(1);
+    });
+  });
 });
