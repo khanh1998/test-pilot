@@ -45,12 +45,12 @@ export function extractEndpoints(api: SwaggerDocument) {
     const paths = api.paths || {};
 
     for (const path in paths) {
-      const pathItem: OpenAPIV3.PathItemObject = paths[path];
+      const pathItem = paths[path];
+      if (!pathItem) continue;
 
       for (const method of ['get', 'post', 'put', 'delete', 'patch', 'options', 'head']) {
-        if (pathItem[method]) {
-          const operation: OpenAPIV3.OperationObject = pathItem[method];
-
+        const operation = pathItem[method as keyof typeof pathItem] as OpenAPIV3.OperationObject | undefined;
+        if (operation) {
           endpoints.push({
             path,
             method: method.toUpperCase(),
@@ -71,12 +71,12 @@ export function extractEndpoints(api: SwaggerDocument) {
     const paths = api.paths || {};
 
     for (const path in paths) {
-      const pathItem: OpenAPIV2.PathItemObject = paths[path];
+      const pathItem = paths[path];
+      if (!pathItem) continue;
 
       for (const method of ['get', 'post', 'put', 'delete', 'patch', 'options', 'head']) {
-        if (pathItem[method]) {
-          const operation: OpenAPIV2.OperationObject = pathItem[method];
-
+        const operation = pathItem[method as keyof typeof pathItem] as OpenAPIV2.OperationObject | undefined;
+        if (operation) {
           endpoints.push({
             path,
             method: method.toUpperCase(),
@@ -133,7 +133,7 @@ export function extractHost(api: SwaggerDocument): string | null {
 
 // Helper functions for OpenAPI 3.x
 function extractRequestSchema(operation: OpenAPIV3.OperationObject) {
-  if (!operation.requestBody) return null;
+  if (!operation.requestBody || '$ref' in operation.requestBody) return null;
 
   const content = operation.requestBody.content || {};
   const contentType = Object.keys(content)[0]; // Get the first content type (usually application/json)
@@ -151,7 +151,7 @@ function extractResponseSchema(operation: OpenAPIV3.OperationObject) {
   // Look for 200 or 201 response first
   const successResponse = operation.responses['200'] || operation.responses['201'];
 
-  if (successResponse && successResponse.content) {
+  if (successResponse && !('$ref' in successResponse) && successResponse.content) {
     const contentType = Object.keys(successResponse.content)[0];
     if (contentType && successResponse.content[contentType].schema) {
       return successResponse.content[contentType].schema;
@@ -170,7 +170,33 @@ function extractParameters(
   const operationParams = operation.parameters || [];
 
   // Combine parameters, with operation parameters taking precedence
-  return [...pathParams, ...operationParams];
+  const allParams = [...pathParams, ...operationParams];
+
+  // Process parameters to extract schema information
+  return allParams.map(param => {
+    if ('$ref' in param) {
+      // Handle parameter references - for now just return as is
+      return param;
+    }
+
+    const paramObj = param as OpenAPIV3.ParameterObject;
+    const schema = paramObj.schema as OpenAPIV3.SchemaObject | undefined;
+
+    const processedParam = {
+      name: paramObj.name,
+      in: paramObj.in,
+      required: paramObj.required || false,
+      description: paramObj.description,
+      example: paramObj.example,
+      schema: schema,
+      style: paramObj.style,
+      explode: paramObj.explode,
+      // For backward compatibility, extract type from schema
+      type: schema?.type || 'string'
+    };
+
+    return processedParam;
+  });
 }
 
 // Helper functions for Swagger 2.0
@@ -179,10 +205,10 @@ function extractSwagger2RequestSchema(operation: OpenAPIV2.OperationObject) {
 
   // Find body parameter
   const bodyParam = operation.parameters.find(
-    (param: OpenAPIV2.ParameterObject) => param.in === 'body'
+    (param) => '$ref' in param ? false : param.in === 'body'
   );
 
-  if (bodyParam && bodyParam.schema) {
+  if (bodyParam && !('$ref' in bodyParam) && 'schema' in bodyParam && bodyParam.schema) {
     return bodyParam.schema;
   }
 
@@ -195,7 +221,7 @@ function extractSwagger2ResponseSchema(operation: OpenAPIV2.OperationObject) {
   // Look for 200 or 201 response first
   const successResponse = operation.responses['200'] || operation.responses['201'];
 
-  if (successResponse && successResponse.schema) {
+  if (successResponse && !('$ref' in successResponse) && 'schema' in successResponse && successResponse.schema) {
     return successResponse.schema;
   }
 
@@ -211,5 +237,36 @@ function extractSwagger2Parameters(
   const operationParams = operation.parameters || [];
 
   // Combine parameters, with operation parameters taking precedence
-  return [...pathParams, ...operationParams];
+  const allParams = [...pathParams, ...operationParams];
+
+  // Process parameters to extract schema information
+  return allParams.map(param => {
+    if ('$ref' in param) {
+      // Handle parameter references - for now just return as is
+      return param;
+    }
+
+    const paramObj = param as OpenAPIV2.ParameterObject;
+
+    const processedParam = {
+      name: paramObj.name,
+      in: paramObj.in,
+      required: paramObj.required || false,
+      description: paramObj.description,
+      example: paramObj.example,
+      type: paramObj.type || 'string',
+      // Map Swagger 2.0 collection format to OpenAPI 3.x style
+      collectionFormat: paramObj.collectionFormat,
+      schema: paramObj.type === 'array' ? {
+        type: 'array',
+        items: paramObj.items ? {
+          type: paramObj.items.type || 'string'
+        } : { type: 'string' }
+      } : {
+        type: paramObj.type || 'string'
+      }
+    };
+
+    return processedParam;
+  });
 }

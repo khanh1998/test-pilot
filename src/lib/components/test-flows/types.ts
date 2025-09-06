@@ -5,6 +5,16 @@ export type Parameter = {
   description?: string;
   example?: string;
   type?: string;
+  schema?: {
+    type: string;
+    items?: {
+      type: string;
+    };
+    format?: string;
+  };
+  style?: 'form' | 'spaceDelimited' | 'pipeDelimited' | 'deepObject';
+  explode?: boolean;
+  collectionFormat?: 'csv' | 'ssv' | 'tsv' | 'pipes' | 'multi'; // Swagger 2.0 collection format
 };
 
 export type Endpoint = {

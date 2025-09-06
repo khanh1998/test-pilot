@@ -231,7 +231,18 @@ export class FlowExecutionEngine {
         const queryParams = new URLSearchParams();
         Object.entries(endpoint.queryParams).forEach(([name, value]) => {
           const resolvedValue = this.resolveTemplateValueUnified(value as string);
-          queryParams.append(name, resolvedValue);
+          
+          // Check if this parameter is an array parameter in the endpoint definition
+          const paramDefinition = endpointDef.parameters?.find((p: any) => p.name === name && p.in === 'query');
+          
+          if (paramDefinition && (paramDefinition.schema?.type === 'array' || paramDefinition.type === 'array')) {
+            // Handle array parameter serialization
+            const arrayValues = this.parseArrayParameter(resolvedValue, paramDefinition);
+            this.serializeArrayParameter(queryParams, name, arrayValues, paramDefinition);
+          } else {
+            // Handle as single value parameter
+            queryParams.append(name, resolvedValue);
+          }
         });
         url += `?${queryParams.toString()}`;
       } catch (err: unknown) {
@@ -577,5 +588,83 @@ export class FlowExecutionEngine {
 
   private addRequestDebugLogs(path: string, reqHeaders: Record<string, string>) {
     // Implementation for request debug logs
+  }
+
+  /**
+   * Parse array parameter value from string format
+   */
+  private parseArrayParameter(value: string, paramDefinition: any): string[] {
+    if (!value || value.trim() === '') {
+      return [];
+    }
+
+    const format = paramDefinition.collectionFormat || paramDefinition.style || 'csv';
+    
+    switch (format) {
+      case 'csv':
+      case 'form':
+        return value.split(',').map(item => item.trim()).filter(item => item !== '');
+      case 'ssv':
+      case 'spaceDelimited':
+        return value.split(' ').map(item => item.trim()).filter(item => item !== '');
+      case 'tsv':
+        return value.split('\t').map(item => item.trim()).filter(item => item !== '');
+      case 'pipes':
+      case 'pipeDelimited':
+        return value.split('|').map(item => item.trim()).filter(item => item !== '');
+      case 'multi':
+        // For multi format, the value should already be an array or single value
+        return [value];
+      default:
+        // Default to comma-separated
+        return value.split(',').map(item => item.trim()).filter(item => item !== '');
+    }
+  }
+
+  /**
+   * Serialize array parameter values to query string format
+   */
+  private serializeArrayParameter(queryParams: URLSearchParams, name: string, values: string[], paramDefinition: any): void {
+    if (values.length === 0) {
+      return;
+    }
+
+    const format = paramDefinition.collectionFormat || paramDefinition.style || 'csv';
+    const explode = paramDefinition.explode !== false; // Default to true for OpenAPI 3.x
+
+    switch (format) {
+      case 'csv':
+      case 'form':
+        if (explode) {
+          // Multiple parameters: ?tags=red&tags=blue&tags=green
+          values.forEach(value => queryParams.append(name, value));
+        } else {
+          // Single parameter with comma-separated values: ?tags=red,blue,green
+          queryParams.append(name, values.join(','));
+        }
+        break;
+      case 'ssv':
+      case 'spaceDelimited':
+        // Space-separated: ?tags=red%20blue%20green
+        queryParams.append(name, values.join(' '));
+        break;
+      case 'tsv':
+        // Tab-separated: ?tags=red%09blue%09green
+        queryParams.append(name, values.join('\t'));
+        break;
+      case 'pipes':
+      case 'pipeDelimited':
+        // Pipe-separated: ?tags=red|blue|green
+        queryParams.append(name, values.join('|'));
+        break;
+      case 'multi':
+        // Multiple parameters: ?tags=red&tags=blue&tags=green
+        values.forEach(value => queryParams.append(name, value));
+        break;
+      default:
+        // Default to exploded form (multiple parameters)
+        values.forEach(value => queryParams.append(name, value));
+        break;
+    }
   }
 }
