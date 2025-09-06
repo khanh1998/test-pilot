@@ -488,6 +488,13 @@ export class FlowExecutionEngine {
 
   private updateFinalStatus(endpoint: StepEndpoint, endpointId: string, response: Response): void {
     const shouldSkipDefaultCheck = endpoint.skipDefaultStatusCheck === true;
+    
+    // Check if assertions already failed - if so, don't override the failed status
+    const currentState = this.context.executionState[endpointId];
+    if (currentState?.status === 'failed') {
+      this.context.addLog('debug', `Endpoint ${endpointId} already marked as failed (likely due to assertion failure), skipping default status check`);
+      return;
+    }
 
     if (shouldSkipDefaultCheck) {
       this.context.updateExecutionState(endpointId, { status: 'completed' }, true);

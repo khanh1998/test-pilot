@@ -78,6 +78,9 @@ export class FlowRunner {
 
     this.parameterManager = new ParameterManager(parameterContext);
 
+    // Capture reference to state for proper error synchronization
+    const state = this.state;
+
     const executionContext: ExecutionContext = {
       flowData: this.options.flowData,
       preferences: this.options.preferences,
@@ -87,8 +90,10 @@ export class FlowRunner {
       environmentVariables: this.options.environmentVariables,
       cookieStore: this.state.cookieStore,
       selectedEnvironment: this.options.selectedEnvironment,
-      shouldStopExecution: this.state.shouldStopExecution,
-      error: this.state.error,
+      get shouldStopExecution() { return state.shouldStopExecution; },
+      set shouldStopExecution(value) { state.shouldStopExecution = value; },
+      get error() { return state.error; },
+      set error(value) { state.error = value; },
       executionState: this.state.executionState,
       addLog: this.options.onLog,
       updateExecutionState: this.updateExecutionState.bind(this)
