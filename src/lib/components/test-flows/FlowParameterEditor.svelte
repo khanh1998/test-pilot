@@ -19,6 +19,11 @@
   let showConfirmDialog = false;
   let pendingDeleteIndex: number | null = null;
 
+  // Default value input state
+  let newParameterIsNullSet = false;
+  let editingParameterIsNullSet: Record<number, boolean> = {};
+  let defaultValueErrors: Record<string, string> = {};
+
   // New parameter template
   let newParameter: FlowParameter = {
     name: '',
@@ -27,10 +32,53 @@
     description: '',
     required: false
   };
+
+  // Helper function to get appropriate default value for a type
+  function getDefaultValueForType(type: string): unknown {
+    switch (type) {
+      case 'string': return '';
+      case 'number': return 0;
+      case 'boolean': return false;
+      case 'object': return {};
+      case 'array': return [];
+      case 'null': return null;
+      default: return '';
+    }
+  }
+
+  // Helper function to handle null checkbox change
+  function handleNullToggle(isNull: boolean, param: FlowParameter, paramType: 'new' | number) {
+    if (isNull) {
+      param.defaultValue = null;
+    } else {
+      param.defaultValue = getDefaultValueForType(param.type);
+    }
+    
+    if (paramType === 'new') {
+      delete defaultValueErrors['new'];
+    } else {
+      delete defaultValueErrors[`edit-${paramType}`];
+    }
+  }
+
+  // Helper function to handle JSON input validation
+  function validateJsonInput(value: string, type: 'object' | 'array', errorKey: string): boolean {
+    try {
+      JSON.parse(value);
+      delete defaultValueErrors[errorKey];
+      return true;
+    } catch (e) {
+      defaultValueErrors[errorKey] = `Invalid JSON: ${e instanceof Error ? e.message : String(e)}`;
+      return false;
+    }
+  }
   
   // Initialize working copy when parameters change, but only if not already modified locally
   $: if (!initialized || (parameters.length !== workingParameters.length)) {
     workingParameters = [...parameters];
+    // Reset editing states when parameters change
+    editingParameterIsNullSet = {};
+    defaultValueErrors = {};
     initialized = true;
   }
   
@@ -43,6 +91,8 @@
       description: '',
       required: false
     };
+    newParameterIsNullSet = false;
+    delete defaultValueErrors['new'];
   }
   
   function cancelAddingNew() {
@@ -54,6 +104,25 @@
       description: '',
       required: false
     };
+    newParameterIsNullSet = false;
+    delete defaultValueErrors['new'];
+  }
+
+  // Handle type change for new parameter
+  function handleNewParameterTypeChange() {
+    if (!newParameterIsNullSet) {
+      newParameter.defaultValue = getDefaultValueForType(newParameter.type);
+    }
+    delete defaultValueErrors['new'];
+  }
+
+  // Handle type change for editing parameter
+  function handleEditingParameterTypeChange(index: number) {
+    const isNullSet = editingParameterIsNullSet[index] || false;
+    if (!isNullSet) {
+      workingParameters[index].defaultValue = getDefaultValueForType(workingParameters[index].type);
+    }
+    delete defaultValueErrors[`edit-${index}`];
   }
   
   function saveNewParameter() {
@@ -71,6 +140,12 @@
       alert('Parameter name already exists');
       return;
     }
+
+    // Set default value (null if checkbox is checked)
+    if (newParameterIsNullSet) {
+      newParameter.defaultValue = null;
+    }
+    // Note: For non-null values, the value is already set by direct binding to newParameter.defaultValue
     
     const paramToSave = { ...newParameter, isNew: true };
     workingParameters = [...workingParameters, paramToSave];
@@ -80,9 +155,15 @@
   
   function startEditing(index: number) {
     editingIndex = index;
+    editingParameterIsNullSet[index] = workingParameters[index].defaultValue === null;
+    delete defaultValueErrors[`edit-${index}`];
   }
   
   function cancelEditing() {
+    if (editingIndex !== null) {
+      delete editingParameterIsNullSet[editingIndex];
+      delete defaultValueErrors[`edit-${editingIndex}`];
+    }
     editingIndex = null;
   }
   
@@ -97,9 +178,16 @@
       alert('Parameter type is required');
       return;
     }
+
+    // Set default value (null if checkbox is checked)
+    if (editingParameterIsNullSet[index]) {
+      param.defaultValue = null;
+    }
+    // Note: For non-null values, the value is already set by direct binding to param.defaultValue
     
     dispatch('save', param);
     editingIndex = null;
+    delete editingParameterIsNullSet[index];
   }
   
   function removeParameter(index: number) {
@@ -195,6 +283,7 @@
               <div class="block text-sm font-medium text-gray-700 mb-1">Type <span class="text-red-500">*</span></div>
               <select
                 bind:value={newParameter.type}
+                on:change={handleNewParameterTypeChange}
                 class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
               >
                 <option value="string">String</option>
@@ -202,16 +291,74 @@
                 <option value="boolean">Boolean</option>
                 <option value="object">Object</option>
                 <option value="array">Array</option>
+                <option value="null">Null</option>
               </select>
             </div>
-            <div>
+            <div class="col-span-2">
               <div class="block text-sm font-medium text-gray-700 mb-1">Default Value</div>
-              <input
-                type="text"
-                bind:value={newParameter.defaultValue}
-                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                placeholder="Default value"
-              />
+              <div class="space-y-2">
+                <div class="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="new-param-null-checkbox"
+                    bind:checked={newParameterIsNullSet}
+                    on:change={() => handleNullToggle(newParameterIsNullSet, newParameter, 'new')}
+                    class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <label for="new-param-null-checkbox" class="text-sm text-gray-700">Set to null/undefined</label>
+                </div>
+                
+                {#if !newParameterIsNullSet}
+                  {#if newParameter.type === 'boolean'}
+                    <div class="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id="new-param-boolean-input"
+                        checked={Boolean(newParameter.defaultValue)}
+                        on:change={(e) => {
+                          newParameter.defaultValue = (e.target as HTMLInputElement).checked;
+                        }}
+                        class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <label for="new-param-boolean-input" class="text-sm text-gray-700">True/False</label>
+                    </div>
+                  {:else if newParameter.type === 'number'}
+                    <input
+                      type="number"
+                      bind:value={newParameter.defaultValue}
+                      class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      placeholder="Enter number"
+                      step="any"
+                    />
+                  {:else if newParameter.type === 'object' || newParameter.type === 'array'}
+                    <textarea
+                      bind:value={newParameter.defaultValue}
+                      on:input={(e) => {
+                        const value = (e.target as HTMLTextAreaElement).value;
+                        if (value.trim()) {
+                          validateJsonInput(value, newParameter.type as 'object' | 'array', 'new');
+                        }
+                      }}
+                      class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 font-mono text-sm"
+                      placeholder={`Enter valid JSON for ${newParameter.type}`}
+                      rows="3"
+                    ></textarea>
+                  {:else}
+                    <input
+                      type="text"
+                      bind:value={newParameter.defaultValue}
+                      class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      placeholder="Enter string value"
+                    />
+                  {/if}
+                {:else}
+                  <div class="text-sm text-gray-500 italic p-2 bg-gray-50 rounded">Value will be set to null</div>
+                {/if}
+
+                {#if defaultValueErrors['new']}
+                  <p class="text-sm text-red-600">{defaultValueErrors['new']}</p>
+                {/if}
+              </div>
             </div>
             <div class="col-span-2">
               <div class="block text-sm font-medium text-gray-700 mb-1">Description</div>
@@ -273,6 +420,7 @@
                     <div class="block text-sm font-medium text-gray-700 mb-1">Type <span class="text-red-500">*</span></div>
                     <select
                       bind:value={param.type}
+                      on:change={() => handleEditingParameterTypeChange(index)}
                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                     >
                       <option value="string">String</option>
@@ -280,15 +428,74 @@
                       <option value="boolean">Boolean</option>
                       <option value="object">Object</option>
                       <option value="array">Array</option>
+                      <option value="null">Null</option>
                     </select>
                   </div>
-                  <div>
+                  <div class="col-span-2">
                     <div class="block text-sm font-medium text-gray-700 mb-1">Default Value</div>
-                    <input
-                      type="text"
-                      bind:value={param.defaultValue}
-                      class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                    />
+                    <div class="space-y-2">
+                      <div class="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id="edit-param-null-checkbox-{index}"
+                          bind:checked={editingParameterIsNullSet[index]}
+                          on:change={() => handleNullToggle(editingParameterIsNullSet[index], param, index)}
+                          class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <label for="edit-param-null-checkbox-{index}" class="text-sm text-gray-700">Set to null/undefined</label>
+                      </div>
+                      
+                      {#if !editingParameterIsNullSet[index]}
+                        {#if param.type === 'boolean'}
+                          <div class="flex items-center space-x-2">
+                            <input
+                              type="checkbox"
+                              id="edit-param-boolean-input-{index}"
+                              checked={Boolean(param.defaultValue)}
+                              on:change={(e) => {
+                                param.defaultValue = (e.target as HTMLInputElement).checked;
+                              }}
+                              class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <label for="edit-param-boolean-input-{index}" class="text-sm text-gray-700">True/False</label>
+                          </div>
+                        {:else if param.type === 'number'}
+                          <input
+                            type="number"
+                            bind:value={param.defaultValue}
+                            class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            placeholder="Enter number"
+                            step="any"
+                          />
+                        {:else if param.type === 'object' || param.type === 'array'}
+                          <textarea
+                            bind:value={param.defaultValue}
+                            on:input={(e) => {
+                              const value = (e.target as HTMLTextAreaElement).value;
+                              if (value.trim()) {
+                                validateJsonInput(value, param.type as 'object' | 'array', `edit-${index}`);
+                              }
+                            }}
+                            class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 font-mono text-sm"
+                            placeholder={`Enter valid JSON for ${param.type}`}
+                            rows="3"
+                          ></textarea>
+                        {:else}
+                          <input
+                            type="text"
+                            bind:value={param.defaultValue}
+                            class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            placeholder="Enter string value"
+                          />
+                        {/if}
+                      {:else}
+                        <div class="text-sm text-gray-500 italic p-2 bg-gray-50 rounded">Value will be set to null</div>
+                      {/if}
+
+                      {#if defaultValueErrors[`edit-${index}`]}
+                        <p class="text-sm text-red-600">{defaultValueErrors[`edit-${index}`]}</p>
+                      {/if}
+                    </div>
                   </div>
                   <div class="col-span-2">
                     <div class="block text-sm font-medium text-gray-700 mb-1">Description</div>
@@ -341,7 +548,17 @@
                       {currentValues[param.name] !== undefined ? JSON.stringify(currentValues[param.name]) : 'Not evaluated'}
                     </div>
                     <div class="text-xs text-gray-600 mt-2">Default:</div>
-                    <div class="text-sm font-mono break-all">{param.defaultValue || 'Not set'}</div>
+                    <div class="text-sm font-mono break-all">
+                      {#if param.defaultValue === null}
+                        <span class="text-gray-500 italic">null</span>
+                      {:else if param.defaultValue === undefined}
+                        <span class="text-gray-500 italic">undefined</span>
+                      {:else if param.defaultValue === ''}
+                        <span class="text-gray-500 italic">empty string</span>
+                      {:else}
+                        {typeof param.defaultValue === 'string' ? param.defaultValue : JSON.stringify(param.defaultValue)}
+                      {/if}
+                    </div>
                     {#if param.description}
                       <div class="text-xs text-gray-600 mt-1">Description:</div>
                       <p class="text-xs text-gray-500">{param.description}</p>
