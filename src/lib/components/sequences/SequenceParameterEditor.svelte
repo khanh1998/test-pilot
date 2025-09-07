@@ -1,9 +1,11 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import type { SequenceParameter } from '$lib/http_client/sequences';
+  import type { ProjectVariable } from '$lib/http_client/projects';
 
   export let isOpen = false;
   export let parameters: Record<string, SequenceParameter> = {};
+  export let projectVariables: Record<string, ProjectVariable> = {};
   export let onSave: (parameters: Record<string, SequenceParameter>) => void;
   export let onCancel: () => void;
 
@@ -269,14 +271,92 @@
                         {/if}
                       {:else}
                         <label for="var-{paramName}" class="block text-sm font-medium text-gray-700">Project Variable</label>
-                        <input
-                          id="var-{paramName}"
-                          type="text"
-                          class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                          placeholder="Enter project variable name..."
-                          value={parameter.project_variable || ''}
-                          on:input={(e) => updateParameter(paramName, { project_variable: (e.target as HTMLInputElement).value })}
-                        />
+                        {#if Object.keys(projectVariables).length > 0}
+                          <select
+                            id="var-{paramName}"
+                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                            value={parameter.project_variable || ''}
+                            on:change={(e) => updateParameter(paramName, { project_variable: (e.target as HTMLSelectElement).value })}
+                          >
+                            <option value="">Select a project variable...</option>
+                            
+                            <!-- Compatible variables (same type) first -->
+                            {#each Object.entries(projectVariables).filter(([_, varConfig]) => varConfig.type === parameter.type) as [varName, varConfig] (varName)}
+                              <option value={varName}>
+                                ✓ {varName} ({varConfig.type})
+                                {#if varConfig.description}
+                                  - {varConfig.description.length > 40 ? varConfig.description.substring(0, 40) + '...' : varConfig.description}
+                                {/if}
+                              </option>
+                            {/each}
+                            
+                            <!-- Incompatible variables (different type) -->
+                            {#each Object.entries(projectVariables).filter(([_, varConfig]) => varConfig.type !== parameter.type) as [varName, varConfig] (varName)}
+                              <option value={varName}>
+                                ⚠ {varName} ({varConfig.type} - type mismatch)
+                                {#if varConfig.description}
+                                  - {varConfig.description.length > 30 ? varConfig.description.substring(0, 30) + '...' : varConfig.description}
+                                {/if}
+                              </option>
+                            {/each}
+                          </select>
+                          <!-- Show selected variable details -->
+                          {#if parameter.project_variable && projectVariables[parameter.project_variable]}
+                            {@const selectedVar = projectVariables[parameter.project_variable]}
+                            <div class="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                              <div class="text-sm">
+                                <div class="font-medium text-blue-900 mb-1">Selected: {parameter.project_variable}</div>
+                                <div class="text-blue-700 space-y-1">
+                                  <div><span class="font-medium">Type:</span> {selectedVar.type}</div>
+                                  <div><span class="font-medium">Required:</span> {selectedVar.required ? 'Yes' : 'No'}</div>
+                                  <div><span class="font-medium">Source:</span> {selectedVar.value_source === 'environment' ? 'Environment Variable' : 'Hardcoded Value'}</div>
+                                  {#if selectedVar.description}
+                                    <div><span class="font-medium">Description:</span> {selectedVar.description}</div>
+                                  {/if}
+                                  {#if selectedVar.value_source === 'hardcoded' && selectedVar.hardcoded_value !== null && selectedVar.hardcoded_value !== undefined && selectedVar.hardcoded_value !== ''}
+                                    <div><span class="font-medium">Current Value:</span> 
+                                      <code class="bg-blue-100 px-1 rounded text-xs">{selectedVar.hardcoded_value}</code>
+                                    </div>
+                                  {/if}
+                                  {#if selectedVar.value_source === 'environment' && selectedVar.environment_variable}
+                                    <div><span class="font-medium">Environment Variable:</span> 
+                                      <code class="bg-blue-100 px-1 rounded text-xs">{selectedVar.environment_variable}</code>
+                                    </div>
+                                  {/if}
+                                </div>
+                                <!-- Type compatibility warning -->
+                                {#if parameter.type !== selectedVar.type}
+                                  <div class="mt-2 p-2 bg-yellow-100 border border-yellow-300 rounded text-yellow-800">
+                                    <svg class="inline h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16c-.77.833.192 2.5 1.732 2.5z"></path>
+                                    </svg>
+                                    <span class="text-xs">
+                                      <strong>Type mismatch:</strong> Parameter expects {parameter.type}, but variable is {selectedVar.type}
+                                    </span>
+                                  </div>
+                                {/if}
+                              </div>
+                            </div>
+                          {/if}
+                        {:else}
+                          <div class="mt-1">
+                            <div class="rounded-md bg-yellow-50 p-3 border border-yellow-200">
+                              <div class="flex">
+                                <div class="flex-shrink-0">
+                                  <svg class="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                                  </svg>
+                                </div>
+                                <div class="ml-3">
+                                  <h3 class="text-sm font-medium text-yellow-800">No Project Variables Available</h3>
+                                  <div class="mt-1 text-sm text-yellow-700">
+                                    <p>No project variables have been defined yet. You can define project variables in the project configuration.</p>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        {/if}
                       {/if}
                     </div>
                   </div>

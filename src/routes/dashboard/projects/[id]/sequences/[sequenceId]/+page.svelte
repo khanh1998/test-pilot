@@ -441,6 +441,7 @@
 <SequenceParameterEditor
   isOpen={showParameterEditor}
   parameters={sequence?.config?.parameters || {}}
+  projectVariables={project?.config?.variables || {}}
   onSave={handleUpdateSequenceParameters}
   onCancel={() => showParameterEditor = false}
 />

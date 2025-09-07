@@ -6,6 +6,7 @@
   import * as sequenceClient from '$lib/http_client/sequences';
   import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
   import SequenceCard from '$lib/components/sequences/SequenceCard.svelte';
+  import ProjectConfigModal from '$lib/components/projects/ProjectConfigModal.svelte';
   import type { Project } from '$lib/http_client/projects';
   import type { Sequence, CreateSequenceData } from '$lib/http_client/sequences';
 
@@ -35,6 +36,9 @@
   // Edit modal state
   let showEditSequenceModal = false;
   let editingSequence: Sequence | null = null;
+
+  // Project configuration state
+  let showConfigModal = false;
 
   // Get project ID from URL
   $: projectId = parseInt($page.params.id || '');
@@ -225,6 +229,19 @@
   function goBackToProjects() {
     goto('/dashboard/projects');
   }
+
+  // Project Configuration Modal handlers
+  function openConfigModal() {
+    showConfigModal = true;
+  }
+
+  function closeConfigModal() {
+    showConfigModal = false;
+  }
+
+  function handleConfigSaved(event: CustomEvent<{ project: Project }>) {
+    project = event.detail.project;
+  }
 </script>
 
 <svelte:head>
@@ -282,7 +299,17 @@
       {/if}
     </div>
     
-    <div class="mt-4 sm:mt-0">
+    <div class="mt-4 sm:mt-0 flex gap-2">
+      <button
+        type="button"
+        class="inline-flex items-center rounded-md bg-gray-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-gray-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-600"
+        on:click={openConfigModal}
+      >
+        <svg class="-ml-0.5 mr-1.5 h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M8.34 1.804A1 1 0 019.32 1h1.36a1 1 0 01.98.804l.295 1.473c.497.144.971.342 1.416.587l1.25-.834a1 1 0 011.262.125l.962.962a1 1 0 01.125 1.262l-.834 1.25c.245.445.443.919.587 1.416l1.473.294a1 1 0 01.804.98v1.361a1 1 0 01-.804.98l-1.473.295a6.95 6.95 0 01-.587 1.416l.834 1.25a1 1 0 01-.125 1.262l-.962.962a1 1 0 01-1.262.125l-1.25-.834a6.953 6.953 0 01-1.416.587l-.294 1.473a1 1 0 01-.98.804H9.32a1 1 0 01-.98-.804l-.295-1.473a6.957 6.957 0 01-1.416-.587l-1.25.834a1 1 0 01-1.262-.125l-.962-.962a1 1 0 01-.125-1.262l.834-1.25a6.957 6.957 0 01-.587-1.416l-1.473-.294A1 1 0 011 10.68V9.32a1 1 0 01.804-.98l1.473-.295c.144-.497.342-.971.587-1.416l-.834-1.25a1 1 0 01.125-1.262l.962-.962A1 1 0 015.38 3.03l1.25.834a6.957 6.957 0 011.416-.587l.294-1.473zM13 10a3 3 0 11-6 0 3 3 0 016 0z" clip-rule="evenodd" />
+        </svg>
+        Configure
+      </button>
       <button
         type="button"
         class="inline-flex items-center rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
@@ -603,3 +630,11 @@
     on:cancel={cancelDeleteSequence}
   />
 {/if}
+
+<!-- Project Configuration Modal -->
+<ProjectConfigModal
+  isOpen={showConfigModal}
+  {project}
+  on:close={closeConfigModal}
+  on:saved={handleConfigSaved}
+/>
