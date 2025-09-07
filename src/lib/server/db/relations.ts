@@ -1,10 +1,11 @@
 import { relations } from 'drizzle-orm';
-import { users, apis, apiEndpoints, testFlows, testFlowApis, endpointEmbeddings, environments, environmentApis } from './schema';
+import { users, apis, apiEndpoints, testFlows, testFlowApis, endpointEmbeddings, environments, environmentApis, projects, sequences } from './schema';
 
 export const usersRelations = relations(users, ({ many }) => ({
   apis: many(apis),
   testFlows: many(testFlows),
-  environments: many(environments)
+  environments: many(environments),
+  projects: many(projects)
 }));
 
 export const apisRelations = relations(apis, ({ one, many }) => ({
@@ -72,5 +73,20 @@ export const environmentApisRelations = relations(environmentApis, ({ one }) => 
   api: one(apis, {
     fields: [environmentApis.apiId],
     references: [apis.id]
+  })
+}));
+
+export const projectsRelations = relations(projects, ({ one, many }) => ({
+  user: one(users, {
+    fields: [projects.userId],
+    references: [users.id]
+  }),
+  sequences: many(sequences)
+}));
+
+export const sequencesRelations = relations(sequences, ({ one }) => ({
+  project: one(projects, {
+    fields: [sequences.projectId],
+    references: [projects.id]
   })
 }));

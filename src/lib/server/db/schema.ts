@@ -113,6 +113,49 @@ export const environmentApis = pgTable(
   ]
 );
 
+// Projects table - containers that group related sequences with shared variables and API dependencies
+export const projects = pgTable(
+  'projects',
+  {
+    id: serial('id').primaryKey(),
+    name: text('name').notNull(),
+    description: text('description'),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    config: jsonb('config').notNull(), // Stores project configuration
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull()
+  },
+  (table) => [
+    index('projects_config_gin_idx').using('gin', table.config),
+    index('projects_user_id_idx').on(table.userId),
+    uniqueIndex('projects_user_name_unique_idx').on(table.userId, table.name) // Prevent duplicate project names per user
+  ]
+);
+
+// Sequences table - ordered collections of test flows with parameters
+export const sequences = pgTable(
+  'sequences',
+  {
+    id: serial('id').primaryKey(),
+    name: text('name').notNull(),
+    projectId: integer('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    config: jsonb('config').notNull(), // Stores sequence configuration
+    orderIndex: integer('order_index').notNull().default(0),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull()
+  },
+  (table) => [
+    index('sequences_config_gin_idx').using('gin', table.config),
+    index('sequences_project_id_idx').on(table.projectId),
+    index('sequences_order_idx').on(table.projectId, table.orderIndex),
+    uniqueIndex('sequences_project_name_unique_idx').on(table.projectId, table.name) // Prevent duplicate sequence names per project
+  ]
+);
+
 // Endpoint embeddings table for vector similarity search
 export const endpointEmbeddings = pgTable(
   'endpoint_embeddings',

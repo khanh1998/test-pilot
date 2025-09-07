@@ -21,7 +21,7 @@ export async function GET({ locals, url }: RequestEvent) {
     const search = url.searchParams.get('search') || '';
 
     // Validate parameters
-    if (page < 1 || limit < 1 || limit > 100) {
+    if (page < 1 || limit < 1 || limit > 1000) {
       return new Response(JSON.stringify({ error: 'Invalid pagination parameters' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }

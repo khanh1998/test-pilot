@@ -119,12 +119,24 @@ export class FlowRunner {
     const validationError = FlowValidator.getValidationErrorMessage(this.options.flowData);
     if (validationError) {
       this.state.error = new Error(validationError);
+      
+      // Include error information in flow outputs even for validation errors
+      const flowOutputs: Record<string, unknown> = {
+        __error: {
+          message: validationError,
+          type: 'ValidationError',
+          timestamp: new Date().toISOString(),
+          stepIndex: 0,
+          totalSteps: this.state.totalSteps
+        }
+      };
+      
       this.options.onExecutionComplete?.({
         success: false,
         error: this.state.error,
         storedResponses: this.state.storedResponses,
         parameterValues: this.state.parameterValues,
-        flowOutputs: {}
+        flowOutputs
       });
       return { success: false, error: this.state.error };
     }
@@ -171,9 +183,24 @@ export class FlowRunner {
 
       this.state.progress = 100;
       
+      // Always try to evaluate outputs, even if there was an error
       let flowOutputs: Record<string, unknown> = {};
-      if (!this.state.error) {
+      try {
         flowOutputs = this.outputEvaluator.evaluateOutputs();
+      } catch (outputError) {
+        this.options.onLog('warning', 'Failed to evaluate flow outputs after execution', 
+          outputError instanceof Error ? outputError.message : String(outputError));
+      }
+
+      // Include error information in flow outputs if there was an error
+      if (this.state.error) {
+        flowOutputs.__error = {
+          message: this.state.error instanceof Error ? this.state.error.message : String(this.state.error),
+          type: this.state.error instanceof Error ? this.state.error.constructor.name : 'Unknown',
+          timestamp: new Date().toISOString(),
+          stepIndex: this.state.currentStep,
+          totalSteps: this.state.totalSteps
+        };
       }
 
       this.options.onExecutionComplete?.({
@@ -190,12 +217,30 @@ export class FlowRunner {
       this.state.error = err;
       this.options.onLog('error', 'Flow execution error', err instanceof Error ? err.message : String(err));
       
+      // Try to evaluate outputs even after an error, and include error information
+      let flowOutputs: Record<string, unknown> = {};
+      try {
+        flowOutputs = this.outputEvaluator.evaluateOutputs();
+      } catch (outputError) {
+        this.options.onLog('warning', 'Failed to evaluate flow outputs after error', 
+          outputError instanceof Error ? outputError.message : String(outputError));
+      }
+
+      // Include error information in flow outputs
+      flowOutputs.__error = {
+        message: err instanceof Error ? err.message : String(err),
+        type: err instanceof Error ? err.constructor.name : 'Unknown',
+        timestamp: new Date().toISOString(),
+        stepIndex: this.state.currentStep,
+        totalSteps: this.state.totalSteps
+      };
+      
       this.options.onExecutionComplete?.({
         success: false,
         error: this.state.error,
         storedResponses: this.state.storedResponses,
         parameterValues: this.state.parameterValues,
-        flowOutputs: {}
+        flowOutputs
       });
 
       return { success: false, error: this.state.error };
