@@ -267,35 +267,42 @@
         
         // Handle special operators that require array values
         if (isRangeOperator(assertion.operator)) {
-          // Make sure between/not_between have an array of two numbers
-          if (!Array.isArray(assertion.expected_value) || assertion.expected_value.length !== 2) {
-            const value = Number(assertion.expected_value) || 0;
-            assertion.expected_value = [value, value + 10];
-          } else {
-            // Ensure both values are numbers
-            assertion.expected_value = [
-              Number(assertion.expected_value[0]), 
-              Number(assertion.expected_value[1])
-            ];
+          // Make sure between/not_between have an array of two numbers (only for non-templates)
+          if (!assertion.is_template_expression) {
+            if (!Array.isArray(assertion.expected_value) || assertion.expected_value.length !== 2) {
+              const value = Number(assertion.expected_value) || 0;
+              assertion.expected_value = [value, value + 10];
+            } else {
+              // Ensure both values are numbers
+              assertion.expected_value = [
+                Number(assertion.expected_value[0]), 
+                Number(assertion.expected_value[1])
+              ];
+            }
           }
+          // For templates, keep the string value as-is
         }
         // Handle other array-based operators
         else if (isArrayOperator(assertion.operator)) {
-          if (!Array.isArray(assertion.expected_value)) {
-            try {
-              if (typeof assertion.expected_value === 'string') {
-                assertion.expected_value = JSON.parse(assertion.expected_value);
-              } else {
-                assertion.expected_value = [assertion.expected_value];
+          // Only process arrays for non-templates
+          if (!assertion.is_template_expression) {
+            if (!Array.isArray(assertion.expected_value)) {
+              try {
+                if (typeof assertion.expected_value === 'string') {
+                  assertion.expected_value = JSON.parse(assertion.expected_value);
+                } else {
+                  assertion.expected_value = [assertion.expected_value];
+                }
+              } catch (e) {
+                console.error('Invalid array value in assertion:', e);
+                assertion.expected_value = [];
               }
-            } catch (e) {
-              console.error('Invalid array value in assertion:', e);
-              assertion.expected_value = [];
             }
           }
+          // For templates, keep the string value as-is
         }
-        // Convert string values to their proper types for array
-        else if (assertion.expected_value_type === 'array') {
+        // Convert string values to their proper types for array (only for non-templates)
+        else if (assertion.expected_value_type === 'array' && !assertion.is_template_expression) {
           if (typeof assertion.expected_value === 'string') {
             try {
               assertion.expected_value = JSON.parse(assertion.expected_value as string);
@@ -305,11 +312,11 @@
               assertion.expected_value = [];
             }
           }
-        } else if (assertion.expected_value_type === 'number') {
-          // Convert number strings to actual numbers
+        } else if (assertion.expected_value_type === 'number' && !assertion.is_template_expression) {
+          // Convert number strings to actual numbers (only if not a template)
           assertion.expected_value = Number(assertion.expected_value);
-        } else if (assertion.expected_value_type === 'boolean') {
-          // Convert boolean strings to actual booleans
+        } else if (assertion.expected_value_type === 'boolean' && !assertion.is_template_expression) {
+          // Convert boolean strings to actual booleans (only if not a template)
           assertion.expected_value = assertion.expected_value === 'true' || assertion.expected_value === true;
         }
         
@@ -339,37 +346,43 @@
     
     // Handle special operator cases
     if (processedAssertion.operator === 'between' || processedAssertion.operator === 'not_between') {
-      // Make sure it's a valid array of two numbers
-      if (!Array.isArray(processedAssertion.expected_value) || processedAssertion.expected_value.length !== 2) {
-        processedAssertion.expected_value = [0, 10]; // Default range
-      } else {
-        // Ensure both values are numbers
-        processedAssertion.expected_value = [
-          Number(processedAssertion.expected_value[0]), 
-          Number(processedAssertion.expected_value[1])
-        ];
-      }
-    } else if (['contains_all', 'contains_any', 'not_contains_any', 'one_of', 'not_one_of'].includes(processedAssertion.operator)) {
-      // Make sure it's a valid array
-      if (!Array.isArray(processedAssertion.expected_value)) {
-        try {
-          if (typeof processedAssertion.expected_value === 'string') {
-            processedAssertion.expected_value = JSON.parse(processedAssertion.expected_value);
-          } else {
-            processedAssertion.expected_value = [processedAssertion.expected_value];
-          }
-        } catch (e) {
-          console.error('InValid array in assertion:', e);
-          processedAssertion.expected_value = []; // Default empty array
+      // Make sure it's a valid array of two numbers (only for non-templates)
+      if (!processedAssertion.is_template_expression) {
+        if (!Array.isArray(processedAssertion.expected_value) || processedAssertion.expected_value.length !== 2) {
+          processedAssertion.expected_value = [0, 10]; // Default range
+        } else {
+          // Ensure both values are numbers
+          processedAssertion.expected_value = [
+            Number(processedAssertion.expected_value[0]), 
+            Number(processedAssertion.expected_value[1])
+          ];
         }
       }
+      // For templates, keep the string value as-is
+    } else if (['contains_all', 'contains_any', 'not_contains_any', 'one_of', 'not_one_of'].includes(processedAssertion.operator)) {
+      // Make sure it's a valid array (only for non-templates)
+      if (!processedAssertion.is_template_expression) {
+        if (!Array.isArray(processedAssertion.expected_value)) {
+          try {
+            if (typeof processedAssertion.expected_value === 'string') {
+              processedAssertion.expected_value = JSON.parse(processedAssertion.expected_value);
+            } else {
+              processedAssertion.expected_value = [processedAssertion.expected_value];
+            }
+          } catch (e) {
+            console.error('InValid array in assertion:', e);
+            processedAssertion.expected_value = []; // Default empty array
+          }
+        }
+      }
+      // For templates, keep the string value as-is
     } else if (processedAssertion.operator === 'is_type') {
       // Make sure it's a valid type string
       if (!['string', 'number', 'boolean', 'array', 'object', 'null'].includes(String(processedAssertion.expected_value))) {
         processedAssertion.expected_value = 'string'; // Default type
       }
-    } else if (processedAssertion.expected_value_type === 'array') {
-      // Parse JSON arrays
+    } else if (processedAssertion.expected_value_type === 'array' && !processedAssertion.is_template_expression) {
+      // Parse JSON arrays (only for non-templates)
       if (typeof processedAssertion.expected_value === 'string') {
         try {
           processedAssertion.expected_value = JSON.parse(processedAssertion.expected_value);
@@ -379,11 +392,11 @@
           processedAssertion.expected_value = [];
         }
       }
-    } else if (processedAssertion.expected_value_type === 'number') {
-      // Convert to number
+    } else if (processedAssertion.expected_value_type === 'number' && !processedAssertion.is_template_expression) {
+      // Convert to number (only if not a template)
       processedAssertion.expected_value = Number(processedAssertion.expected_value);
-    } else if (processedAssertion.expected_value_type === 'boolean') {
-      // Convert to boolean
+    } else if (processedAssertion.expected_value_type === 'boolean' && !processedAssertion.is_template_expression) {
+      // Convert to boolean (only if not a template)
       processedAssertion.expected_value = processedAssertion.expected_value === 'true' || processedAssertion.expected_value === true;
     }
     
@@ -477,10 +490,10 @@
         }
       } else if (newType === 'boolean') {
         assertion.expected_value = Boolean(currentValue).toString();
-      } else if (newType === 'number') {
+      } else if (newType === 'number' && !assertion.is_template_expression) {
         assertion.expected_value = isNaN(Number(currentValue)) ? 0 : Number(currentValue);
       } else {
-        // For string, convert to string representation
+        // For string or template expressions, convert to string representation
         assertion.expected_value = String(currentValue);
       }
     }
@@ -497,8 +510,8 @@
     }
     
     // Handle special case for range operators when switching to number type
-    if (newType === 'number' && (assertion.operator === 'between' || assertion.operator === 'not_between')) {
-      // Ensure expected_value is an array with two numbers
+    if (newType === 'number' && (assertion.operator === 'between' || assertion.operator === 'not_between') && !assertion.is_template_expression) {
+      // Ensure expected_value is an array with two numbers (only for non-templates)
       if (!Array.isArray(assertion.expected_value)) {
         const defaultValue = Number(assertion.expected_value) || 0;
         assertion.expected_value = [defaultValue, defaultValue + 10];
@@ -789,65 +802,78 @@
                     </span>
                   {/if}
                 </div>                <div class="grid grid-cols-2 gap-x-3 gap-y-2">
-                  <div>
-                    <label for="data-source-{i}" class="block text-xs font-medium text-gray-500">
-                      Data Source:
-                    </label>
-                    <select
-                      id="data-source-{i}"
-                      bind:value={assertion.data_source}
-                      class="w-full rounded border px-1.5 py-0.5 text-xs"
-                      on:change={handleAssertionChange}
-                    >
-                      <option value="response">Response</option>
-                      {#if hasTransformations}
-                        <option value="transformed_data">Transformed Data</option>
-                      {/if}
-                    </select>
-                  </div>
+          <div>
+            <label for="data-source-{i}" class="block text-xs font-medium text-gray-500">
+              Data Source:
+            </label>
+            <select
+              id="data-source-{i}"
+              bind:value={assertion.data_source}
+              class="w-full rounded border px-1.5 py-0.5 text-xs"
+              on:change={() => {
+                // Auto-set assertion type to json_body when transformed_data is selected
+                if (assertion.data_source === 'transformed_data') {
+                  assertion.assertion_type = 'json_body';
+                  updateAssertionType(assertion, 'json_body');
+                }
+                handleAssertionChange();
+              }}
+            >
+              <option value="response">Response</option>
+              {#if hasTransformations}
+                <option value="transformed_data">Transformed Data</option>
+              {/if}
+            </select>
+          </div>
 
-                  <div>
-                    <label for="assertion-type-{i}" class="block text-xs font-medium text-gray-500">
-                      Assertion Type:
-                    </label>
-                    <select
-                      id="assertion-type-{i}"
-                      bind:value={assertion.assertion_type}
-                      class="w-full rounded border px-1.5 py-0.5 text-xs"
-                      on:change={() => {
-                        updateAssertionType(assertion, assertion.assertion_type);
-                        handleAssertionChange();
-                      }}
-                    >
-                      <option value="status_code">Status Code</option>
-                      <option value="response_time">Response Time</option>
-                      <option value="header">Header</option>
-                      <option value="json_body">JSON Body</option>
-                    </select>
-                  </div>
-
-                  {#if assertion.assertion_type === 'header' || assertion.assertion_type === 'json_body'}
+          {#if assertion.data_source !== 'transformed_data'}
+            <div>
+              <label for="assertion-type-{i}" class="block text-xs font-medium text-gray-500">
+                Assertion Type:
+              </label>
+              <select
+                id="assertion-type-{i}"
+                bind:value={assertion.assertion_type}
+                class="w-full rounded border px-1.5 py-0.5 text-xs"
+                on:change={() => {
+                  updateAssertionType(assertion, assertion.assertion_type);
+                  handleAssertionChange();
+                }}
+              >
+                <option value="status_code">Status Code</option>
+                <option value="response_time">Response Time</option>
+                <option value="header">Header</option>
+                <option value="json_body">JSON Body</option>
+              </select>
+            </div>
+          {/if}                  {#if assertion.assertion_type === 'header' || assertion.assertion_type === 'json_body' || assertion.data_source === 'transformed_data'}
                     <div class="col-span-2">
                       <label for="data-id-{i}" class="block text-xs font-medium text-gray-500">
-                        {assertion.assertion_type === 'header' ? 'Header Name' : 'JSONPath Expression'}:
+                        {#if assertion.data_source === 'transformed_data'}
+                          JSONPath Expression:
+                        {:else if assertion.assertion_type === 'header'}
+                          Header Name:
+                        {:else}
+                          JSONPath Expression:
+                        {/if}
                       </label>
                       <input
                         id="data-id-{i}"
                         type="text"
                         bind:value={assertion.data_id}
                         class="w-full rounded border px-1.5 py-0.5 text-xs"
-                        placeholder={assertion.assertion_type === 'header' ? 'content-type' : '$.data.user.id'}
+                        placeholder={assertion.data_source === 'transformed_data' ? '$.transformedField' : assertion.assertion_type === 'header' ? 'content-type' : '$.data.user.id'}
                         on:change={handleAssertionChange}
                       />
-                      {#if assertion.assertion_type === 'json_body'}
+                      {#if assertion.assertion_type === 'json_body' || assertion.data_source === 'transformed_data'}
                         <p class="mt-0.5 text-xs text-gray-500">JSONPath from {assertion.data_source}</p>
                       {/if}
                     </div>
                   {/if}
 
                   <div>
-                    <!-- Type selector for json_body assertions -->
-                    {#if assertion.assertion_type === 'json_body'}
+                    <!-- Type selector for json_body assertions or transformed data -->
+                    {#if assertion.assertion_type === 'json_body' || assertion.data_source === 'transformed_data'}
                       <label for="type-{i}" class="block text-xs font-medium text-gray-500">
                         Type:
                       </label>
@@ -878,7 +904,7 @@
                         handleAssertionChange();
                       }}
                     >
-                      {#each getOperatorsForType(assertion.assertion_type, assertion.expected_value_type, assertion.is_template_expression) as op}
+                      {#each getOperatorsForType(assertion.data_source === 'transformed_data' ? 'json_body' : assertion.assertion_type, assertion.expected_value_type, assertion.is_template_expression) as op}
                         <option value={op}>{getOperatorDisplayName(op)}</option>
                       {/each}
                     </select>
@@ -1214,6 +1240,13 @@
               id="new-data-source"
               bind:value={newAssertion.data_source}
               class="w-full rounded border px-1.5 py-0.5 text-xs"
+              on:change={() => {
+                // Auto-set assertion type to json_body when transformed_data is selected
+                if (newAssertion.data_source === 'transformed_data') {
+                  newAssertion.assertion_type = 'json_body';
+                  updateAssertionType(newAssertion, 'json_body');
+                }
+              }}
             >
               <option value="response">Response</option>
               {#if hasTransformations}
@@ -1222,46 +1255,54 @@
             </select>
           </div>
 
-          <div>
-            <label for="new-assertion-type" class="block text-xs font-medium text-gray-500">
-              Assertion Type:
-            </label>
-            <select
-              id="new-assertion-type"
-              bind:value={newAssertion.assertion_type}
-              class="w-full rounded border px-1.5 py-0.5 text-xs"
-              on:change={() => {
-                updateAssertionType(newAssertion, newAssertion.assertion_type);
-              }}
-            >
-              <option value="status_code">Status Code</option>
-              <option value="response_time">Response Time</option>
-              <option value="header">Header</option>
-              <option value="json_body">JSON Body</option>
-            </select>
-          </div>
+          {#if newAssertion.data_source !== 'transformed_data'}
+            <div>
+              <label for="new-assertion-type" class="block text-xs font-medium text-gray-500">
+                Assertion Type:
+              </label>
+              <select
+                id="new-assertion-type"
+                bind:value={newAssertion.assertion_type}
+                class="w-full rounded border px-1.5 py-0.5 text-xs"
+                on:change={() => {
+                  updateAssertionType(newAssertion, newAssertion.assertion_type);
+                }}
+              >
+                <option value="status_code">Status Code</option>
+                <option value="response_time">Response Time</option>
+                <option value="header">Header</option>
+                <option value="json_body">JSON Body</option>
+              </select>
+            </div>
+          {/if}
 
-          {#if newAssertion.assertion_type === 'header' || newAssertion.assertion_type === 'json_body'}
+          {#if newAssertion.assertion_type === 'header' || newAssertion.assertion_type === 'json_body' || newAssertion.data_source === 'transformed_data'}
             <div class="col-span-2">
               <label for="new-data-id" class="block text-xs font-medium text-gray-500">
-                {newAssertion.assertion_type === 'header' ? 'Header Name' : 'JSONPath Expression'}:
+                {#if newAssertion.data_source === 'transformed_data'}
+                  JSONPath Expression:
+                {:else if newAssertion.assertion_type === 'header'}
+                  Header Name:
+                {:else}
+                  JSONPath Expression:
+                {/if}
               </label>
               <input
                 id="new-data-id"
                 type="text"
                 bind:value={newAssertion.data_id}
                 class="w-full rounded border px-1.5 py-0.5 text-xs"
-                placeholder={newAssertion.assertion_type === 'header' ? 'content-type' : '$.data.user.id'}
+                placeholder={newAssertion.data_source === 'transformed_data' ? '$.transformedField' : newAssertion.assertion_type === 'header' ? 'content-type' : '$.data.user.id'}
               />
-              {#if newAssertion.assertion_type === 'json_body'}
+              {#if newAssertion.assertion_type === 'json_body' || newAssertion.data_source === 'transformed_data'}
                 <p class="mt-0.5 text-2xs text-gray-500">JSONPath from {newAssertion.data_source}</p>
               {/if}
             </div>
           {/if}
 
           <div>
-            <!-- Type selector for json_body assertions -->
-            {#if newAssertion.assertion_type === 'json_body'}
+            <!-- Type selector for json_body assertions or transformed data -->
+            {#if newAssertion.assertion_type === 'json_body' || newAssertion.data_source === 'transformed_data'}
               <label for="new-type" class="block text-xs font-medium text-gray-500">
                 Type:
               </label>
@@ -1314,7 +1355,7 @@
                 }
               }}
             >
-              {#each getOperatorsForType(newAssertion.assertion_type, newAssertion.expected_value_type, newAssertion.is_template_expression) as op}
+              {#each getOperatorsForType(newAssertion.data_source === 'transformed_data' ? 'json_body' : newAssertion.assertion_type, newAssertion.expected_value_type, newAssertion.is_template_expression) as op}
                 <option value={op}>{getOperatorDisplayName(op)}</option>
               {/each}
             </select>
