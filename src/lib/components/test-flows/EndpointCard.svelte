@@ -414,9 +414,12 @@
         {/each}
         {#each endpoint.parameters.filter((p) => p.in === 'query') as param, index (`query-${param.name}-${index}`)}
           {#if stepEndpoint.queryParams && stepEndpoint.queryParams[param.name]}
+            {@const paramValue = stepEndpoint.queryParams[param.name]}
             <span
               class="rounded bg-blue-100 px-0.5 py-px text-blue-800"
-              title="{param.name}: {stepEndpoint.queryParams[param.name]}"
+              title="{param.name}: {Array.isArray(paramValue) 
+                ? paramValue.join(', ') 
+                : paramValue}"
             >
               {param.name}
             </span>

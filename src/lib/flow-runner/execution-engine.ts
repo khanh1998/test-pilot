@@ -236,17 +236,24 @@ export class FlowExecutionEngine {
       try {
         const queryParams = new URLSearchParams();
         Object.entries(endpoint.queryParams).forEach(([name, value]) => {
-          const resolvedValue = this.resolveTemplateValueUnified(value as string);
-          
           // Check if this parameter is an array parameter in the endpoint definition
           const paramDefinition = endpointDef.parameters?.find((p: any) => p.name === name && p.in === 'query');
           
           if (paramDefinition && (paramDefinition.schema?.type === 'array' || paramDefinition.type === 'array')) {
             // Handle array parameter serialization
-            const arrayValues = this.parseArrayParameter(resolvedValue, paramDefinition);
+            let arrayValues: string[];
+            if (Array.isArray(value)) {
+              // Value is already an array (e.g., from multi format)
+              arrayValues = value.map(v => this.resolveTemplateValueUnified(String(v)));
+            } else {
+              // Value is a string that needs to be parsed
+              const resolvedValue = this.resolveTemplateValueUnified(value as string);
+              arrayValues = this.parseArrayParameter(resolvedValue, paramDefinition);
+            }
             this.serializeArrayParameter(queryParams, name, arrayValues, paramDefinition);
           } else {
             // Handle as single value parameter
+            const resolvedValue = this.resolveTemplateValueUnified(value as string);
             queryParams.append(name, resolvedValue);
           }
         });

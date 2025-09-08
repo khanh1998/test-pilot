@@ -35,7 +35,7 @@ export type StepEndpoint = {
   endpoint_id: string | number;
   api_id: string | number; // API identifier that maps to the host in settings.api_hosts
   pathParams?: Record<string, string>;
-  queryParams?: Record<string, string>;
+  queryParams?: Record<string, string | string[]>; // Support arrays for multi format
   body?: unknown;
   headers?: { name: string; value: string; enabled: boolean }[];
   transformations?: Array<{
@@ -54,7 +54,7 @@ export type EndpointExecutionState = {
     body?: unknown;
     headers?: Record<string, string>;
     pathParams?: Record<string, string>;
-    queryParams?: Record<string, string>;
+    queryParams?: Record<string, string | string[]>; // Support arrays for multi format
   };
   response?: {
     status?: number;

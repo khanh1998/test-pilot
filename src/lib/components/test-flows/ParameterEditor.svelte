@@ -114,18 +114,26 @@
       }
 
       // Convert array parameters back to string format for storage
-      const processedQueryParams: Record<string, string> = {};
+      const processedQueryParams: Record<string, string | string[]> = {};
       for (const [key, value] of Object.entries(localQueryParams)) {
         if (Array.isArray(value)) {
           // Find the parameter definition to get the collection format
           const param = endpoint?.parameters?.find(p => p.name === key && p.in === 'query');
           const format = param?.collectionFormat || param?.style || 'csv';
           
+          // For OpenAPI 3.0, check if explode is true (which is default for query params)
+          const isExploded = param?.explode !== false; // Default is true for query parameters
+          
           // Convert array back to string based on collection format
           switch (format) {
             case 'csv':
             case 'form':
-              processedQueryParams[key] = value.join(',');
+              if (format === 'form' && isExploded) {
+                // This is the "multi" format - store as array for repeated parameters
+                processedQueryParams[key] = value;
+              } else {
+                processedQueryParams[key] = value.join(',');
+              }
               break;
             case 'ssv':
             case 'spaceDelimited':
@@ -139,7 +147,8 @@
               processedQueryParams[key] = value.join('|');
               break;
             case 'multi':
-              processedQueryParams[key] = value.join(','); // Store as CSV for multi format
+              // Store as array for repeated parameters (e.g., ?colors=red&colors=blue)
+              processedQueryParams[key] = value;
               break;
             default:
               processedQueryParams[key] = value.join(',');
@@ -278,7 +287,11 @@
     switch (format) {
       case 'csv':
       case 'form':
-        return 'comma-separated (,)';
+        if (param.explode !== false) {
+          return 'multiple parameters (?param=val1&param=val2)';
+        } else {
+          return 'comma-separated (,)';
+        }
       case 'ssv':
       case 'spaceDelimited':
         return 'space-separated ( )';
@@ -288,7 +301,7 @@
       case 'pipeDelimited':
         return 'pipe-separated (|)';
       case 'multi':
-        return 'multiple parameters';
+        return 'multiple parameters (?param=val1&param=val2)';
       default:
         return 'comma-separated (,)';
     }
