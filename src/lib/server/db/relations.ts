@@ -1,10 +1,25 @@
 import { relations } from 'drizzle-orm';
-import { users, apis, apiEndpoints, testFlows, testFlowApis, endpointEmbeddings, environments, environmentApis } from './schema';
+import { 
+  users, 
+  apis, 
+  apiEndpoints, 
+  testFlows, 
+  testFlowApis, 
+  endpointEmbeddings, 
+  environments, 
+  environmentApis,
+  projects,
+  projectApis,
+  projectModules,
+  flowSequences,
+  projectEnvironments
+} from './schema';
 
 export const usersRelations = relations(users, ({ many }) => ({
   apis: many(apis),
   testFlows: many(testFlows),
-  environments: many(environments)
+  environments: many(environments),
+  projects: many(projects)
 }));
 
 export const apisRelations = relations(apis, ({ one, many }) => ({
@@ -14,7 +29,8 @@ export const apisRelations = relations(apis, ({ one, many }) => ({
   }),
   endpoints: many(apiEndpoints),
   testFlowApis: many(testFlowApis),
-  environmentApis: many(environmentApis)
+  environmentApis: many(environmentApis),
+  projectApis: many(projectApis)
 }));
 
 export const apiEndpointsRelations = relations(apiEndpoints, ({ one, many }) => ({
@@ -61,7 +77,8 @@ export const environmentsRelations = relations(environments, ({ one, many }) => 
     references: [users.id]
   }),
   environmentApis: many(environmentApis),
-  testFlows: many(testFlows)
+  testFlows: many(testFlows),
+  projectEnvironments: many(projectEnvironments)
 }));
 
 export const environmentApisRelations = relations(environmentApis, ({ one }) => ({
@@ -72,5 +89,53 @@ export const environmentApisRelations = relations(environmentApis, ({ one }) => 
   api: one(apis, {
     fields: [environmentApis.apiId],
     references: [apis.id]
+  })
+}));
+
+// Project relations
+export const projectsRelations = relations(projects, ({ one, many }) => ({
+  user: one(users, {
+    fields: [projects.userId],
+    references: [users.id]
+  }),
+  projectApis: many(projectApis),
+  modules: many(projectModules),
+  projectEnvironments: many(projectEnvironments)
+}));
+
+export const projectApisRelations = relations(projectApis, ({ one }) => ({
+  project: one(projects, {
+    fields: [projectApis.projectId],
+    references: [projects.id]
+  }),
+  api: one(apis, {
+    fields: [projectApis.apiId],
+    references: [apis.id]
+  })
+}));
+
+export const projectModulesRelations = relations(projectModules, ({ one, many }) => ({
+  project: one(projects, {
+    fields: [projectModules.projectId],
+    references: [projects.id]
+  }),
+  sequences: many(flowSequences)
+}));
+
+export const flowSequencesRelations = relations(flowSequences, ({ one }) => ({
+  module: one(projectModules, {
+    fields: [flowSequences.moduleId],
+    references: [projectModules.id]
+  })
+}));
+
+export const projectEnvironmentsRelations = relations(projectEnvironments, ({ one }) => ({
+  project: one(projects, {
+    fields: [projectEnvironments.projectId],
+    references: [projects.id]
+  }),
+  environment: one(environments, {
+    fields: [projectEnvironments.environmentId],
+    references: [environments.id]
   })
 }));

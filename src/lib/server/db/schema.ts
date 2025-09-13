@@ -137,3 +137,81 @@ export const endpointEmbeddings = pgTable(
     index('fts_idx').using('gin', table.searchVector)
   ]
 );
+
+// Projects table - stores project configurations and metadata
+export const projects = pgTable('projects', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull(),
+  description: text('description'),
+  userId: integer('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  projectJson: jsonb('project_json').notNull(), // Contains project configuration
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull()
+});
+
+// Project-API relationships
+export const projectApis = pgTable(
+  'project_apis',
+  {
+    id: serial('id').primaryKey(),
+    projectId: integer('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    apiId: integer('api_id')
+      .notNull()
+      .references(() => apis.id, { onDelete: 'cascade' }),
+    defaultHost: text('default_host'), // Default host for this API in this project
+    createdAt: timestamp('created_at').defaultNow().notNull()
+  },
+  (table) => [
+    uniqueIndex('project_apis_unique_idx').on(table.projectId, table.apiId)
+  ]
+);
+
+// Project modules (categorization of related sequences)
+export const projectModules = pgTable('project_modules', {
+  id: serial('id').primaryKey(),
+  projectId: integer('project_id')
+    .notNull()
+    .references(() => projects.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  description: text('description'),
+  displayOrder: integer('display_order').default(0),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull()
+});
+
+// Flow sequences (ordered sequences of test flows)
+export const flowSequences = pgTable('flow_sequences', {
+  id: serial('id').primaryKey(),
+  moduleId: integer('module_id')
+    .notNull()
+    .references(() => projectModules.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  description: text('description'),
+  sequenceConfig: jsonb('sequence_config').notNull(), // Contains complete flow sequence, steps, and parameter mappings
+  displayOrder: integer('display_order').default(0),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull()
+});
+
+// Project environment links
+export const projectEnvironments = pgTable(
+  'project_environments',
+  {
+    id: serial('id').primaryKey(),
+    projectId: integer('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    environmentId: integer('environment_id')
+      .notNull()
+      .references(() => environments.id, { onDelete: 'cascade' }),
+    variableMappings: jsonb('variable_mappings').notNull(), // Maps project variables to environment variables
+    createdAt: timestamp('created_at').defaultNow().notNull()
+  },
+  (table) => [
+    uniqueIndex('project_environments_unique_idx').on(table.projectId, table.environmentId)
+  ]
+);
