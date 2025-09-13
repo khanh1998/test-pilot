@@ -1,0 +1,172 @@
+<!-- FlowCard.svelte - Compact flow card for sequence rows -->
+<script lang="ts">
+  import type { TestFlow } from '../../types/test-flow.js';
+  import { createEventDispatcher } from 'svelte';
+
+  export let flow: TestFlow;
+  export let stepOrder: number;
+  export let isDragging: boolean = false;
+  export let isDropTarget: boolean = false;
+
+  const dispatch = createEventDispatcher<{
+    click: { flow: TestFlow; stepOrder: number };
+    dragstart: { flow: TestFlow; stepOrder: number };
+    dragend: void;
+    remove: { stepOrder: number };
+  }>();
+
+  function handleClick() {
+    dispatch('click', { flow, stepOrder });
+  }
+
+  function handleDragStart(event: DragEvent) {
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', JSON.stringify({ flowId: flow.id, stepOrder }));
+    }
+    console.log('FlowCard drag start:', { flowId: flow.id, stepOrder });
+    dispatch('dragstart', { flow, stepOrder });
+  }
+
+  function handleDragEnd() {
+    console.log('FlowCard drag end:', { flowId: flow.id, stepOrder });
+    dispatch('dragend');
+  }
+
+  function handleRemove(event: MouseEvent) {
+    event.stopPropagation();
+    dispatch('remove', { stepOrder });
+  }
+</script>
+
+<div
+  class="flow-card group relative bg-white border border-gray-200 rounded-lg p-3 cursor-pointer hover:shadow-md transition-all duration-200 w-72 h-40"
+  class:opacity-50={isDragging}
+  class:border-blue-400={isDropTarget}
+  class:bg-blue-50={isDropTarget}
+  class:shadow-lg={isDragging}
+  class:cursor-grabbing={isDragging}
+  class:cursor-grab={!isDragging}
+  draggable="true"
+  on:click={handleClick}
+  on:dragstart={handleDragStart}
+  on:dragend={handleDragEnd}
+  role="button"
+  tabindex="0"
+  on:keydown={(e) => e.key === 'Enter' && handleClick()}
+>
+  <!-- Flow Content -->
+  <div class="h-full flex flex-col">
+    <!-- Header with Flow Name and Remove Button -->
+    <div class="flex items-start justify-between mb-2">
+      <h4 class="text-sm font-medium text-gray-900 line-clamp-1 flex-1 pr-2" title={flow.name}>
+        {flow.name}
+      </h4>
+      
+      <!-- Remove Button -->
+      <button
+        type="button"
+        class="flex-shrink-0 w-5 h-5 bg-red-500 text-white text-xs rounded-full hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+        on:click={handleRemove}
+        aria-label="Remove flow"
+      >
+        ×
+      </button>
+    </div>
+    
+    <!-- Side-by-side Parameters & Outputs -->
+    <div class="flex-1 flex gap-3">
+      <!-- Left Half - Parameters Section -->
+      <div class="flex-1 border-r border-gray-100 pr-3">
+        <div class="flex items-center gap-1 mb-2">
+          <div class="w-2 h-2 bg-blue-400 rounded-full"></div>
+          <span class="text-xs font-medium text-gray-600">Inputs ({flow.flowJson?.parameters?.length || 0})</span>
+        </div>
+        {#if flow.flowJson?.parameters && flow.flowJson.parameters.length > 0}
+          <div class="scrollable-list text-xs text-gray-700 space-y-1 h-20 overflow-y-auto relative group/scroll">
+            {#each flow.flowJson.parameters as param}
+              <div class="truncate" title={param.name}>
+                • {param.name}
+              </div>
+            {/each}
+            {#if flow.flowJson.parameters.length > 8}
+              <div class="absolute bottom-0 right-0 text-xs text-blue-400 opacity-0 group-hover/scroll:opacity-100 transition-opacity bg-white px-1">
+                ↕
+              </div>
+            {/if}
+          </div>
+        {:else}
+          <div class="text-xs text-gray-400 italic h-20 flex items-center">
+            No inputs
+          </div>
+        {/if}
+      </div>
+
+      <!-- Right Half - Outputs Section -->
+      <div class="flex-1 pl-3">
+        <div class="flex items-center gap-1 mb-2">
+          <div class="w-2 h-2 bg-green-400 rounded-full"></div>
+          <span class="text-xs font-medium text-gray-600">Outputs ({flow.flowJson?.outputs?.length || 0})</span>
+        </div>
+        {#if flow.flowJson?.outputs && flow.flowJson.outputs.length > 0}
+          <div class="scrollable-list text-xs text-gray-700 space-y-1 h-20 overflow-y-auto relative group/scroll">
+            {#each flow.flowJson.outputs as output}
+              <div class="truncate" title={output.name}>
+                • {output.name}
+              </div>
+            {/each}
+            {#if flow.flowJson.outputs.length > 8}
+              <div class="absolute bottom-0 right-0 text-xs text-green-400 opacity-0 group-hover/scroll:opacity-100 transition-opacity bg-white px-1">
+                ↕
+              </div>
+            {/if}
+          </div>
+        {:else}
+          <div class="text-xs text-gray-400 italic h-20 flex items-center">
+            No outputs
+          </div>
+        {/if}
+      </div>
+    </div>
+
+    <!-- Drag Handle -->
+    <div class="flex justify-end mt-1">
+      <div class="text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity">
+        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l4-4 4 4m0 6l-4 4-4-4"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .line-clamp-1 {
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .scrollable-list {
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+  }
+
+  .scrollable-list::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  .scrollable-list::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollable-list::-webkit-scrollbar-thumb {
+    background-color: #cbd5e1;
+    border-radius: 2px;
+  }
+
+  .scrollable-list::-webkit-scrollbar-thumb:hover {
+    background-color: #94a3b8;
+  }
+</style>
