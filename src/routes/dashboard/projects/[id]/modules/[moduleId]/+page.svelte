@@ -21,6 +21,7 @@
   import type { Environment } from '$lib/types/environment';
   import type { EnvironmentMapping } from '$lib/components/test-flows/types';
   import type { ExecutionPreferences } from '$lib/flow-runner/execution-engine';
+  import { isDesktop } from '$lib/environment';
 
   let projectId: number;
   let moduleId: number;
@@ -55,9 +56,9 @@
   // Execution options state
   let showExecutionOptions = false;
   let executionPreferences: ExecutionPreferences = {
-    parallelExecution: false,
+    parallelExecution: true,
     stopOnError: true,
-    serverCookieHandling: false,
+    serverCookieHandling: !isDesktop,
     retryCount: 0,
     timeout: 30000
   };
