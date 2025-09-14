@@ -266,6 +266,23 @@ export async function linkEnvironment(projectId: number, data: LinkEnvironmentRe
   return response.json();
 }
 
+export async function updateEnvironmentMapping(projectId: number, environmentId: number, data: { variableMappings: Record<string, string> }): Promise<{ link: ProjectEnvironmentLink }> {
+  const response = await fetchWithAuth(`${API_BASE}/${projectId}/environments`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ environment_id: environmentId, variableMappings: data.variableMappings })
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to update environment mapping');
+  }
+  
+  return response.json();
+}
+
 export async function unlinkEnvironment(projectId: number, environmentId: number): Promise<void> {
   const response = await fetchWithAuth(`${API_BASE}/${projectId}/environments/${environmentId}`, {
     method: 'DELETE'
@@ -329,5 +346,47 @@ export async function unlinkApiFromProject(projectId: number, apiId: number): Pr
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.error || 'Failed to unlink API from project');
+  }
+}
+
+// Environment Mapping Operations (using project_json.environment_mappings)
+export async function linkEnvironmentMapping(projectId: number, data: { environmentId: number; variableMappings: Record<string, string> }): Promise<void> {
+  const response = await fetchWithAuth(`${API_BASE}/${projectId}/environment-mappings`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(data)
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to link environment');
+  }
+}
+
+export async function updateEnvironmentMappingInProject(projectId: number, environmentId: number, data: { variableMappings: Record<string, string> }): Promise<void> {
+  const response = await fetchWithAuth(`${API_BASE}/${projectId}/environment-mappings/${environmentId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(data)
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to update environment mapping');
+  }
+}
+
+export async function unlinkEnvironmentMapping(projectId: number, environmentId: number): Promise<void> {
+  const response = await fetchWithAuth(`${API_BASE}/${projectId}/environment-mappings/${environmentId}`, {
+    method: 'DELETE'
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to unlink environment');
   }
 }

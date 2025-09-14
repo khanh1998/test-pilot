@@ -1,6 +1,6 @@
 import { db } from '../../db/index.js';
 import { projects, projectApis, projectEnvironments, projectModules, apis, environments } from '../../db/schema.js';
-import { eq, and, desc, asc } from 'drizzle-orm';
+import { eq, and, desc, asc, inArray } from 'drizzle-orm';
 import type { 
   Project, 
   ProjectConfig, 
@@ -91,13 +91,12 @@ export class ProjectRepository {
       .leftJoin(apis, eq(projectApis.apiId, apis.id))
       .where(eq(projectApis.projectId, projectId));
 
-    // Get linked environments
+    // Get linked environments from project_environments table
     const environmentsResult = await db
       .select({
         id: projectEnvironments.id,
         projectId: projectEnvironments.projectId,
         environmentId: projectEnvironments.environmentId,
-        variableMappings: projectEnvironments.variableMappings,
         createdAt: projectEnvironments.createdAt,
         envName: environments.name,
         envDescription: environments.description
@@ -126,18 +125,25 @@ export class ProjectRepository {
           host: api.apiHost || undefined
         }
       })),
-      environments: environmentsResult.map(env => ({
-        id: env.id,
-        projectId: env.projectId,
-        environmentId: env.environmentId,
-        variableMappings: env.variableMappings as Record<string, string>,
-        createdAt: env.createdAt,
-        environment: {
-          id: env.environmentId,
-          name: env.envName || '',
-          description: env.envDescription || undefined
-        }
-      }))
+      environments: environmentsResult.map(env => {
+        // Find the corresponding variable mappings in project_json.environment_mappings
+        const variableMappings = project.projectJson?.environment_mappings?.find(
+          mapping => mapping.environment_id === env.environmentId
+        )?.variable_mappings || {};
+        
+        return {
+          id: env.id,
+          projectId: env.projectId,
+          environmentId: env.environmentId,
+          variableMappings: variableMappings,
+          createdAt: env.createdAt,
+          environment: {
+            id: env.environmentId,
+            name: env.envName || '',
+            description: env.envDescription || undefined
+          }
+        };
+      })
     };
   }
 

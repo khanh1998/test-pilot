@@ -37,6 +37,11 @@
     event.stopPropagation();
     dispatch('remove', { stepOrder });
   }
+
+  function handleViewDetails(event: MouseEvent) {
+    event.stopPropagation();
+    window.location.href = `/dashboard/test-flows/${flow.id}`;
+  }
 </script>
 
 <div
@@ -57,21 +62,39 @@
 >
   <!-- Flow Content -->
   <div class="h-full flex flex-col">
-    <!-- Header with Flow Name and Remove Button -->
+    <!-- Header with Flow Name and Action Buttons -->
     <div class="flex items-start justify-between mb-2">
       <h4 class="text-sm font-medium text-gray-900 line-clamp-1 flex-1 pr-2" title={flow.name}>
         {flow.name}
       </h4>
       
-      <!-- Remove Button -->
-      <button
-        type="button"
-        class="flex-shrink-0 w-5 h-5 bg-red-500 text-white text-xs rounded-full hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
-        on:click={handleRemove}
-        aria-label="Remove flow"
-      >
-        ×
-      </button>
+      <!-- Action Buttons -->
+      <div class="flex-shrink-0 flex items-center gap-1">
+        <!-- View Details Button -->
+        <button
+          type="button"
+          class="w-5 h-5 bg-blue-500 text-white text-xs rounded-full hover:bg-blue-600 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+          on:click={handleViewDetails}
+          aria-label="View flow details"
+          title="View flow details"
+        >
+          <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+            <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/>
+            <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/>
+          </svg>
+        </button>
+        
+        <!-- Remove Button -->
+        <button
+          type="button"
+          class="w-5 h-5 bg-red-500 text-white text-xs rounded-full hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+          on:click={handleRemove}
+          aria-label="Remove flow"
+          title="Remove flow from sequence"
+        >
+          ×
+        </button>
+      </div>
     </div>
     
     <!-- Side-by-side Parameters & Outputs -->

@@ -2,10 +2,12 @@
   import { onMount, onDestroy } from 'svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
+  import { fade } from 'svelte/transition';
   import { setBreadcrumbOverride, clearBreadcrumbOverride } from '$lib/store/breadcrumb';
   import * as projectClient from '$lib/http_client/projects';
   import * as testFlowClient from '$lib/http_client/test-flow';
   import * as environmentClient from '$lib/http_client/environments';
+  import { SequenceRunner, type SequenceRunnerOptions } from '$lib/sequence-runner';
   import FlowSearch from '$lib/components/projects/FlowSearch.svelte';
   import SequenceRow from '$lib/components/projects/SequenceRow.svelte';
   import SequenceCreator from '$lib/components/projects/SequenceCreator.svelte';
@@ -18,6 +20,7 @@
   import type { TestFlow } from '$lib/types/test-flow';
   import type { Environment } from '$lib/types/environment';
   import type { EnvironmentMapping } from '$lib/components/test-flows/types';
+  import type { ExecutionPreferences } from '$lib/flow-runner/execution-engine';
 
   let projectId: number;
   let moduleId: number;
@@ -30,9 +33,17 @@
   
   let loading = true;
   let error: string | null = null;
+  
+  // Execution results state
+  let executionResults: {
+    show: boolean;
+    type: 'success' | 'error' | 'warning';
+    title: string;
+    message: string;
+    details?: string;
+  } | null = null;
 
   // Modal states
-  let showConfirmDialog = false;
   let isSubmitting = false;
 
   // Environment and execution states
@@ -40,10 +51,17 @@
   let selectedSubEnvironment: string | null = null;
   let isRunningAll = false;
   let runningSequences = new Set<number>(); // Track which sequences are running
-
-  // Delete state
-  let pendingDeleteSequence: { id: number; name: string } | null = null;
   
+  // Execution options state
+  let showExecutionOptions = false;
+  let executionPreferences: ExecutionPreferences = {
+    parallelExecution: false,
+    stopOnError: true,
+    serverCookieHandling: false,
+    retryCount: 0,
+    timeout: 30000
+  };
+
   // Parameter mapping panel state
   let showParameterPanel = false;
   let selectedFlow: TestFlow | null = null;
@@ -213,7 +231,8 @@
       sequenceFlowsMap.set(response.sequence.id, []);
     } catch (err) {
       console.error('Failed to create sequence:', err);
-      error = err instanceof Error ? err.message : 'Failed to create sequence';
+      const errorMessage = err instanceof Error ? err.message : 'Failed to create sequence';
+      showExecutionResults('error', 'Creation Failed', 'Failed to create sequence', errorMessage);
     } finally {
       isSubmitting = false;
     }
@@ -233,7 +252,8 @@
       );
     } catch (err) {
       console.error('Failed to update sequence name:', err);
-      error = err instanceof Error ? err.message : 'Failed to update sequence name';
+      const errorMessage = err instanceof Error ? err.message : 'Failed to update sequence name';
+      showExecutionResults('error', 'Update Failed', 'Failed to update sequence name', errorMessage);
     }
   }
 
@@ -274,7 +294,8 @@
       sequences = updatedSequences;
     } catch (err) {
       console.error('Failed to add flow to sequence:', err);
-      error = err instanceof Error ? err.message : 'Failed to add flow to sequence';
+      const errorMessage = err instanceof Error ? err.message : 'Failed to add flow to sequence';
+      showExecutionResults('error', 'Add Flow Failed', 'Failed to add flow to sequence', errorMessage);
     }
   }
 
@@ -314,7 +335,8 @@
       }
     } catch (err) {
       console.error('Failed to remove flow from sequence:', err);
-      error = err instanceof Error ? err.message : 'Failed to remove flow from sequence';
+      const errorMessage = err instanceof Error ? err.message : 'Failed to remove flow from sequence';
+      showExecutionResults('error', 'Remove Flow Failed', 'Failed to remove flow from sequence', errorMessage);
     }
   }
 
@@ -377,18 +399,48 @@
       
     } catch (err) {
       console.error('Failed to reorder flows:', err);
-      error = err instanceof Error ? err.message : 'Failed to reorder flows';
+      const errorMessage = err instanceof Error ? err.message : 'Failed to reorder flows';
+      showExecutionResults('error', 'Reorder Failed', 'Failed to reorder flows', errorMessage);
     }
   }
 
-  function handleDeleteSequence(event: CustomEvent<{ sequence: FlowSequence }>) {
-    pendingDeleteSequence = { id: event.detail.sequence.id, name: event.detail.sequence.name };
-    showConfirmDialog = true;
+  async function handleDeleteSequence(event: CustomEvent<{ sequence: FlowSequence }>) {
+    try {
+      await projectClient.deleteSequence(projectId, moduleId, event.detail.sequence.id);
+      sequences = Array.isArray(sequences) ? sequences.filter(s => s.id !== event.detail.sequence.id) : [];
+    } catch (err) {
+      console.error('Failed to delete sequence:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to delete sequence';
+      showExecutionResults('error', 'Delete Failed', 'Failed to delete sequence', errorMessage);
+    }
   }
 
   function handleEnvironmentSelect(event: CustomEvent<{ environmentId: number | null; subEnvironment: string | null }>) {
     selectedEnvironmentId = event.detail.environmentId;
     selectedSubEnvironment = event.detail.subEnvironment;
+  }
+
+  function showExecutionResults(type: 'success' | 'error' | 'warning', title: string, message: string, details?: string) {
+    executionResults = {
+      show: true,
+      type,
+      title,
+      message,
+      details
+    };
+    
+    // Auto-hide success messages after 5 seconds
+    if (type === 'success') {
+      setTimeout(() => {
+        if (executionResults?.type === 'success') {
+          executionResults = null;
+        }
+      }, 5000);
+    }
+  }
+
+  function hideExecutionResults() {
+    executionResults = null;
   }
 
   async function handleRunAllSequences() {
@@ -402,6 +454,13 @@
       return;
     }
 
+    // Find the selected environment
+    const selectedEnv = environments.find(env => env.id === selectedEnvironmentId);
+    if (!selectedEnv) {
+      alert('Selected environment not found');
+      return;
+    }
+
     isRunningAll = true;
     console.log('Running all sequences with environment:', {
       environmentId: selectedEnvironmentId,
@@ -409,14 +468,78 @@
       sequences: sequences.map(s => s.name)
     });
 
-    // TODO: Implement actual execution logic
-    // For now, just simulate the execution
     try {
-      await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate execution time
-      console.log('All sequences execution completed');
+      let successCount = 0;
+      let failCount = 0;
+      
+      // Run each sequence sequentially
+      for (const sequence of sequences) {
+        const flows = sequenceFlowsMap.get(sequence.id) || [];
+        if (flows.length === 0) {
+          console.log(`Skipping sequence "${sequence.name}" - no flows`);
+          continue;
+        }
+
+        console.log(`\n🚀 Running sequence: ${sequence.name}`);
+        
+        // Prepare environment variables
+        let environmentVariables: Record<string, unknown> = {};
+        if (selectedEnv.config.environments[selectedSubEnvironment]) {
+          environmentVariables = selectedEnv.config.environments[selectedSubEnvironment].variables;
+        }
+
+        try {
+          // Create sequence runner options
+          const sequenceOptions: SequenceRunnerOptions = {
+            sequence,
+            flows,
+            project, // Add project information
+            environments,
+            selectedEnvironment: selectedEnv,
+            selectedSubEnvironment: selectedSubEnvironment,
+            environmentVariables,
+            preferences: executionPreferences,
+            onLog: (level, message, details) => {
+              console.log(`[${sequence.name}] [${level}] ${message}`, details);
+            },
+            onSequenceComplete: (data) => {
+              const status = data.success ? '✅' : '❌';
+              console.log(`${status} Sequence "${sequence.name}" completed: ${data.completedFlows}/${data.totalFlows} flows`);
+            }
+          };
+
+          const sequenceRunner = new SequenceRunner(sequenceOptions);
+          const result = await sequenceRunner.runSequence();
+
+          if (result.success) {
+            successCount++;
+          } else {
+            failCount++;
+            console.error(`Sequence "${sequence.name}" failed:`, result.error);
+          }
+
+        } catch (err) {
+          failCount++;
+          console.error(`Failed to run sequence "${sequence.name}":`, err);
+        }
+      }
+
+      const totalSequences = sequences.length;
+      const message = `Execution completed: ${successCount} successful, ${failCount} failed out of ${totalSequences} sequences`;
+      
+      if (failCount > 0) {
+        showExecutionResults('warning', 'Some Sequences Failed', message, 
+          `${failCount} sequence(s) encountered errors. Check the console for detailed error information.`);
+      } else {
+        showExecutionResults('success', 'All Sequences Completed', message, 
+          `Successfully executed all ${successCount} sequences.`);
+        console.log(`🎉 ${message}`);
+      }
+
     } catch (err) {
       console.error('Failed to run all sequences:', err);
-      error = err instanceof Error ? err.message : 'Failed to run sequences';
+      const errorMessage = err instanceof Error ? err.message : 'Failed to run sequences';
+      showExecutionResults('error', 'Execution Failed', 'Failed to execute sequences', errorMessage);
     } finally {
       isRunningAll = false;
     }
@@ -436,6 +559,20 @@
       return;
     }
 
+    // Find the selected environment
+    const selectedEnv = environments.find(env => env.id === selectedEnvironmentId);
+    if (!selectedEnv) {
+      alert('Selected environment not found');
+      return;
+    }
+
+    // Prepare environment variables
+    let environmentVariables: Record<string, unknown> = {};
+    
+    if (selectedEnv.config.environments[selectedSubEnvironment]) {
+      environmentVariables = selectedEnv.config.environments[selectedSubEnvironment].variables;
+    }
+
     runningSequences.add(sequence.id);
     runningSequences = new Set(runningSequences); // Trigger reactivity
 
@@ -443,17 +580,69 @@
       sequenceName: sequence.name,
       environmentId: selectedEnvironmentId,
       subEnvironment: selectedSubEnvironment,
-      flows: flows.map(f => f.name)
+      flows: flows.map(f => f.name),
+      environmentVariables: Object.keys(environmentVariables)
     });
 
-    // TODO: Implement actual execution logic
-    // For now, just simulate the execution
     try {
-      await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate execution time
-      console.log(`Sequence "${sequence.name}" execution completed`);
+      // Create sequence runner options
+      const sequenceOptions: SequenceRunnerOptions = {
+        sequence,
+        flows,
+        project, // Add project information
+        environments,
+        selectedEnvironment: selectedEnv,
+        selectedSubEnvironment: selectedSubEnvironment,
+        environmentVariables,
+        preferences: executionPreferences,
+        onLog: (level, message, details) => {
+          console.log(`[SEQUENCE ${sequence.name}] [${level}] ${message}`, details);
+        },
+        onSequenceStart: () => {
+          console.log(`Sequence "${sequence.name}" started`);
+        },
+        onSequenceComplete: (data) => {
+          console.log(`Sequence "${sequence.name}" completed:`, data);
+          if (data.success) {
+            console.log(`✅ Sequence completed successfully. Executed ${data.completedFlows}/${data.totalFlows} flows.`);
+            showExecutionResults('success', 'Sequence Completed', 
+              `"${sequence.name}" executed successfully`, 
+              `Completed ${data.completedFlows}/${data.totalFlows} flows.`);
+          } else {
+            console.error(`❌ Sequence failed: ${data.error}`);
+            const errorMsg = data.error instanceof Error ? data.error.message : String(data.error);
+            showExecutionResults('error', 'Sequence Failed', 
+              `"${sequence.name}" execution failed`, errorMsg);
+          }
+        },
+        onFlowStart: (data) => {
+          console.log(`Starting flow ${data.flow.name} (step ${data.stepOrder})`);
+        },
+        onFlowComplete: (data) => {
+          const status = data.success ? '✅' : '❌';
+          console.log(`${status} Flow ${data.flow.name} ${data.success ? 'completed' : 'failed'}${data.error ? `: ${data.error}` : ''}`);
+        },
+        onSequenceStateUpdate: (state) => {
+          console.log(`Sequence progress: ${state.progress}% (${state.currentFlowIndex + 1}/${state.totalFlows})`);
+        }
+      };
+
+      // Create and run the sequence
+      const sequenceRunner = new SequenceRunner(sequenceOptions);
+      const result = await sequenceRunner.runSequence();
+
+      if (result.success) {
+        console.log(`🎉 Sequence "${sequence.name}" execution completed successfully!`);
+      } else {
+        console.error(`💥 Sequence "${sequence.name}" execution failed:`, result.error);
+        // Don't show error here as it's already handled in onSequenceComplete
+      }
+
     } catch (err) {
       console.error(`Failed to run sequence "${sequence.name}":`, err);
-      error = err instanceof Error ? err.message : `Failed to run sequence "${sequence.name}"`;
+      const errorMessage = err instanceof Error ? err.message : `Failed to run sequence "${sequence.name}"`;
+      showExecutionResults('error', 'Execution Error', 
+        `Failed to start sequence "${sequence.name}"`, errorMessage);
     } finally {
       runningSequences.delete(sequence.id);
       runningSequences = new Set(runningSequences); // Trigger reactivity
@@ -509,27 +698,9 @@
       
     } catch (err) {
       console.error('Failed to save parameter mappings:', err);
-      error = err instanceof Error ? err.message : 'Failed to save parameter mappings';
+      const errorMessage = err instanceof Error ? err.message : 'Failed to save parameter mappings';
+      showExecutionResults('error', 'Save Failed', 'Failed to save parameter mappings', errorMessage);
     }
-  }
-
-  async function confirmDeleteSequence() {
-    if (!pendingDeleteSequence) return;
-    
-    try {
-      await projectClient.deleteSequence(projectId, moduleId, pendingDeleteSequence.id);
-      sequences = Array.isArray(sequences) ? sequences.filter(s => s.id !== pendingDeleteSequence!.id) : [];
-      showConfirmDialog = false;
-      pendingDeleteSequence = null;
-    } catch (err) {
-      console.error('Failed to delete sequence:', err);
-      error = err instanceof Error ? err.message : 'Failed to delete sequence';
-    }
-  }
-
-  function cancelDelete() {
-    showConfirmDialog = false;
-    pendingDeleteSequence = null;
   }
 
   function getProjectVariables() {
@@ -606,6 +777,56 @@
     </div>
   </div>
 {:else if module}
+  <!-- Execution Results Toast -->
+  {#if executionResults}
+    <div class="fixed top-4 right-4 z-50 max-w-md w-full" transition:fade={{ duration: 300 }}>
+      <div class="bg-white rounded-lg shadow-lg border-l-4 {executionResults.type === 'success' ? 'border-green-400' : executionResults.type === 'error' ? 'border-red-400' : 'border-yellow-400'} p-4">
+        <div class="flex items-start">
+          <div class="flex-shrink-0">
+            {#if executionResults.type === 'success'}
+              <svg class="h-5 w-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+              </svg>
+            {:else if executionResults.type === 'error'}
+              <svg class="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+              </svg>
+            {:else}
+              <svg class="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+              </svg>
+            {/if}
+          </div>
+          <div class="ml-3 flex-1">
+            <h4 class="text-sm font-medium {executionResults.type === 'success' ? 'text-green-800' : executionResults.type === 'error' ? 'text-red-800' : 'text-yellow-800'}">
+              {executionResults.title}
+            </h4>
+            <p class="mt-1 text-sm {executionResults.type === 'success' ? 'text-green-700' : executionResults.type === 'error' ? 'text-red-700' : 'text-yellow-700'}">
+              {executionResults.message}
+            </p>
+            {#if executionResults.details}
+              <p class="mt-1 text-xs {executionResults.type === 'success' ? 'text-green-600' : executionResults.type === 'error' ? 'text-red-600' : 'text-yellow-600'}">
+                {executionResults.details}
+              </p>
+            {/if}
+          </div>
+          <div class="ml-4 flex-shrink-0">
+            <button
+              type="button"
+              on:click={hideExecutionResults}
+              aria-label="Close notification"
+              class="inline-flex {executionResults.type === 'success' ? 'text-green-400 hover:text-green-500' : executionResults.type === 'error' ? 'text-red-400 hover:text-red-500' : 'text-yellow-400 hover:text-yellow-500'}"
+            >
+              <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  {/if}
+
   <div class="min-h-screen bg-gray-50">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <!-- Environment Selector and Run All Button -->
@@ -626,7 +847,21 @@
             />
           </div>
           
-          <div class="ml-6">
+          <div class="ml-6 flex items-center space-x-3">
+            <!-- Execution Options Button -->
+            <button
+              type="button"
+              on:click={() => (showExecutionOptions = !showExecutionOptions)}
+              disabled={isRunningAll || runningSequences.size > 0}
+              class="inline-flex items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+            >
+              <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path>
+              </svg>
+              Options
+            </button>
+            
+            <!-- Run All Button -->
             <button
               type="button"
               on:click={handleRunAllSequences}
@@ -664,6 +899,100 @@
         {/if}
       </div>
 
+      <!-- Execution Options Panel (Collapsible) -->
+      {#if showExecutionOptions}
+        <div class="bg-white shadow rounded-lg p-6 mb-6" transition:fade={{ duration: 150 }}>
+          <h4 class="text-sm font-medium text-gray-700 mb-4">Flow Execution Options</h4>
+          <p class="text-xs text-gray-500 mb-4">These options will be applied to each flow within the sequences when they execute.</p>
+          
+          <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <div class="space-y-4">
+              <div class="flex items-center">
+                <input
+                  type="checkbox"
+                  id="parallelExecution"
+                  class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  bind:checked={executionPreferences.parallelExecution}
+                />
+                <label for="parallelExecution" class="ml-2 block text-sm text-gray-700">
+                  Parallel Execution
+                </label>
+              </div>
+              <p class="ml-6 text-xs text-gray-500">
+                Execute endpoints within each flow in parallel when possible
+              </p>
+
+              <div class="flex items-center">
+                <input
+                  type="checkbox"
+                  id="stopOnError"
+                  class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  bind:checked={executionPreferences.stopOnError}
+                />
+                <label for="stopOnError" class="ml-2 block text-sm text-gray-700">
+                  Stop Sequence On Flow Error
+                </label>
+              </div>
+              <p class="ml-6 text-xs text-gray-500">
+                Stop the entire sequence if any individual flow fails
+              </p>
+
+              <div class="flex items-center">
+                <input
+                  type="checkbox"
+                  id="serverCookieHandling"
+                  class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  bind:checked={executionPreferences.serverCookieHandling}
+                />
+                <label for="serverCookieHandling" class="ml-2 block text-sm text-gray-700">
+                  Handle Cookies
+                </label>
+              </div>
+              <p class="ml-6 text-xs text-gray-500">
+                Automatically handle cookies between requests within each flow
+              </p>
+            </div>
+
+            <div class="space-y-4">
+              <div>
+                <label for="retryCount" class="block text-sm font-medium text-gray-700">
+                  Retry Count
+                </label>
+                <input
+                  type="number"
+                  id="retryCount"
+                  class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  min="0"
+                  max="5"
+                  bind:value={executionPreferences.retryCount}
+                />
+                <p class="mt-1 text-xs text-gray-500">
+                  Number of times to retry failed requests within each flow (0-5)
+                </p>
+              </div>
+
+              <div>
+                <label for="timeout" class="block text-sm font-medium text-gray-700">
+                  Request Timeout (ms)
+                </label>
+                <input
+                  type="number"
+                  id="timeout"
+                  class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  min="1000"
+                  max="300000"
+                  step="1000"
+                  bind:value={executionPreferences.timeout}
+                />
+                <p class="mt-1 text-xs text-gray-500">
+                  Request timeout for each endpoint call (1-300 seconds)
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      {/if}
+
       <!-- Excel-like sequence management interface -->
       <div class="space-y-6">
         <!-- Create new sequence -->
@@ -692,7 +1021,7 @@
                   on:removeFlow={handleRemoveFlowFromSequence}
                   on:clickFlow={handleFlowClick}
                   on:reorderFlow={handleReorderFlow}
-                  on:delete={handleDeleteSequence}
+                  on:deleteSequence={handleDeleteSequence}
                   on:runSequence={handleRunSequence}
                 />
               {/each}
@@ -725,31 +1054,3 @@
   on:close={handleParameterPanelClose}
   on:save={handleParameterPanelSave}
 />
-
-<!-- Confirm Delete Dialog -->
-{#if showConfirmDialog && pendingDeleteSequence}
-  <div class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-    <div class="relative top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white p-6 rounded-lg shadow-xl max-w-md">
-      <h3 class="text-lg font-medium text-gray-900 mb-4">Delete Sequence</h3>
-      <p class="text-sm text-gray-500 mb-6">
-        Are you sure you want to delete "{pendingDeleteSequence.name}"? This action cannot be undone.
-      </p>
-      <div class="flex space-x-3 justify-end">
-        <button
-          type="button"
-          on:click={cancelDelete}
-          class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          on:click={confirmDeleteSequence}
-          class="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700"
-        >
-          Delete
-        </button>
-      </div>
-    </div>
-  </div>
-{/if}

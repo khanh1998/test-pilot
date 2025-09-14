@@ -71,6 +71,9 @@
       if (!project.projectJson.variables) {
         project.projectJson.variables = [];
       }
+      if (!project.projectJson.environment_mappings) {
+        project.projectJson.environment_mappings = [];
+      }
       
       // Load APIs
       const apiResult = await projectClient.getProjectApis(projectId);
@@ -301,7 +304,7 @@
     try {
       const { environmentId, variableMappings } = event.detail;
       
-      const response = await projectClient.linkEnvironment(projectId, {
+      await projectClient.linkEnvironmentMapping(projectId, {
         environmentId,
         variableMappings
       });
@@ -318,17 +321,13 @@
     try {
       const { id, variableMappings } = event.detail;
       
-      // Find the environment mapping to get the environmentId
+      // Find the environment mapping in the environments array (to get environmentId)
       const envMapping = environments.find(env => env.id === id);
       if (!envMapping) {
         throw new Error('Environment mapping not found');
       }
       
-      // Update the mapping by unlinking and relinking
-      // (This might need a dedicated update endpoint in the future)
-      await projectClient.unlinkEnvironment(projectId, envMapping.environmentId);
-      await projectClient.linkEnvironment(projectId, {
-        environmentId: envMapping.environmentId,
+      await projectClient.updateEnvironmentMappingInProject(projectId, envMapping.environmentId, {
         variableMappings
       });
       
@@ -350,7 +349,7 @@
         throw new Error('Environment mapping not found');
       }
       
-      await projectClient.unlinkEnvironment(projectId, envMapping.environmentId);
+      await projectClient.unlinkEnvironmentMapping(projectId, envMapping.environmentId);
       
       // Reload project data
       await loadProject();

@@ -280,6 +280,16 @@ export class FlowRunner {
     this.executionEngine.updateParameterValues(this.state.parameterValues);
   }
 
+  /**
+   * Set parameter values directly (used in sequence context where parameters are already resolved)
+   */
+  setParameterValues(parameterValues: Record<string, unknown>): void {
+    this.state.parameterValues = { ...parameterValues };
+    
+    // Update execution context with new parameter values
+    this.executionEngine.updateParameterValues(this.state.parameterValues);
+  }
+
   private updateExecutionState(endpointId: string, updates: Partial<any>, emitEndpointUpdate: boolean = false): void {
     const updatedEndpointState = {
       ...this.state.executionState[endpointId],

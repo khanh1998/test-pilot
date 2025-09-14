@@ -49,6 +49,7 @@ export class ProjectEnvironmentService {
 
   /**
    * Link environment to project
+   * Note: Variable mappings are now handled by ProjectEnvironmentMappingService
    */
   async linkEnvironment(projectId: number, userId: number, data: LinkEnvironmentRequest): Promise<ProjectEnvironmentLink> {
     // Verify user owns the project
@@ -66,11 +67,16 @@ export class ProjectEnvironmentService {
       throw new Error('Environment is already linked to this project');
     }
 
-    return await this.envRepo.linkEnvironment(projectId, data);
+    // Create basic link without variable mappings (those are handled separately)
+    return await this.envRepo.linkEnvironment(projectId, {
+      environmentId: data.environmentId,
+      variableMappings: {} // Empty since variable mappings are stored in project_json
+    });
   }
 
   /**
    * Update environment link
+   * Note: Variable mappings are now handled by ProjectEnvironmentMappingService
    */
   async updateEnvironmentLink(
     projectId: number, 
@@ -84,7 +90,9 @@ export class ProjectEnvironmentService {
       throw new Error('Project not found or access denied');
     }
 
-    const updatedLink = await this.envRepo.updateEnvironmentLink(projectId, environmentId, data);
+    // Variable mappings are no longer updated here - they're handled by ProjectEnvironmentMappingService
+    // This method now primarily exists for compatibility
+    const updatedLink = await this.envRepo.getProjectEnvironment(projectId, environmentId);
     
     if (!updatedLink) {
       throw new Error('Environment link not found');

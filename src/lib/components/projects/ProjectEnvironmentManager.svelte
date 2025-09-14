@@ -45,6 +45,7 @@
       availableEnvironments = await environmentClient.getEnvironments();
     } catch (error) {
       console.error('Failed to load environments:', error);
+      availableEnvironments = [];
     } finally {
       environmentLoading = false;
     }
@@ -53,9 +54,10 @@
   async function loadLinkedEnvironments() {
     try {
       const response = await projectClient.getProjectEnvironments(projectId);
-      linkedEnvironments = response.environments;
+      linkedEnvironments = response.environments || [];
     } catch (error) {
       console.error('Failed to load linked environments:', error);
+      linkedEnvironments = [];
     }
   }
 
@@ -122,9 +124,9 @@
   // Get project variable names
   $: projectVariableNames = projectVariables.map(v => v.name).sort();
 
-  // Filter out already linked environments
+  // Filter out already linked environments (based on environments prop from project_environments table)
   $: filteredEnvironments = availableEnvironments.filter(env => 
-    !linkedEnvironments.some(link => link.environmentId === env.id)
+    !environments.some(linkedEnv => linkedEnv.environmentId === env.id)
   );
 
   // Update selected environment when selection changes

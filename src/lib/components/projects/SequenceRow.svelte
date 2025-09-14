@@ -5,6 +5,7 @@
   import { createEventDispatcher } from 'svelte';
   import FlowCard from './FlowCard.svelte';
   import FlowSearch from './FlowSearch.svelte';
+  import ConfirmDialog from '../ConfirmDialog.svelte';
 
   export let sequence: FlowSequence;
   export let sequenceFlows: TestFlow[] = []; // Populated flows from sequence steps
@@ -27,6 +28,7 @@
   let draggedIndex = -1;
   let dropTargetIndex = -1;
   let showFlowSearch = false;
+  let showDeleteConfirm = false;
 
   function handleNameEdit() {
     if (editingName.trim() && editingName !== sequence.name) {
@@ -88,9 +90,16 @@
   }
 
   function handleDeleteSequence() {
-    if (confirm(`Are you sure you want to delete sequence "${sequence.name}"?`)) {
-      dispatch('deleteSequence', { sequence });
-    }
+    showDeleteConfirm = true;
+  }
+
+  function handleConfirmDelete() {
+    dispatch('deleteSequence', { sequence });
+    showDeleteConfirm = false;
+  }
+
+  function handleCancelDelete() {
+    showDeleteConfirm = false;
   }
 
   function handleRunSequence() {
@@ -218,6 +227,18 @@
     </div>
   {/if}
 </div>
+
+<!-- Confirm Delete Dialog -->
+<ConfirmDialog
+  isOpen={showDeleteConfirm}
+  title="Delete Sequence"
+  message={`Are you sure you want to delete "${sequence.name}"? This action cannot be undone.`}
+  confirmText="Delete"
+  cancelText="Cancel"
+  confirmVariant="danger"
+  on:confirm={handleConfirmDelete}
+  on:cancel={handleCancelDelete}
+/>
 
 <style>
   .sequence-row {

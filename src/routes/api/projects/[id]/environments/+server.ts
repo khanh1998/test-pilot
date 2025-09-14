@@ -17,9 +17,9 @@ export async function GET({ params, locals }: RequestEvent) {
       return json({ error: 'Invalid project ID' }, { status: 400 });
     }
 
-    const environments = await environmentService.listProjectEnvironments(projectId, locals.user.userId);
+    const environmentsResponse = await environmentService.listProjectEnvironments(projectId, locals.user.userId);
     
-    return json({ environments });
+    return json({ environments: environmentsResponse.environmentLinks });
   } catch (error: any) {
     console.error('Error listing project environments:', error);
     
@@ -74,6 +74,51 @@ export async function POST({ params, request, locals }: RequestEvent) {
     
     if (error.message.includes('already linked')) {
       return json({ error: 'Environment is already linked to this project' }, { status: 409 });
+    }
+    
+    return json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+
+// PUT /api/projects/[id]/environments - Update environment mapping for project
+export async function PUT({ params, request, locals }: RequestEvent) {
+  try {
+    // Check if user is authenticated
+    if (!locals.user) {
+      return json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const projectId = parseInt(params.id as string);
+    if (isNaN(projectId)) {
+      return json({ error: 'Invalid project ID' }, { status: 400 });
+    }
+
+    const data = await request.json();
+
+    // Validate required fields
+    if (!data.environment_id || typeof data.environment_id !== 'number') {
+      return json({ error: 'Environment ID is required and must be a number' }, { status: 400 });
+    }
+
+    if (data.variableMappings !== undefined && typeof data.variableMappings !== 'object') {
+      return json({ error: 'Variable mappings must be an object' }, { status: 400 });
+    }
+
+    const link = await environmentService.updateEnvironmentLink(
+      projectId, 
+      data.environment_id,
+      locals.user.userId,
+      { 
+        variableMappings: data.variableMappings || {}
+      }
+    );
+
+    return json({ link });
+  } catch (error: any) {
+    console.error('Error updating environment mapping:', error);
+    
+    if (error.message.includes('not found') || error.message.includes('access denied')) {
+      return json({ error: 'Project or environment not found' }, { status: 404 });
     }
     
     return json({ error: 'Internal server error' }, { status: 500 });
