@@ -276,3 +276,58 @@ export async function unlinkEnvironment(projectId: number, environmentId: number
     throw new Error(error.error || 'Failed to unlink environment');
   }
 }
+
+// Project API Management
+export async function getProjectApis(projectId: number): Promise<{ projectApis: any[] }> {
+  const response = await fetchWithAuth(`${API_BASE}/${projectId}/apis`);
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to fetch project APIs');
+  }
+  return response.json();
+}
+
+export async function linkApiToProject(projectId: number, data: { apiId: number; defaultHost?: string }): Promise<{ projectApi: any }> {
+  const response = await fetchWithAuth(`${API_BASE}/${projectId}/apis`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(data)
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to link API to project');
+  }
+  
+  return response.json();
+}
+
+export async function updateProjectApiHost(projectId: number, apiId: number, data: { defaultHost: string }): Promise<{ projectApi: any }> {
+  const response = await fetchWithAuth(`${API_BASE}/${projectId}/apis/${apiId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(data)
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to update API host');
+  }
+  
+  return response.json();
+}
+
+export async function unlinkApiFromProject(projectId: number, apiId: number): Promise<void> {
+  const response = await fetchWithAuth(`${API_BASE}/${projectId}/apis/${apiId}`, {
+    method: 'DELETE'
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to unlink API from project');
+  }
+}

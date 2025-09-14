@@ -10,7 +10,7 @@
   import ModuleForm from '$lib/components/projects/ModuleForm.svelte';
   import SequenceCard from '$lib/components/projects/SequenceCard.svelte';
   import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
-  import ProjectApiManager from '$lib/components/projects/ProjectApiManager.svelte';
+  import ProjectApiLinkManager from '$lib/components/projects/ProjectApiLinkManager.svelte';
   import ProjectEnvironmentManager from '$lib/components/projects/ProjectEnvironmentManager.svelte';
   import ProjectVariableManager from '$lib/components/projects/ProjectVariableManager.svelte';
   import { formatDate } from '$lib/utils/date';
@@ -29,6 +29,8 @@
   let error: string | null = null;
   let activeTab = 'modules';
   let variableLoading = false;
+  let isSaving = false;
+  let hasUnsavedChanges = false;
 
   // Modal states
   let showCreateModuleModal = false;
@@ -41,11 +43,8 @@
 
   $: projectId = parseInt($page.params.id);
 
-  onMount(async () => {
-    if (projectId) {
-      await loadProject();
-      await loadTestFlows();
-    }
+    onMount(async () => {
+    await loadProject();
   });
 
   onDestroy(() => {
@@ -53,12 +52,13 @@
     clearBreadcrumbOverride(projectId.toString());
   });
 
-  async function loadProject() {
+    async function loadProject() {
     try {
       loading = true;
-      error = null;
-      const response = await projectClient.getProject(projectId);
-      project = response.project;
+      const projectDetail = await projectClient.getProject(projectId);
+      project = projectDetail.project;
+      modules = projectDetail.modules || [];
+      environments = projectDetail.environments || [];
       
       // Initialize projectJson if it doesn't exist
       if (!project.projectJson) {
@@ -72,9 +72,12 @@
         project.projectJson.variables = [];
       }
       
-      modules = response.modules || [];
-      apis = response.apis || [];
-      environments = response.environments || [];
+      // Load APIs
+      const apiResult = await projectClient.getProjectApis(projectId);
+      apis = apiResult.projectApis || [];
+      
+      // Load test flows
+      await loadTestFlows();
 
       // Set breadcrumb override for this project
       if (project?.name) {
@@ -293,27 +296,6 @@
     }
   }
 
-  // API management handlers (placeholder for now)
-  function handleCreateApi(event: CustomEvent) {
-    console.log('Create API:', event.detail);
-    // TODO: Implement API creation
-  }
-
-  function handleUpdateApi(event: CustomEvent) {
-    console.log('Update API:', event.detail);
-    // TODO: Implement API update
-  }
-
-  function handleDeleteApi(event: CustomEvent) {
-    console.log('Delete API:', event.detail);
-    // TODO: Implement API deletion
-  }
-
-  function handleUploadApi(event: CustomEvent) {
-    console.log('Upload API:', event.detail);
-    // TODO: Implement API upload
-  }
-
   // Environment management handlers
   async function handleLinkEnvironment(event: CustomEvent<{ environmentId: number; variableMappings: Record<string, string> }>) {
     try {
@@ -377,6 +359,81 @@
       error = err instanceof Error ? err.message : 'Failed to unlink environment';
     }
   }
+
+  // API management handlers
+  async function handleLinkApi(event: CustomEvent<{ apiId: number; defaultHost?: string }>) {
+    try {
+      const { apiId, defaultHost } = event.detail;
+      await projectClient.linkApiToProject(projectId, { apiId, defaultHost });
+      await loadProject(); // Reload to get updated data
+    } catch (err) {
+      console.error('Failed to link API:', err);
+      error = err instanceof Error ? err.message : 'Failed to link API';
+    }
+  }
+
+  async function handleUpdateApiHost(event: CustomEvent<{ id: number; defaultHost: string }>) {
+    try {
+      const { id, defaultHost } = event.detail;
+      
+      // Find the project API to get the apiId
+      const projectApi = apis.find(api => api.id === id);
+      if (!projectApi) {
+        throw new Error('Project API not found');
+      }
+      
+      await projectClient.updateProjectApiHost(projectId, projectApi.apiId, { defaultHost });
+      await loadProject(); // Reload to get updated data
+    } catch (err) {
+      console.error('Failed to update API host:', err);
+      error = err instanceof Error ? err.message : 'Failed to update API host';
+    }
+  }
+
+  async function handleUnlinkApi(event: CustomEvent<{ id: number }>) {
+    try {
+      const { id } = event.detail;
+      
+      // Find the project API to get the apiId
+      const projectApi = apis.find(api => api.id === id);
+      if (!projectApi) {
+        throw new Error('Project API not found');
+      }
+      
+      await projectClient.unlinkApiFromProject(projectId, projectApi.apiId);
+      await loadProject(); // Reload to get updated data
+    } catch (err) {
+      console.error('Failed to unlink API:', err);
+      error = err instanceof Error ? err.message : 'Failed to unlink API';
+    }
+  }
+
+  // Mark changes as needing save
+  function markDirty() {
+    hasUnsavedChanges = true;
+  }
+
+  // Save project changes
+  async function saveProject() {
+    if (!project || !hasUnsavedChanges) return;
+    
+    try {
+      isSaving = true;
+      
+      await projectClient.updateProject(projectId, {
+        name: project.name,
+        description: project.description,
+        projectJson: project.projectJson
+      });
+      
+      hasUnsavedChanges = false;
+    } catch (err) {
+      console.error('Failed to save project:', err);
+      error = err instanceof Error ? err.message : 'Failed to save project';
+    } finally {
+      isSaving = false;
+    }
+  }
 </script>
 
 <svelte:head>
@@ -404,6 +461,30 @@
       <!-- Project Tabs -->
       <ProjectTabs {modules} {apis} {environments} variables={project?.projectJson?.variables || []} bind:activeTab>
         <div slot="tab-content">
+          
+          <!-- Save button (shown on settings tab) -->
+          {#if activeTab === 'settings' || activeTab === 'variables'}
+            <div class="mb-6 flex justify-between items-center">
+              <div>
+                {#if hasUnsavedChanges}
+                  <p class="text-sm text-amber-600">You have unsaved changes</p>
+                {/if}
+              </div>
+              <button
+                type="button"
+                on:click={saveProject}
+                disabled={isSaving || !hasUnsavedChanges}
+                class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {#if isSaving}
+                  <div class="w-4 h-4 mr-2 animate-spin rounded-full border-t-2 border-b-2 border-white"></div>
+                  Saving...
+                {:else}
+                  Save Changes
+                {/if}
+              </button>
+            </div>
+          {/if}
           
           <!-- Modules Tab -->
           {#if activeTab === 'modules'}
@@ -458,13 +539,13 @@
 
           <!-- Other tabs content placeholder -->
           {:else if activeTab === 'apis'}
-            <ProjectApiManager 
-              {apis} 
+            <ProjectApiLinkManager 
+              linkedApis={apis} 
               {loading}
-              on:create={handleCreateApi}
-              on:update={handleUpdateApi}
-              on:delete={handleDeleteApi}
-              on:upload={handleUploadApi}
+              disabled={isSaving}
+              on:link={handleLinkApi}
+              on:updateHost={handleUpdateApiHost}
+              on:unlink={handleUnlinkApi}
             />
           
           {:else if activeTab === 'environments'}
@@ -502,7 +583,8 @@
                       <input
                         id="project-name"
                         type="text"
-                        value={project?.name || ''}
+                        bind:value={project.name}
+                        on:input={markDirty}
                         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                         placeholder="Project name"
                       />
@@ -513,7 +595,8 @@
                       <textarea
                         id="project-description"
                         rows="3"
-                        value={project?.description || ''}
+                        bind:value={project.description}
+                        on:input={markDirty}
                         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                         placeholder="Project description"
                       ></textarea>

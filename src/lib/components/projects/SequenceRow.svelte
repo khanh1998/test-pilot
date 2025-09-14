@@ -9,6 +9,9 @@
   export let sequence: FlowSequence;
   export let sequenceFlows: TestFlow[] = []; // Populated flows from sequence steps
   export let isEditing: boolean = false;
+  export let selectedEnvironmentId: number | null = null;
+  export let selectedSubEnvironment: string | null = null;
+  export let isRunning: boolean = false;
 
   const dispatch = createEventDispatcher<{
     editName: { sequence: FlowSequence; newName: string };
@@ -17,6 +20,7 @@
     reorderFlow: { sequence: FlowSequence; fromIndex: number; toIndex: number };
     deleteSequence: { sequence: FlowSequence };
     clickFlow: { sequence: FlowSequence; flow: TestFlow; stepOrder: number };
+    runSequence: { sequence: FlowSequence };
   }>();
 
   let editingName = sequence.name;
@@ -89,10 +93,15 @@
     }
   }
 
+  function handleRunSequence() {
+    dispatch('runSequence', { sequence });
+  }
+
   $: steps = sequence.sequenceConfig?.steps || [];
+  $: canRun = sequenceFlows.length > 0 && selectedEnvironmentId && selectedSubEnvironment;
 </script>
 
-<div class="sequence-row bg-white border border-gray-200 rounded-lg p-4 mb-4">
+<div class="sequence-row bg-white border border-gray-200 rounded-lg p-4 mb-4 {isRunning ? 'ring-2 ring-green-500 ring-opacity-50 bg-green-50' : ''}" class:animate-pulse={isRunning}>
   <!-- Sequence Header -->
   <div class="flex items-center justify-between mb-4">
     <div class="flex items-center gap-3 flex-1">
@@ -116,10 +125,40 @@
       <span class="text-sm text-gray-500">
         {steps.length} flow{steps.length !== 1 ? 's' : ''}
       </span>
+      
+      {#if isRunning}
+        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+          <svg class="w-3 h-3 mr-1 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          Running
+        </span>
+      {/if}
     </div>
 
     <!-- Sequence Actions -->
     <div class="flex items-center gap-2">
+      <!-- Run Sequence Button -->
+      <button
+        type="button"
+        on:click={handleRunSequence}
+        disabled={!canRun || isRunning}
+        class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+        title={!canRun ? 'Select an environment to run this sequence' : 'Run this sequence'}
+      >
+        {#if isRunning}
+          <svg class="w-3 h-3 mr-1 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          Running...
+        {:else}
+          <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8.056v3.888a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
+          </svg>
+          Run
+        {/if}
+      </button>
+      
       <button
         type="button"
         on:click={handleDeleteSequence}

@@ -5,15 +5,19 @@
   import { setBreadcrumbOverride, clearBreadcrumbOverride } from '$lib/store/breadcrumb';
   import * as projectClient from '$lib/http_client/projects';
   import * as testFlowClient from '$lib/http_client/test-flow';
+  import * as environmentClient from '$lib/http_client/environments';
   import FlowSearch from '$lib/components/projects/FlowSearch.svelte';
   import SequenceRow from '$lib/components/projects/SequenceRow.svelte';
   import SequenceCreator from '$lib/components/projects/SequenceCreator.svelte';
   import ParameterMappingPanel from '$lib/components/projects/ParameterMappingPanel.svelte';
+  import SimplifiedEnvironmentSelector from '$lib/components/environments/SimplifiedEnvironmentSelector.svelte';
   import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
   import { formatDate } from '$lib/utils/date';
   import type { ProjectModule } from '$lib/types/project';
   import type { FlowSequence } from '$lib/types/flow_sequence';
   import type { TestFlow } from '$lib/types/test-flow';
+  import type { Environment } from '$lib/types/environment';
+  import type { EnvironmentMapping } from '$lib/components/test-flows/types';
 
   let projectId: number;
   let moduleId: number;
@@ -21,6 +25,8 @@
   let module: ProjectModule | null = null;
   let sequences: FlowSequence[] = [];
   let sequenceFlowsMap: Map<number, TestFlow[]> = new Map(); // Map sequence ID to flows
+  let environments: Environment[] = [];
+  let linkedEnvironments: EnvironmentMapping[] = [];
   
   let loading = true;
   let error: string | null = null;
@@ -28,6 +34,12 @@
   // Modal states
   let showConfirmDialog = false;
   let isSubmitting = false;
+
+  // Environment and execution states
+  let selectedEnvironmentId: number | null = null;
+  let selectedSubEnvironment: string | null = null;
+  let isRunningAll = false;
+  let runningSequences = new Set<number>(); // Track which sequences are running
 
   // Delete state
   let pendingDeleteSequence: { id: number; name: string } | null = null;
@@ -44,6 +56,9 @@
   // Reactive statement to calculate previous flow outputs
   $: previousFlowOutputs = getPreviousFlowOutputs(selectedSequence, selectedStepOrder, sequenceFlowsMap);
 
+  // Reactive statement to check if we can run all sequences
+  $: canRunAll = sequences.length > 0 && selectedEnvironmentId && selectedSubEnvironment;
+
   $: projectId = parseInt($page.params.id);
   $: moduleId = parseInt($page.params.moduleId);
 
@@ -52,7 +67,8 @@
       try {
         await Promise.all([
           loadModule(),
-          loadSequences()
+          loadSequences(),
+          loadEnvironments() // Still need this for all environments
         ]);
       } catch (err) {
         console.error('Error during initial load:', err);
@@ -78,6 +94,7 @@
       const response = await projectClient.getProject(projectId);
       project = response.project; // Store project data
       module = response.modules.find(m => m.id === moduleId) || null;
+      
       if (!module) {
         error = 'Module not found';
       } else {
@@ -89,6 +106,17 @@
           setBreadcrumbOverride(moduleId.toString(), module.name);
         }
       }
+
+      // Extract linked environments from project data
+      if (response.environments && Array.isArray(response.environments)) {
+        linkedEnvironments = response.environments.map(projectEnv => ({
+          environmentId: projectEnv.environment?.id || 0,
+          environmentName: projectEnv.environment?.name || 'Unknown Environment',
+          selectedSubEnvironment: undefined, // Will be set when user selects
+          parameterMappings: projectEnv.variableMappings || {}
+        })).filter(env => env.environmentId > 0); // Filter out invalid environments
+      }
+      
     } catch (err) {
       console.error('Failed to load module:', err);
       error = err instanceof Error ? err.message : 'Failed to load module';
@@ -106,6 +134,17 @@
       console.error('Failed to load sequences:', err);
       sequences = []; // Ensure it's always an array on error
       error = err instanceof Error ? err.message : 'Failed to load sequences';
+    }
+  }
+
+  async function loadEnvironments() {
+    try {
+      // Load all environments for the user (needed for the environment selector)
+      environments = await environmentClient.getEnvironments();
+    } catch (err) {
+      console.error('Failed to load environments:', err);
+      environments = [];
+      // Don't set error here as environments are optional
     }
   }
 
@@ -347,6 +386,80 @@
     showConfirmDialog = true;
   }
 
+  function handleEnvironmentSelect(event: CustomEvent<{ environmentId: number | null; subEnvironment: string | null }>) {
+    selectedEnvironmentId = event.detail.environmentId;
+    selectedSubEnvironment = event.detail.subEnvironment;
+  }
+
+  async function handleRunAllSequences() {
+    if (!selectedEnvironmentId || !selectedSubEnvironment) {
+      alert('Please select an environment first');
+      return;
+    }
+
+    if (sequences.length === 0) {
+      alert('No sequences to run');
+      return;
+    }
+
+    isRunningAll = true;
+    console.log('Running all sequences with environment:', {
+      environmentId: selectedEnvironmentId,
+      subEnvironment: selectedSubEnvironment,
+      sequences: sequences.map(s => s.name)
+    });
+
+    // TODO: Implement actual execution logic
+    // For now, just simulate the execution
+    try {
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate execution time
+      console.log('All sequences execution completed');
+    } catch (err) {
+      console.error('Failed to run all sequences:', err);
+      error = err instanceof Error ? err.message : 'Failed to run sequences';
+    } finally {
+      isRunningAll = false;
+    }
+  }
+
+  async function handleRunSequence(event: CustomEvent<{ sequence: FlowSequence }>) {
+    const sequence = event.detail.sequence;
+    
+    if (!selectedEnvironmentId || !selectedSubEnvironment) {
+      alert('Please select an environment first');
+      return;
+    }
+
+    const flows = sequenceFlowsMap.get(sequence.id) || [];
+    if (flows.length === 0) {
+      alert('This sequence has no flows to run');
+      return;
+    }
+
+    runningSequences.add(sequence.id);
+    runningSequences = new Set(runningSequences); // Trigger reactivity
+
+    console.log('Running sequence:', {
+      sequenceName: sequence.name,
+      environmentId: selectedEnvironmentId,
+      subEnvironment: selectedSubEnvironment,
+      flows: flows.map(f => f.name)
+    });
+
+    // TODO: Implement actual execution logic
+    // For now, just simulate the execution
+    try {
+      await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate execution time
+      console.log(`Sequence "${sequence.name}" execution completed`);
+    } catch (err) {
+      console.error(`Failed to run sequence "${sequence.name}":`, err);
+      error = err instanceof Error ? err.message : `Failed to run sequence "${sequence.name}"`;
+    } finally {
+      runningSequences.delete(sequence.id);
+      runningSequences = new Set(runningSequences); // Trigger reactivity
+    }
+  }
+
   function handleParameterPanelClose() {
     showParameterPanel = false;
     selectedFlow = null;
@@ -495,6 +608,62 @@
 {:else if module}
   <div class="min-h-screen bg-gray-50">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <!-- Environment Selector and Run All Button -->
+      <div class="bg-white shadow rounded-lg p-6 mb-6">
+        <div class="flex items-center justify-between">
+          <div class="flex-1 max-w-md">
+            <label for="environment-selector" class="block text-sm font-medium text-gray-700 mb-2">
+              Execution Environment
+            </label>
+            <SimplifiedEnvironmentSelector
+              id="environment-selector"
+              {environments}
+              {linkedEnvironments}
+              {selectedEnvironmentId}
+              {selectedSubEnvironment}
+              placeholder="Select environment for execution..."
+              on:select={handleEnvironmentSelect}
+            />
+          </div>
+          
+          <div class="ml-6">
+            <button
+              type="button"
+              on:click={handleRunAllSequences}
+              disabled={!canRunAll || isRunningAll}
+              class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+              title={!canRunAll ? 'Select an environment and ensure all sequences have flows' : 'Run all sequences in this module'}
+            >
+              {#if isRunningAll}
+                <svg class="w-4 h-4 mr-2 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Running All...
+              {:else}
+                <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8.056v3.888a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
+                </svg>
+                Run All Sequences
+              {/if}
+            </button>
+          </div>
+        </div>
+        
+        {#if selectedEnvironmentId && selectedSubEnvironment}
+          <div class="mt-3 text-xs text-green-600">
+            ✓ Ready to execute with selected environment
+          </div>
+        {:else if linkedEnvironments.length === 0}
+          <div class="mt-3 text-xs text-yellow-600">
+            ⚠ No environments linked to this project. Link environments in project settings to enable execution.
+          </div>
+        {:else}
+          <div class="mt-3 text-xs text-gray-500">
+            Select an environment to enable sequence execution
+          </div>
+        {/if}
+      </div>
+
       <!-- Excel-like sequence management interface -->
       <div class="space-y-6">
         <!-- Create new sequence -->
@@ -515,12 +684,16 @@
                 <SequenceRow 
                   {sequence}
                   sequenceFlows={sequenceFlowsMap.get(sequence.id) || []}
+                  {selectedEnvironmentId}
+                  {selectedSubEnvironment}
+                  isRunning={runningSequences.has(sequence.id)}
                   on:editName={handleEditSequenceName}
                   on:addFlow={handleAddFlowToSequence}
                   on:removeFlow={handleRemoveFlowFromSequence}
                   on:clickFlow={handleFlowClick}
                   on:reorderFlow={handleReorderFlow}
                   on:delete={handleDeleteSequence}
+                  on:runSequence={handleRunSequence}
                 />
               {/each}
             </div>
