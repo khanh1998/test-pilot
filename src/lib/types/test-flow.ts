@@ -18,6 +18,7 @@ export interface TestFlow {
   description?: string;
   apiId: number;
   steps: TestFlowStep[];
+  flowJson?: TestFlowJson; // Add the flowJson property
   createdAt?: string;
   updatedAt?: string;
 }
@@ -115,6 +116,12 @@ export interface TestFlowJson {
     required: boolean;
     description: string;
     defaultValue: string | number | boolean | Array<string | number | boolean | null> | null;
+  }>;
+  outputs?: Array<{
+    name: string;
+    value: string;
+    description?: string;
+    isTemplate: boolean;
   }>;
   settings?: {
     api_hosts: Record<string, {

@@ -51,6 +51,11 @@
       icon: 'M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z'
     },
     {
+      name: 'Projects',
+      href: '/dashboard/projects',
+      icon: 'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10'
+    },
+    {
       name: 'APIs',
       href: '/dashboard/apis',
       icon: 'M8 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-2m-4-1v8m0 0l3-3m-3 3L9 8'
@@ -89,6 +94,11 @@
         const fullPath = '/dashboard' + currentPath;
         const isLast = i === segments.length - 1;
         
+        // Skip the "modules" segment as it's not a real page
+        if (segments[i] === 'modules' && !isLast) {
+          continue;
+        }
+        
         // Map segment names to display names
         let displayName = segments[i];
         let href = fullPath;
@@ -101,6 +111,13 @@
           switch (segments[i]) {
             case 'apis':
               displayName = 'APIs';
+              break;
+            case 'projects':
+              displayName = 'Projects';
+              break;
+            case 'modules':
+              // If we reach here, it means this is the last segment (a specific module)
+              displayName = 'Module';
               break;
             case 'environments':
               displayName = 'Environments';
@@ -121,7 +138,12 @@
                 const parentSegment = i > 1 ? segments[i - 1] : '';
                 if (parentSegment === 'apis') {
                   displayName = 'API Details';
-                  // Don't make ID segments clickable by default
+                  href = isLast ? fullPath : fullPath;
+                } else if (parentSegment === 'projects') {
+                  displayName = 'Project Details';
+                  href = isLast ? fullPath : fullPath;
+                } else if (parentSegment === 'modules') {
+                  displayName = 'Module Details';
                   href = isLast ? fullPath : fullPath;
                 } else if (parentSegment === 'test-flows') {
                   displayName = 'Test Flow Details';
