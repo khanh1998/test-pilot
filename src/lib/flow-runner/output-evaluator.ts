@@ -63,7 +63,7 @@ export class FlowOutputEvaluator {
     return results;
   }
 
-  private resolveTemplateValue(value: string): string {
+  private resolveTemplateValue(value: string): unknown {
     try {
       const context = createTemplateContextFromFlowRunner(
         this.context.storedResponses,
@@ -74,7 +74,7 @@ export class FlowOutputEvaluator {
       );
       
       const result = resolveTemplate(value, context);
-      return result !== undefined && result !== null ? String(result) : '';
+      return result;
     } catch (error) {
       this.context.addLog('error', `Template resolution failed for "${value}"`, 
         error instanceof Error ? error.message : String(error));

@@ -1,18 +1,21 @@
 <!-- FlowCard.svelte - Compact flow card for sequence rows -->
 <script lang="ts">
   import type { TestFlow } from '../../types/test-flow.js';
+  import type { SequenceFlowResult } from '$lib/sequence-runner/types';
   import { createEventDispatcher } from 'svelte';
 
   export let flow: TestFlow;
   export let stepOrder: number;
   export let isDragging: boolean = false;
   export let isDropTarget: boolean = false;
+  export let executionResults: SequenceFlowResult[] = [];
 
   const dispatch = createEventDispatcher<{
     click: { flow: TestFlow; stepOrder: number };
     dragstart: { flow: TestFlow; stepOrder: number };
     dragend: void;
     remove: { stepOrder: number };
+    showResults: { flow: TestFlow; stepOrder: number; executionResult: SequenceFlowResult };
   }>();
 
   function handleClick() {
@@ -42,10 +45,42 @@
     event.stopPropagation();
     window.location.href = `/dashboard/test-flows/${flow.id}`;
   }
+
+  function handleShowResults(event: MouseEvent) {
+    event.stopPropagation();
+    if (executionResult) {
+      dispatch('showResults', { flow, stepOrder, executionResult });
+    }
+  }
+
+  // Find execution result for this flow and step
+  $: executionResult = executionResults.find(result => {
+    const flowIdNum = parseInt(flow.id);
+    const match = result.flowId === flowIdNum && result.stepOrder === stepOrder;
+    return match;
+  }) || null;
+
+  // Determine execution status for visual indicators
+  $: executionStatus = executionResult ? (executionResult.success ? 'success' : 'error') : 'none';
+  $: hasResults = executionResult !== null;
+  
+  // Debug logging
+  $: {
+    const flowIdNum = parseInt(flow.id);
+    console.log(`🎯 FlowCard ${flow.name} (flowId=${flowIdNum}, stepOrder=${stepOrder}): executionResult=`, executionResult);
+    console.log(`🎯 FlowCard ${flow.name}: hasResults=${hasResults}, executionStatus=${executionStatus}`);
+    if (executionResults.length > 0) {
+      console.log(`🎯 FlowCard ${flow.name}: Available results:`, executionResults.map(r => ({ flowId: r.flowId, stepOrder: r.stepOrder, success: r.success })));
+    }
+  }
 </script>
 
 <div
-  class="flow-card group relative bg-white border border-gray-200 rounded-lg p-3 cursor-pointer hover:shadow-md transition-all duration-200 w-72 h-40"
+  class="flow-card group relative bg-white border rounded-lg p-3 cursor-pointer hover:shadow-md transition-all duration-200 w-72 h-40 {executionStatus === 'success' 
+    ? 'border-green-300 bg-green-50' 
+    : executionStatus === 'error' 
+    ? 'border-red-300 bg-red-50' 
+    : 'border-gray-200'}"
   class:opacity-50={isDragging}
   class:border-blue-400={isDropTarget}
   class:bg-blue-50={isDropTarget}
@@ -62,6 +97,25 @@
 >
   <!-- Flow Content -->
   <div class="h-full flex flex-col">
+    <!-- Execution Status Indicator -->
+    {#if executionStatus !== 'none'}
+      <div class="absolute top-2 right-2 flex items-center gap-1">
+        {#if executionStatus === 'success'}
+          <div class="w-3 h-3 bg-green-500 rounded-full flex items-center justify-center">
+            <svg class="w-2 h-2 text-white" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+            </svg>
+          </div>
+        {:else if executionStatus === 'error'}
+          <div class="w-3 h-3 bg-red-500 rounded-full flex items-center justify-center">
+            <svg class="w-2 h-2 text-white" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+            </svg>
+          </div>
+        {/if}
+      </div>
+    {/if}
+
     <!-- Header with Flow Name and Action Buttons -->
     <div class="flex items-start justify-between mb-2">
       <h4 class="text-sm font-medium text-gray-900 line-clamp-1 flex-1 pr-2" title={flow.name}>
@@ -70,6 +124,21 @@
       
       <!-- Action Buttons -->
       <div class="flex-shrink-0 flex items-center gap-1">
+        <!-- Results Button (only show if has execution results) -->
+        {#if hasResults}
+          <button
+            type="button"
+            class="w-5 h-5 {executionStatus === 'success' ? 'bg-green-500 hover:bg-green-600' : 'bg-red-500 hover:bg-red-600'} text-white text-xs rounded-full transition-colors opacity-0 group-hover:opacity-100 flex items-center justify-center"
+            on:click={handleShowResults}
+            aria-label="View execution results"
+            title="View execution results"
+          >
+            <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+          </button>
+        {/if}
+        
         <!-- View Details Button -->
         <button
           type="button"
@@ -167,6 +236,7 @@
   .line-clamp-1 {
     display: -webkit-box;
     -webkit-line-clamp: 1;
+    line-clamp: 1;
     -webkit-box-orient: vertical;
     overflow: hidden;
   }

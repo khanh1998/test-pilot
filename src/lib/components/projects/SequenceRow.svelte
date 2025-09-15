@@ -2,9 +2,11 @@
 <script lang="ts">
   import type { FlowSequence } from '../../types/flow_sequence.js';
   import type { TestFlow } from '../../types/test-flow.js';
+  import type { SequenceFlowResult } from '$lib/sequence-runner/types';
   import { createEventDispatcher } from 'svelte';
   import FlowCard from './FlowCard.svelte';
   import FlowSearch from './FlowSearch.svelte';
+  import FlowResultsPanel from './FlowResultsPanel.svelte';
   import ConfirmDialog from '../ConfirmDialog.svelte';
 
   export let sequence: FlowSequence;
@@ -13,6 +15,21 @@
   export let selectedEnvironmentId: number | null = null;
   export let selectedSubEnvironment: string | null = null;
   export let isRunning: boolean = false;
+  export let executionResults: SequenceFlowResult[] = []; // New prop for execution results
+
+  // Debug executionResults
+  $: if (executionResults.length > 0) {
+    console.log(`SequenceRow ${sequence.name} received execution results:`, executionResults);
+  }
+  
+  // Debug when component renders
+  $: {
+    console.log(`SequenceRow ${sequence.name} rendering with:`, {
+      sequenceFlows: sequenceFlows.length,
+      executionResults: executionResults.length,
+      sequenceId: sequence.id
+    });
+  }
 
   const dispatch = createEventDispatcher<{
     editName: { sequence: FlowSequence; newName: string };
@@ -29,6 +46,9 @@
   let dropTargetIndex = -1;
   let showFlowSearch = false;
   let showDeleteConfirm = false;
+  let showResultsPanel = false;
+  let selectedFlowResult: SequenceFlowResult | null = null;
+  let selectedFlowName = '';
 
   function handleNameEdit() {
     if (editingName.trim() && editingName !== sequence.name) {
@@ -104,6 +124,18 @@
 
   function handleRunSequence() {
     dispatch('runSequence', { sequence });
+  }
+
+  function handleShowResults(event: CustomEvent<{ flow: TestFlow; stepOrder: number; executionResult: SequenceFlowResult }>) {
+    selectedFlowResult = event.detail.executionResult;
+    selectedFlowName = event.detail.flow.name;
+    showResultsPanel = true;
+  }
+
+  function handleCloseResultsPanel() {
+    showResultsPanel = false;
+    selectedFlowResult = null;
+    selectedFlowName = '';
   }
 
   $: steps = sequence.sequenceConfig?.steps || [];
@@ -183,34 +215,38 @@
 
   <!-- Flow Cards Container -->
   <div class="flex items-center gap-3 overflow-x-auto py-2" style="min-height: 11rem;">
-    {#each sequenceFlows as flow, index (`${flow.id}-${index}`)}
-      <div
-        class="drop-zone transition-all duration-200"
-        class:border-2={dropTargetIndex === index}
-        class:border-blue-400={dropTargetIndex === index}
-        class:border-dashed={dropTargetIndex === index}
-        class:bg-blue-50={dropTargetIndex === index}
-        class:rounded-lg={dropTargetIndex === index}
-        class:p-1={dropTargetIndex === index}
-        on:dragover={(e) => handleDragOver(e, index)}
-        on:drop={(e) => handleDrop(e, index)}
-        role="button"
-        tabindex="0"
-      >
-        <FlowCard
-          {flow}
-          stepOrder={index + 1}
-          isDragging={draggedIndex === index}
-          isDropTarget={dropTargetIndex === index}
-          on:click={handleFlowClick}
-          on:dragstart={handleDragStart}
-          on:dragend={handleDragEnd}
-          on:remove={handleFlowRemove}
-        />
-      </div>
-    {/each}
-
-    <!-- Add Flow Search -->
+      {#each sequenceFlows as flow, index (`${flow.id}-${index}`)}
+        {@const flowIdNum = parseInt(flow.id)}
+        {@const sequenceStep = sequence.sequenceConfig?.steps?.find(s => s.test_flow_id === flowIdNum)}
+        {@const stepOrder = sequenceStep?.step_order || (index + 1)}
+        {console.log(`🔍 Rendering FlowCard for ${flow.name}: flowId=${flowIdNum}, stepOrder=${stepOrder}, from sequenceStep=${!!sequenceStep}`)}
+        <div
+          class="drop-zone transition-all duration-200"
+          class:border-2={dropTargetIndex === index}
+          class:border-blue-400={dropTargetIndex === index}
+          class:border-dashed={dropTargetIndex === index}
+          class:bg-blue-50={dropTargetIndex === index}
+          class:rounded-lg={dropTargetIndex === index}
+          class:p-1={dropTargetIndex === index}
+          on:dragover={(e) => handleDragOver(e, index)}
+          on:drop={(e) => handleDrop(e, index)}
+          role="button"
+          tabindex="0"
+        >
+          <FlowCard
+            {flow}
+            stepOrder={stepOrder}
+            isDragging={draggedIndex === index}
+            isDropTarget={dropTargetIndex === index}
+            {executionResults}
+            on:click={handleFlowClick}
+            on:dragstart={handleDragStart}
+            on:dragend={handleDragEnd}
+            on:remove={handleFlowRemove}
+            on:showResults={handleShowResults}
+          />
+        </div>
+      {/each}    <!-- Add Flow Search -->
     <div class="flex-shrink-0">
       <FlowSearch
         bind:isOpen={showFlowSearch}
@@ -238,6 +274,14 @@
   confirmVariant="danger"
   on:confirm={handleConfirmDelete}
   on:cancel={handleCancelDelete}
+/>
+
+<!-- Flow Results Panel -->
+<FlowResultsPanel
+  isOpen={showResultsPanel}
+  flowResult={selectedFlowResult}
+  flowName={selectedFlowName}
+  on:close={handleCloseResultsPanel}
 />
 
 <style>

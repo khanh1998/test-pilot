@@ -8,6 +8,7 @@
   import * as testFlowClient from '$lib/http_client/test-flow';
   import * as environmentClient from '$lib/http_client/environments';
   import { SequenceRunner, type SequenceRunnerOptions } from '$lib/sequence-runner';
+  import type { SequenceFlowResult } from '$lib/sequence-runner/types';
   import FlowSearch from '$lib/components/projects/FlowSearch.svelte';
   import SequenceRow from '$lib/components/projects/SequenceRow.svelte';
   import SequenceCreator from '$lib/components/projects/SequenceCreator.svelte';
@@ -29,6 +30,7 @@
   let module: ProjectModule | null = null;
   let sequences: FlowSequence[] = [];
   let sequenceFlowsMap: Map<number, TestFlow[]> = new Map(); // Map sequence ID to flows
+  let sequenceResultsMap: Map<number, SequenceFlowResult[]> = new Map(); // Map sequence ID to execution results
   let environments: Environment[] = [];
   let linkedEnvironments: EnvironmentMapping[] = [];
   
@@ -77,6 +79,16 @@
 
   // Reactive statement to check if we can run all sequences
   $: canRunAll = sequences.length > 0 && selectedEnvironmentId && selectedSubEnvironment;
+  
+  // Debug execution results
+  $: {
+    if (sequenceResultsMap.size > 0) {
+      console.log('Main page sequenceResultsMap updated:', sequenceResultsMap);
+      for (const [sequenceId, results] of sequenceResultsMap.entries()) {
+        console.log(`Sequence ${sequenceId} has ${results.length} execution results:`, results);
+      }
+    }
+  }
 
   $: projectId = parseInt($page.params.id);
   $: moduleId = parseInt($page.params.moduleId);
@@ -512,6 +524,10 @@
           const sequenceRunner = new SequenceRunner(sequenceOptions);
           const result = await sequenceRunner.runSequence();
 
+          // Store execution results for this sequence
+          sequenceResultsMap.set(sequence.id, sequenceRunner.flowResults);
+          sequenceResultsMap = new Map(sequenceResultsMap); // Trigger reactivity
+
           if (result.success) {
             successCount++;
           } else {
@@ -631,6 +647,13 @@
       // Create and run the sequence
       const sequenceRunner = new SequenceRunner(sequenceOptions);
       const result = await sequenceRunner.runSequence();
+
+      // Store execution results for this sequence
+      sequenceResultsMap.set(sequence.id, sequenceRunner.flowResults);
+      sequenceResultsMap = new Map(sequenceResultsMap); // Trigger reactivity
+      
+      console.log('Stored execution results for sequence:', sequence.id, sequenceRunner.flowResults);
+      console.log('Updated sequenceResultsMap:', sequenceResultsMap);
 
       if (result.success) {
         console.log(`🎉 Sequence "${sequence.name}" execution completed successfully!`);
@@ -1014,6 +1037,7 @@
                 <SequenceRow 
                   {sequence}
                   sequenceFlows={sequenceFlowsMap.get(sequence.id) || []}
+                  executionResults={sequenceResultsMap.get(sequence.id) || []}
                   {selectedEnvironmentId}
                   {selectedSubEnvironment}
                   isRunning={runningSequences.has(sequence.id)}
