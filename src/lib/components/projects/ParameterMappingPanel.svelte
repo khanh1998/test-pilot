@@ -38,7 +38,7 @@
     flow_parameter_name: string;
     source_type: 'project_variable' | 'previous_output' | 'static_value';
     source_value: string; // For project_variable: variable name, for previous_output: output field name, for static_value: the actual value
-    data_type?: 'string' | 'number' | 'boolean'; // Only used for static_value
+    data_type?: 'string' | 'number' | 'boolean' | 'array' | 'null'; // Only used for static_value
     source_flow_step?: number; // Only used for previous_output
     source_output_field?: string; // Only used for previous_output
   }
@@ -101,7 +101,7 @@
         flow_parameter_name: param.name,
         source_type: 'static_value',
         source_value: param.example || '',
-        data_type: param.type === 'string' || param.type === 'number' || param.type === 'boolean' 
+        data_type: param.type === 'string' || param.type === 'number' || param.type === 'boolean' || param.type === 'array' || param.type === 'null'
           ? param.type 
           : 'string'
       };
@@ -123,6 +123,11 @@
       if (value !== 'project_variable') {
         parameterMappings[index].source_value = '';
       }
+    }
+    
+    // Set source_value to "null" when data_type is null
+    if (field === 'data_type' && value === 'null') {
+      parameterMappings[index].source_value = 'null';
     }
   }
 
@@ -245,6 +250,8 @@
                       <option value="string">String</option>
                       <option value="number">Number</option>
                       <option value="boolean">Boolean</option>
+                      <option value="array">Array</option>
+                      <option value="null">Null</option>
                     </select>
                   </div>
                   <div class="flex-1">
@@ -268,6 +275,24 @@
                         on:input={(e) => handleInputChange(e, index, 'source_value')}
                         placeholder="Enter number..."
                         class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                      />
+                    {:else if parameterMappings[index].data_type === 'array'}
+                      <textarea
+                        id="value-{index}"
+                        bind:value={parameterMappings[index].source_value}
+                        on:input={(e) => handleInputChange(e, index, 'source_value')}
+                        placeholder='Enter JSON array: [1, 2, 3] or ["item1", "item2"] or [true, false]'
+                        rows="3"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                      ></textarea>
+                    {:else if parameterMappings[index].data_type === 'null'}
+                      <input
+                        id="value-{index}"
+                        type="text"
+                        bind:value={parameterMappings[index].source_value}
+                        placeholder="null"
+                        readonly
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-500 text-sm"
                       />
                     {:else}
                       <input
