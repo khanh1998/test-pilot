@@ -276,13 +276,21 @@
       const currentFlows = sequenceFlowsMap.get(sequence.id) || [];
       const nextStepOrder = currentFlows.length + 1;
       
+      // First, fetch the complete flow data from the API
+      const fullFlowResponse = await testFlowClient.getTestFlow(flow.id);
+      if (!fullFlowResponse?.testFlow) {
+        throw new Error('Failed to fetch complete flow data');
+      }
+      const fullFlow = fullFlowResponse.testFlow;
+      
+      // Add flow to sequence via API
       await projectClient.addFlowToSequence(projectId, moduleId, sequence.id, {
-        test_flow_id: parseInt(flow.id),
+        test_flow_id: parseInt(fullFlow.id),
         step_order: nextStepOrder
       });
       
-      // Update local state
-      sequenceFlowsMap.set(sequence.id, [...currentFlows, flow]);
+      // Update local state with complete flow data
+      sequenceFlowsMap.set(sequence.id, [...currentFlows, fullFlow]);
       sequenceFlowsMap = new Map(sequenceFlowsMap); // Trigger reactivity
       
       // Update sequence steps
@@ -290,7 +298,7 @@
         if (seq.id === sequence.id) {
           const newSteps = [...(seq.sequenceConfig?.steps || []), {
             id: `step-${nextStepOrder}`,
-            test_flow_id: parseInt(flow.id),
+            test_flow_id: parseInt(fullFlow.id),
             step_order: nextStepOrder,
             parameter_mappings: []
           }];
