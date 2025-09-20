@@ -18,6 +18,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { createEventDispatcher } from 'svelte';
   import { generateStepId, generateStepIdBetween } from './step-id-utils.js';
+  import { isDesktop } from '$lib/environment';
 
   // flowData includes settings.api_hosts which contains multiple API host configurations
   export let flowData: TestFlowData;
@@ -172,7 +173,7 @@
   let preferences = {
     parallelExecution: true,
     stopOnError: true,
-    serverCookieHandling: false,
+    serverCookieHandling: !isDesktop,
     retryCount: 0,
     timeout: 30000
   };
@@ -954,6 +955,7 @@
     <!-- Add Step Button (before first step) -->
     <div class="mb-4 flex justify-center">
       <button
+        aria-label="Insert step before"
         class="group flex h-8 w-8 items-center justify-center rounded-full border border-gray-300 bg-white text-gray-400 shadow-sm hover:bg-gray-50 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
         on:click={insertStepAtBeginning}
         disabled={isRunning}
@@ -1013,6 +1015,7 @@
       {#if stepIndex < flowData.steps.length - 1}
         <div class="mb-4 flex justify-center">
           <button
+            aria-label="Insert step after"
             class="group flex h-8 w-8 items-center justify-center rounded-full border border-gray-300 bg-white text-gray-400 shadow-sm hover:bg-gray-50 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
             on:click={() => insertStepAfter(stepIndex)}
             disabled={isRunning}

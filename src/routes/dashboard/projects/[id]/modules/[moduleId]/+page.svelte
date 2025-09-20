@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { page } from '$app/stores';
-  import { goto } from '$app/navigation';
   import { fade } from 'svelte/transition';
   import { setBreadcrumbOverride, clearBreadcrumbOverride } from '$lib/store/breadcrumb';
   import * as projectClient from '$lib/http_client/projects';
@@ -9,13 +8,10 @@
   import * as environmentClient from '$lib/http_client/environments';
   import { SequenceRunner, type SequenceRunnerOptions } from '$lib/sequence-runner';
   import type { SequenceFlowResult } from '$lib/sequence-runner/types';
-  import FlowSearch from '$lib/components/projects/FlowSearch.svelte';
   import SequenceRow from '$lib/components/projects/SequenceRow.svelte';
   import SequenceCreator from '$lib/components/projects/SequenceCreator.svelte';
   import ParameterMappingPanel from '$lib/components/projects/ParameterMappingPanel.svelte';
   import SimplifiedEnvironmentSelector from '$lib/components/environments/SimplifiedEnvironmentSelector.svelte';
-  import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
-  import { formatDate } from '$lib/utils/date';
   import type { ProjectModule } from '$lib/types/project';
   import type { FlowSequence } from '$lib/types/flow_sequence';
   import type { TestFlow } from '$lib/types/test-flow';

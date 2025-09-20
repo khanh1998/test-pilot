@@ -8,14 +8,11 @@
   import ProjectTabs from '$lib/components/projects/ProjectTabs.svelte';
   import ModuleCard from '$lib/components/projects/ModuleCard.svelte';
   import ModuleForm from '$lib/components/projects/ModuleForm.svelte';
-  import SequenceCard from '$lib/components/projects/SequenceCard.svelte';
   import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
   import ProjectApiLinkManager from '$lib/components/projects/ProjectApiLinkManager.svelte';
   import ProjectEnvironmentManager from '$lib/components/projects/ProjectEnvironmentManager.svelte';
   import ProjectVariableManager from '$lib/components/projects/ProjectVariableManager.svelte';
-  import { formatDate } from '$lib/utils/date';
   import type { Project, ProjectModule, ProjectApi, ProjectEnvironment } from '$lib/types/project';
-  import type { FlowSequence } from '$lib/types/flow_sequence';
   import type { TestFlow } from '$lib/types/test-flow';
 
   let projectId: number;
