@@ -16,14 +16,18 @@
   // Output editor state
   let localOutputs: FlowOutput[] = [];
   let editingOutputIndex: number | null = null;
-  let newOutput: FlowOutput = { name: '', description: '', value: '', isTemplate: false };
+  let newOutput: FlowOutput = { name: '', description: '', value: '', isTemplate: false, type: 'string', castToType: false };
   
   // UI state for showing/hiding results
   let showResults = false;
 
   // Initialize state when component mounts
   $: if (isMounted) {
-    localOutputs = [...(outputs || [])];
+    localOutputs = [...(outputs || [])].map(output => ({
+      ...output,
+      type: output.type || 'string',
+      castToType: output.castToType || false
+    }));
   }
 
   // Auto-show results if we have execution data
@@ -53,13 +57,18 @@
     }
 
     localOutputs = [...localOutputs, { ...newOutput }];
-    newOutput = { name: '', description: '', value: '', isTemplate: false };
+    newOutput = { name: '', description: '', value: '', isTemplate: false, type: 'string', castToType: false };
   }
 
   // Edit an output
   function editOutput(index: number) {
     editingOutputIndex = index;
-    newOutput = { ...localOutputs[index] };
+    const output = localOutputs[index];
+    newOutput = { 
+      ...output,
+      type: output.type || 'string',
+      castToType: output.castToType || false
+    };
   }
 
   // Update an output
@@ -70,7 +79,7 @@
 
     if (!newOutput.name || !newOutput.value) {
       editingOutputIndex = null;
-      newOutput = { name: '', description: '', value: '', isTemplate: false };
+      newOutput = { name: '', description: '', value: '', isTemplate: false, type: 'string', castToType: false };
       return;
     }
 
@@ -79,7 +88,7 @@
     );
     
     editingOutputIndex = null;
-    newOutput = { name: '', description: '', value: '', isTemplate: false };
+    newOutput = { name: '', description: '', value: '', isTemplate: false, type: 'string', castToType: false };
   }
 
   // Remove an output
@@ -89,7 +98,7 @@
 
   function cancelEdit() {
     editingOutputIndex = null;
-    newOutput = { name: '', description: '', value: '', isTemplate: false };
+    newOutput = { name: '', description: '', value: '', isTemplate: false, type: 'string', castToType: false };
   }
 
   function closeOutputEditor() {
@@ -280,6 +289,47 @@
                 </div>
               </div>
 
+              <!-- Data Type Selection -->
+              <div>
+                <label for="outputDataType" class="block text-sm font-medium text-gray-700">Data Type</label>
+                <select
+                  id="outputDataType"
+                  class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  bind:value={newOutput.type}
+                >
+                  <option value="string">String</option>
+                  <option value="number">Number</option>
+                  <option value="boolean">Boolean</option>
+                  <option value="object">Object</option>
+                  <option value="array">Array</option>
+                  <option value="null">Null</option>
+                </select>
+                <p class="mt-1 text-xs text-gray-500">
+                  {#if newOutput.isTemplate}
+                    Expected data type after template evaluation
+                  {:else}
+                    Data type of the fixed value
+                  {/if}
+                </p>
+              </div>
+
+              <!-- Type Casting Option (only for templates) -->
+              {#if newOutput.isTemplate}
+                <div>
+                  <label class="flex items-center">
+                    <input
+                      type="checkbox"
+                      class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      bind:checked={newOutput.castToType}
+                    />
+                    <span class="ml-2 text-sm text-gray-600">Cast result to specified data type</span>
+                  </label>
+                  <p class="mt-1 text-xs text-gray-500">
+                    When enabled, the template result will be automatically converted to the specified data type
+                  </p>
+                </div>
+              {/if}
+
               <div class="flex gap-2">
                 {#if editingOutputIndex !== null}
                   <button
@@ -322,6 +372,19 @@
             </p>
           </div>
 
+          <!-- Data Type & Casting Guidelines -->
+          <div class="rounded-lg border border-purple-200 bg-purple-50 p-4">
+            <h4 class="mb-2 text-sm font-medium text-purple-800">Data Type & Casting Guidelines</h4>
+            <div class="space-y-2 text-sm text-purple-700">
+              <div><strong>Data Type:</strong> Specify the expected data type of the output value</div>
+              <div><strong>Auto-cast (Templates only):</strong> When enabled, template results will be automatically converted to the specified data type</div>
+              <div class="text-xs text-purple-600 mt-2">
+                Use auto-casting when template expressions might return strings but you need numbers, booleans, or other types.
+                Example: {`{{res:step1.$.count}}`} might return "123" (string) but you want 123 (number).
+              </div>
+            </div>
+          </div>
+
           <!-- Current Outputs -->
           {#if localOutputs.length > 0}
             <div>
@@ -337,6 +400,12 @@
                             <span class="inline-flex rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-800">Template</span>
                           {:else}
                             <span class="inline-flex rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-800">Static</span>
+                          {/if}
+                          {#if output.type}
+                            <span class="inline-flex rounded-full bg-purple-100 px-2 py-1 text-xs font-semibold text-purple-800">{output.type}</span>
+                          {/if}
+                          {#if output.isTemplate && output.castToType}
+                            <span class="inline-flex rounded-full bg-orange-100 px-2 py-1 text-xs font-semibold text-orange-800">Auto-cast</span>
                           {/if}
                         </div>
                         {#if output.description}

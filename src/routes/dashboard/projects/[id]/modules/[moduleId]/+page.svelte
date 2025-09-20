@@ -769,7 +769,7 @@
         for (const output of flow.flowJson.outputs) {
           flowOutputs.push({
             name: output.name,
-            type: 'unknown' as const, // We don't have type info, so default to unknown
+            type: output.type, // We don't have type info, so default to unknown
             source: 'flow_output' as const
           });
         }

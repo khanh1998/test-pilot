@@ -122,6 +122,7 @@ export interface TestFlowJson {
     value: string;
     description?: string;
     isTemplate: boolean;
+    type: 'string' | 'number' | 'boolean' | 'object' | 'unknown' | 'array' | 'null';
   }>;
   settings?: {
     api_hosts: Record<string, {

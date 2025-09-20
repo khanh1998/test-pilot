@@ -1,6 +1,7 @@
 import type { FlowOutput } from '$lib/components/test-flows/types';
 import { resolveTemplate, createTemplateContextFromFlowRunner } from '$lib/template';
 import { createTemplateFunctions, defaultTemplateFunctions } from '$lib/template';
+import { PipelineHelpers } from '$lib/transform/PipelineFunctions';
 
 export interface OutputEvaluatorContext {
   outputs: FlowOutput[];
@@ -36,22 +37,21 @@ export class FlowOutputEvaluator {
 
     for (const output of this.context.outputs) {
       try {
+        let result: unknown;
+        
         if (output.isTemplate && output.value) {
-          const result = this.resolveTemplateValue(output.value);
+          result = this.resolveTemplateValue(output.value);
           
-          try {
-            if (result.startsWith('{') || result.startsWith('[') || result.startsWith('"')) {
-              results[output.name] = JSON.parse(result);
-            } else {
-              results[output.name] = result;
-            }
-          } catch {
-            results[output.name] = result;
+          // Apply type casting if requested and type is specified
+          if (output.castToType && output.type) {
+            result = this.castToType(result, output.type);
+            this.context.addLog('debug', `Output "${output.name}" cast to type "${output.type}"`, String(result));
           }
         } else {
-          results[output.name] = output.value;
+          result = output.value;
         }
         
+        results[output.name] = result;
         this.context.addLog('debug', `Output "${output.name}" evaluated successfully`, String(results[output.name]));
       } catch (outputError: unknown) {
         const errorMessage = outputError instanceof Error ? outputError.message : String(outputError);
@@ -77,6 +77,49 @@ export class FlowOutputEvaluator {
       return result;
     } catch (error) {
       this.context.addLog('error', `Template resolution failed for "${value}"`, 
+        error instanceof Error ? error.message : String(error));
+      return value;
+    }
+  }
+
+  private castToType(value: unknown, type: string): unknown {
+    try {
+      switch (type) {
+        case 'string':
+          return PipelineHelpers.castToString(value);
+        case 'number':
+          return PipelineHelpers.castToFloat(value);
+        case 'boolean':
+          return PipelineHelpers.castToBool(value);
+        case 'object':
+          // For objects, try to parse if it's a string, otherwise return as-is
+          if (typeof value === 'string') {
+            try {
+              return JSON.parse(value);
+            } catch {
+              return value;
+            }
+          }
+          return value;
+        case 'array':
+          // For arrays, try to parse if it's a string, otherwise wrap in array if not already
+          if (typeof value === 'string') {
+            try {
+              const parsed = JSON.parse(value);
+              return Array.isArray(parsed) ? parsed : [value];
+            } catch {
+              return [value];
+            }
+          }
+          return Array.isArray(value) ? value : [value];
+        case 'null':
+          return null;
+        default:
+          this.context.addLog('warning', `Unknown type "${type}" for casting, returning value as-is`);
+          return value;
+      }
+    } catch (error) {
+      this.context.addLog('error', `Type casting failed for type "${type}"`, 
         error instanceof Error ? error.message : String(error));
       return value;
     }

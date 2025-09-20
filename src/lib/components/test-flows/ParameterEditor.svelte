@@ -32,32 +32,15 @@
     if (!stepEndpoint.queryParams) {
       stepEndpoint.queryParams = {};
     }
-    // Convert string parameters to arrays for array parameters during editing
-    localQueryParams = {};
-    for (const [key, value] of Object.entries(stepEndpoint.queryParams)) {
-      const param = endpoint?.parameters?.find(p => p.name === key && p.in === 'query');
-      if (param && isArrayParameter(param)) {
-        // Convert string to array for editing
-        localQueryParams[key] = getArrayParameterValue({ [key]: value }, key);
-      } else {
-        localQueryParams[key] = value;
-      }
-    }
+    // Copy to local state for simplified editing
+    localQueryParams = { ...stepEndpoint.queryParams };
 
     // Initialize and copy pathParams to local state
     if (!stepEndpoint.pathParams) {
       stepEndpoint.pathParams = {};
     }
-    localPathParams = {};
-    for (const [key, value] of Object.entries(stepEndpoint.pathParams)) {
-      const param = endpoint?.parameters?.find(p => p.name === key && p.in === 'path');
-      if (param && isArrayParameter(param)) {
-        // Convert string to array for editing
-        localPathParams[key] = getArrayParameterValue({ [key]: value }, key);
-      } else {
-        localPathParams[key] = value;
-      }
-    }
+    // Copy to local state for simplified editing
+    localPathParams = { ...stepEndpoint.pathParams };
 
     // Initialize headers if needed
     if (!stepEndpoint.headers) {
@@ -116,53 +99,16 @@
       // Convert array parameters back to string format for storage
       const processedQueryParams: Record<string, string | string[]> = {};
       for (const [key, value] of Object.entries(localQueryParams)) {
-        if (Array.isArray(value)) {
-          // Find the parameter definition to get the collection format
-          const param = endpoint?.parameters?.find(p => p.name === key && p.in === 'query');
-          const format = param?.collectionFormat || param?.style || 'csv';
-          
-          // For OpenAPI 3.0, check if explode is true (which is default for query params)
-          const isExploded = param?.explode !== false; // Default is true for query parameters
-          
-          // Convert array back to string based on collection format
-          switch (format) {
-            case 'csv':
-            case 'form':
-              if (format === 'form' && isExploded) {
-                // This is the "multi" format - store as array for repeated parameters
-                processedQueryParams[key] = value;
-              } else {
-                processedQueryParams[key] = value.join(',');
-              }
-              break;
-            case 'ssv':
-            case 'spaceDelimited':
-              processedQueryParams[key] = value.join(' ');
-              break;
-            case 'tsv':
-              processedQueryParams[key] = value.join('\t');
-              break;
-            case 'pipes':
-            case 'pipeDelimited':
-              processedQueryParams[key] = value.join('|');
-              break;
-            case 'multi':
-              // Store as array for repeated parameters (e.g., ?colors=red&colors=blue)
-              processedQueryParams[key] = value;
-              break;
-            default:
-              processedQueryParams[key] = value.join(',');
-              break;
-          }
-        } else {
-          processedQueryParams[key] = value;
-        }
+        // For simplified array parameters, we store as-is (string)
+        // The execution engine will handle parsing during runtime
+        processedQueryParams[key] = value;
       }
 
       const processedPathParams: Record<string, string> = {};
       for (const [key, value] of Object.entries(localPathParams)) {
+        // For simplified array parameters, we store as-is (string)
+        // The execution engine will handle parsing during runtime
         if (Array.isArray(value)) {
-          // Path params are typically single values, but handle arrays just in case
           processedPathParams[key] = value.join(',');
         } else {
           processedPathParams[key] = value;
@@ -201,87 +147,35 @@
   function closeParamEditor() {
     dispatch('close');
   }
-  
-  // Helper function to ensure we stay on headers tab
-  function keepOnHeadersTab() {
-    activeTab = 'headers';
+
+  // Helper functions for simplified array parameters
+  function getSimplifiedArrayValue(params: Record<string, string | string[]>, paramName: string): string {
+    const value = params[paramName];
+    if (Array.isArray(value)) {
+      return value.join(',');
+    }
+    return value || '';
+  }
+
+  function setSimplifiedArrayValue(params: Record<string, string | string[]>, paramName: string, value: string): void {
+    if (value.trim() === '') {
+      delete params[paramName];
+    } else {
+      // Store as string - will be processed during execution
+      params[paramName] = value;
+    }
+    // Force reactivity update
+    if (params === localQueryParams) {
+      localQueryParams = { ...localQueryParams };
+    } else if (params === localPathParams) {
+      localPathParams = { ...localPathParams };
+    }
   }
 
   // Helper functions for array parameters
   function isArrayParameter(param: Parameter): boolean {
     return (param.schema?.type === 'array') || (param.type === 'array');
   }
-
-  function getArrayParameterValue(params: Record<string, string | string[]>, paramName: string): string[] {
-    const value = params[paramName];
-    if (Array.isArray(value)) {
-      return value;
-    }
-    if (typeof value === 'string' && value.trim() !== '') {
-      // Find the parameter definition to get the collection format
-      const param = endpoint?.parameters?.find(p => p.name === paramName);
-      const format = param?.collectionFormat || param?.style || 'csv';
-      
-      // Parse based on collection format
-      switch (format) {
-        case 'csv':
-        case 'form':
-          return value.split(',').map(item => item.trim());
-        case 'ssv':
-        case 'spaceDelimited':
-          return value.split(' ').map(item => item.trim());
-        case 'tsv':
-          return value.split('\t').map(item => item.trim());
-        case 'pipes':
-        case 'pipeDelimited':
-          return value.split('|').map(item => item.trim());
-        case 'multi':
-          return value.split(',').map(item => item.trim()); // Parse as CSV for multi format
-        default:
-          return value.split(',').map(item => item.trim());
-      }
-    }
-    return [];
-  }
-
-  function setArrayParameterValue(params: Record<string, string | string[]>, paramName: string, values: string[]): void {
-    if (values.length === 0) {
-      delete params[paramName];
-    } else {
-      params[paramName] = values;
-    }
-  }
-
-  function addArrayItem(params: Record<string, string | string[]>, paramName: string): void {
-    const currentValues = getArrayParameterValue(params, paramName);
-    currentValues.push('');
-    setArrayParameterValue(params, paramName, currentValues);
-    // Force reactivity update
-    if (params === localQueryParams) {
-      localQueryParams = { ...localQueryParams };
-    } else if (params === localPathParams) {
-      localPathParams = { ...localPathParams };
-    }
-  }
-
-  function removeArrayItem(params: Record<string, string | string[]>, paramName: string, index: number): void {
-    const currentValues = getArrayParameterValue(params, paramName);
-    currentValues.splice(index, 1);
-    setArrayParameterValue(params, paramName, currentValues);
-    // Force reactivity update
-    if (params === localQueryParams) {
-      localQueryParams = { ...localQueryParams };
-    } else if (params === localPathParams) {
-      localPathParams = { ...localPathParams };
-    }
-  }
-
-  function updateArrayItem(params: Record<string, string | string[]>, paramName: string, index: number, value: string): void {
-    const currentValues = getArrayParameterValue(params, paramName);
-    currentValues[index] = value;
-    setArrayParameterValue(params, paramName, currentValues);
-  }
-
   function getCollectionFormatDescription(param: Parameter): string {
     const format = param.collectionFormat || param.style;
     switch (format) {
@@ -540,51 +434,18 @@
               </label>
               
               {#if isArrayParameter(param)}
-                <!-- Array parameter UI -->
-                {@const arrayValues = getArrayParameterValue(localPathParams, param.name)}
-                <div class="space-y-2">
-                  {#each arrayValues as value, index}
-                    <div class="flex items-center gap-2">
-                      <input
-                        type="text"
-                        class="flex-1 rounded-md border px-3 py-2 text-sm"
-                        placeholder={param.example || `${param.name} item ${index + 1}`}
-                        value={value}
-                        on:input={(e) => {
-                          updateArrayItem(localPathParams, param.name, index, (e.currentTarget as HTMLInputElement).value);
-                        }}
-                      />
-                      <button
-                        type="button"
-                        class="text-red-600 hover:text-red-800"
-                        on:click={() => removeArrayItem(localPathParams, param.name, index)}
-                        aria-label="Remove item"
-                      >
-                        <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                          <path
-                            fill-rule="evenodd"
-                            d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                            clip-rule="evenodd"
-                          ></path>
-                        </svg>
-                      </button>
-                    </div>
-                  {/each}
-                  <button
-                    type="button"
-                    class="mt-2 flex items-center rounded bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700"
-                    on:click={() => addArrayItem(localPathParams, param.name)}
-                  >
-                    <svg class="mr-1 h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-                      ></path>
-                    </svg>
-                    Add Item
-                  </button>
+                <!-- Array parameter UI - simplified single input -->
+                <input
+                  type="text"
+                  class="rounded-md border px-3 py-2 text-sm"
+                  placeholder={param.example || `${param.name} values (comma-separated or template expression)`}
+                  value={getSimplifiedArrayValue(localPathParams, param.name)}
+                  on:input={(e) => {
+                    setSimplifiedArrayValue(localPathParams, param.name, (e.currentTarget as HTMLInputElement).value);
+                  }}
+                />
+                <div class="mt-1 text-xs text-gray-500">
+                  Enter multiple values separated by commas, or use template expressions like {'{{'} responses.step1.items {'}}'}
                 </div>
               {:else}
                 <!-- Single value parameter UI -->
@@ -631,7 +492,7 @@
                   on:change={(e) => {
                     if ((e.currentTarget as HTMLInputElement).checked) {
                       if (isArrayParameter(param)) {
-                        localQueryParams[param.name] = [param.example || ''];
+                        localQueryParams[param.name] = param.example || '';
                       } else {
                         localQueryParams[param.name] = param.example || '';
                       }
@@ -645,51 +506,18 @@
               </div>
               {#if localQueryParams[param.name] !== undefined}
                 {#if isArrayParameter(param)}
-                  <!-- Array parameter UI -->
-                  {@const arrayValues = getArrayParameterValue(localQueryParams, param.name)}
-                  <div class="space-y-2">
-                    {#each arrayValues as value, index}
-                      <div class="flex items-center gap-2">
-                        <input
-                          type="text"
-                          class="flex-1 rounded-md border px-3 py-2 text-sm"
-                          placeholder={param.example || `${param.name} item ${index + 1}`}
-                          value={value}
-                          on:input={(e) => {
-                            updateArrayItem(localQueryParams, param.name, index, (e.currentTarget as HTMLInputElement).value);
-                          }}
-                        />
-                        <button
-                          type="button"
-                          class="text-red-600 hover:text-red-800"
-                          on:click={() => removeArrayItem(localQueryParams, param.name, index)}
-                          aria-label="Remove item"
-                        >
-                          <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                            <path
-                              fill-rule="evenodd"
-                              d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                              clip-rule="evenodd"
-                            ></path>
-                          </svg>
-                        </button>
-                      </div>
-                    {/each}
-                    <button
-                      type="button"
-                      class="mt-2 flex items-center rounded bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700"
-                      on:click={() => addArrayItem(localQueryParams, param.name)}
-                    >
-                      <svg class="mr-1 h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                          stroke-width="2"
-                          d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-                        ></path>
-                      </svg>
-                      Add Item
-                    </button>
+                  <!-- Array parameter UI - simplified single input -->
+                  <input
+                    type="text"
+                    class="rounded-md border px-3 py-2 text-sm"
+                    placeholder={param.example || `${param.name} values (comma-separated or template expression)`}
+                    value={getSimplifiedArrayValue(localQueryParams, param.name)}
+                    on:input={(e) => {
+                      setSimplifiedArrayValue(localQueryParams, param.name, (e.currentTarget as HTMLInputElement).value);
+                    }}
+                  />
+                  <div class="mt-1 text-xs text-gray-500">
+                    Enter multiple values separated by commas, or use template expressions like {'{{'} responses.step1.items {'}}'}
                   </div>
                 {:else}
                   <!-- Single value parameter UI -->

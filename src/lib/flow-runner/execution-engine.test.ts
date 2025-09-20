@@ -513,4 +513,253 @@ describe('FlowExecutionEngine Template Resolution', () => {
       expect(mockContext.cookieStore.size).toBe(1);
     });
   });
+
+  describe('Array Parameter Processing', () => {
+    describe('parseArrayParameter', () => {
+      it('should parse comma-separated string into array', () => {
+        const paramDefinition = { schema: { type: 'array' }, style: 'form' };
+        const result = (engine as any).parseArrayParameter('sent,preparing,accepted', paramDefinition);
+        
+        expect(result).toEqual(['sent', 'preparing', 'accepted']);
+      });
+
+      it('should handle empty string', () => {
+        const paramDefinition = { schema: { type: 'array' } };
+        const result = (engine as any).parseArrayParameter('', paramDefinition);
+        
+        expect(result).toEqual([]);
+      });
+
+      it('should trim whitespace from values', () => {
+        const paramDefinition = { schema: { type: 'array' } };
+        const result = (engine as any).parseArrayParameter('sent , preparing ,  accepted  ', paramDefinition);
+        
+        expect(result).toEqual(['sent', 'preparing', 'accepted']);
+      });
+
+      it('should filter out empty values', () => {
+        const paramDefinition = { schema: { type: 'array' } };
+        const result = (engine as any).parseArrayParameter('sent,,preparing,', paramDefinition);
+        
+        expect(result).toEqual(['sent', 'preparing']);
+      });
+
+      it('should handle single value', () => {
+        const paramDefinition = { schema: { type: 'array' } };
+        const result = (engine as any).parseArrayParameter('single', paramDefinition);
+        
+        expect(result).toEqual(['single']);
+      });
+    });
+
+    describe('serializeArrayParameter', () => {
+      let queryParams: URLSearchParams;
+
+      beforeEach(() => {
+        queryParams = new URLSearchParams();
+      });
+
+      it('should serialize form exploded array (default)', () => {
+        const paramDefinition = { schema: { type: 'array' }, style: 'form', explode: true };
+        (engine as any).serializeArrayParameter(queryParams, 'statuses', ['sent', 'preparing'], paramDefinition);
+        
+        expect(queryParams.toString()).toBe('statuses=sent&statuses=preparing');
+      });
+
+      it('should serialize form non-exploded array', () => {
+        const paramDefinition = { schema: { type: 'array' }, style: 'form', explode: false };
+        (engine as any).serializeArrayParameter(queryParams, 'statuses', ['sent', 'preparing'], paramDefinition);
+        
+        expect(queryParams.toString()).toBe('statuses=sent%2Cpreparing');
+      });
+
+      it('should serialize space-delimited array', () => {
+        const paramDefinition = { schema: { type: 'array' }, style: 'spaceDelimited' };
+        (engine as any).serializeArrayParameter(queryParams, 'tags', ['red', 'blue', 'green'], paramDefinition);
+        
+        expect(queryParams.toString()).toBe('tags=red+blue+green');
+      });
+
+      it('should serialize pipe-delimited array', () => {
+        const paramDefinition = { schema: { type: 'array' }, style: 'pipeDelimited' };
+        (engine as any).serializeArrayParameter(queryParams, 'tags', ['red', 'blue', 'green'], paramDefinition);
+        
+        expect(queryParams.toString()).toBe('tags=red%7Cblue%7Cgreen');
+      });
+
+      it('should serialize multi format array', () => {
+        const paramDefinition = { schema: { type: 'array' }, collectionFormat: 'multi' };
+        (engine as any).serializeArrayParameter(queryParams, 'colors', ['red', 'blue'], paramDefinition);
+        
+        expect(queryParams.toString()).toBe('colors=red&colors=blue');
+      });
+
+      it('should handle empty array', () => {
+        const paramDefinition = { schema: { type: 'array' }, style: 'form' };
+        (engine as any).serializeArrayParameter(queryParams, 'statuses', [], paramDefinition);
+        
+        expect(queryParams.toString()).toBe('');
+      });
+
+      it('should default to exploded form when no style specified', () => {
+        const paramDefinition = { schema: { type: 'array' } };
+        (engine as any).serializeArrayParameter(queryParams, 'items', ['a', 'b'], paramDefinition);
+        
+        expect(queryParams.toString()).toBe('items=a&items=b');
+      });
+    });
+
+    describe('Query parameter processing with arrays', () => {
+      it('should process comma-separated array parameter', () => {
+        const mockEndpoint: StepEndpoint = {
+          endpoint_id: '1',
+          api_id: '1',
+          queryParams: { 
+            statuses: 'sent,preparing,accepted'
+          }
+        };
+
+        const endpointDef = {
+          path: '/api/orders',
+          method: 'GET',
+          parameters: [
+            {
+              name: 'statuses',
+              in: 'query',
+              schema: { type: 'array', items: { type: 'string' } },
+              style: 'form',
+              explode: true
+            }
+          ]
+        };
+
+        // Mock template resolution
+        vi.mocked(createTemplateContextFromFlowRunner).mockReturnValue({
+          responses: {}, transformedData: {}, parameters: {}, environment: {}, functions: {}
+        });
+        vi.mocked(resolveTemplate).mockReturnValue('sent,preparing,accepted');
+
+        const result = (engine as any).prepareRequest(endpointDef, mockEndpoint, 'https://api.example.com');
+
+        expect(result.url).toBe('https://api.example.com/api/orders?statuses=sent&statuses=preparing&statuses=accepted');
+      });
+
+      it('should process template expression that resolves to comma-separated values', () => {
+        const mockEndpoint: StepEndpoint = {
+          endpoint_id: '1',
+          api_id: '1',
+          queryParams: { 
+            statuses: '{{ parameters.status_list }}'
+          }
+        };
+
+        const endpointDef = {
+          path: '/api/orders',
+          method: 'GET',
+          parameters: [
+            {
+              name: 'statuses',
+              in: 'query',
+              schema: { type: 'array', items: { type: 'string' } },
+              style: 'form',
+              explode: false
+            }
+          ]
+        };
+
+        // Mock template resolution to return comma-separated string
+        vi.mocked(createTemplateContextFromFlowRunner).mockReturnValue({
+          responses: {}, transformedData: {}, parameters: { status_list: 'draft,sent,approved' }, environment: {}, functions: {}
+        });
+        vi.mocked(resolveTemplate).mockReturnValue('draft,sent,approved');
+
+        const result = (engine as any).prepareRequest(endpointDef, mockEndpoint, 'https://api.example.com');
+
+        expect(result.url).toBe('https://api.example.com/api/orders?statuses=draft%2Csent%2Capproved');
+      });
+
+      it('should handle array parameter mixed with regular parameters', () => {
+        const mockEndpoint: StepEndpoint = {
+          endpoint_id: '1',
+          api_id: '1',
+          queryParams: { 
+            statuses: 'sent,accepted',
+            page: '1',
+            limit: '10'
+          }
+        };
+
+        const endpointDef = {
+          path: '/api/orders',
+          method: 'GET',
+          parameters: [
+            {
+              name: 'statuses',
+              in: 'query',
+              schema: { type: 'array', items: { type: 'string' } },
+              style: 'form',
+              explode: true
+            },
+            {
+              name: 'page',
+              in: 'query',
+              schema: { type: 'integer' }
+            },
+            {
+              name: 'limit',
+              in: 'query',
+              schema: { type: 'integer' }
+            }
+          ]
+        };
+
+        // Mock template resolution
+        vi.mocked(createTemplateContextFromFlowRunner).mockReturnValue({
+          responses: {}, transformedData: {}, parameters: {}, environment: {}, functions: {}
+        });
+        vi.mocked(resolveTemplate).mockImplementation((value: string) => value);
+
+        const result = (engine as any).prepareRequest(endpointDef, mockEndpoint, 'https://api.example.com');
+
+        // Should handle both array and regular parameters
+        expect(result.url).toContain('statuses=sent&statuses=accepted');
+        expect(result.url).toContain('page=1');
+        expect(result.url).toContain('limit=10');
+      });
+
+      it('should handle legacy array format (already array)', () => {
+        const mockEndpoint: StepEndpoint = {
+          endpoint_id: '1',
+          api_id: '1',
+          queryParams: { 
+            statuses: ['sent', 'preparing'] // Legacy format - already an array
+          }
+        };
+
+        const endpointDef = {
+          path: '/api/orders',
+          method: 'GET',
+          parameters: [
+            {
+              name: 'statuses',
+              in: 'query',
+              schema: { type: 'array', items: { type: 'string' } },
+              style: 'form',
+              explode: true
+            }
+          ]
+        };
+
+        // Mock template resolution
+        vi.mocked(createTemplateContextFromFlowRunner).mockReturnValue({
+          responses: {}, transformedData: {}, parameters: {}, environment: {}, functions: {}
+        });
+        vi.mocked(resolveTemplate).mockImplementation((value: string) => value);
+
+        const result = (engine as any).prepareRequest(endpointDef, mockEndpoint, 'https://api.example.com');
+
+        expect(result.url).toBe('https://api.example.com/api/orders?statuses=sent&statuses=preparing');
+      });
+    });
+  });
 });

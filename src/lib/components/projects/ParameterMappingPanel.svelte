@@ -29,7 +29,7 @@
     stepOrder: number;
     outputs: {
       name: string;
-      type: 'string' | 'number' | 'boolean' | 'object' | 'unknown';
+      type: 'string' | 'number' | 'boolean' | 'object' | 'unknown' | 'array' | 'null';
       source: 'flow_output' | 'response';
     }[];
   }

@@ -242,14 +242,18 @@ export class FlowExecutionEngine {
           if (paramDefinition && (paramDefinition.schema?.type === 'array' || paramDefinition.type === 'array')) {
             // Handle array parameter serialization
             let arrayValues: string[];
+            
             if (Array.isArray(value)) {
-              // Value is already an array (e.g., from multi format)
+              // Value is already an array (e.g., from legacy multi format)
               arrayValues = value.map(v => this.resolveTemplateValueUnified(String(v)));
             } else {
-              // Value is a string that needs to be parsed
+              // Value is a string that needs template resolution and comma parsing
               const resolvedValue = this.resolveTemplateValueUnified(value as string);
-              arrayValues = this.parseArrayParameter(resolvedValue, paramDefinition);
+              
+              // Always split by comma - the delimiter is always comma regardless of output format
+              arrayValues = resolvedValue.split(',').map(item => item.trim()).filter(item => item !== '');
             }
+            
             this.serializeArrayParameter(queryParams, name, arrayValues, paramDefinition);
           } else {
             // Handle as single value parameter
@@ -608,37 +612,6 @@ export class FlowExecutionEngine {
 
   private addRequestDebugLogs(path: string, reqHeaders: Record<string, string>) {
     // Implementation for request debug logs
-  }
-
-  /**
-   * Parse array parameter value from string format
-   */
-  private parseArrayParameter(value: string, paramDefinition: any): string[] {
-    if (!value || value.trim() === '') {
-      return [];
-    }
-
-    const format = paramDefinition.collectionFormat || paramDefinition.style || 'csv';
-    
-    switch (format) {
-      case 'csv':
-      case 'form':
-        return value.split(',').map(item => item.trim()).filter(item => item !== '');
-      case 'ssv':
-      case 'spaceDelimited':
-        return value.split(' ').map(item => item.trim()).filter(item => item !== '');
-      case 'tsv':
-        return value.split('\t').map(item => item.trim()).filter(item => item !== '');
-      case 'pipes':
-      case 'pipeDelimited':
-        return value.split('|').map(item => item.trim()).filter(item => item !== '');
-      case 'multi':
-        // For multi format, the value should already be an array or single value
-        return [value];
-      default:
-        // Default to comma-separated
-        return value.split(',').map(item => item.trim()).filter(item => item !== '');
-    }
   }
 
   /**
