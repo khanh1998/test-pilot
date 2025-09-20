@@ -62,6 +62,34 @@
     return endpoints.find((e) => e.id === id);
   }
 
+  // Helper to calculate endpoint metrics
+  function getEndpointMetrics(endpointId: string | number, currentIndex: number) {
+    const duplicateCount = step.endpoints.filter(
+      (e) => e.endpoint_id === endpointId
+    ).length;
+    
+    const instanceIndex = step.endpoints
+      .slice(0, currentIndex + 1)
+      .filter((e) => e.endpoint_id === endpointId).length;
+    
+    return { duplicateCount, instanceIndex };
+  }
+
+  // Helper to get editor props for a specific endpoint
+  function getEditorProps(endpointIndex: number) {
+    const stepEndpoint = step.endpoints[endpointIndex];
+    const endpoint = findEndpoint(stepEndpoint.endpoint_id);
+    const { duplicateCount, instanceIndex } = getEndpointMetrics(stepEndpoint.endpoint_id, endpointIndex);
+    
+    return {
+      endpoint,
+      stepEndpoint,
+      duplicateCount,
+      instanceIndex,
+      endpointIndex
+    };
+  }
+
   function removeEndpoint(endpointIndex: number) {
     dispatch('removeEndpoint', { stepIndex, endpointIndex });
   }
@@ -501,12 +529,8 @@
         <slot name="endpoint-selector"></slot>
         {#each step.endpoints as stepEndpoint, endpointIndex (stepEndpoint.endpoint_id + '-' + endpointIndex)}
           {@const endpoint = findEndpoint(stepEndpoint.endpoint_id)}
-          {@const duplicateCount = step.endpoints.filter(
-            (e: StepEndpoint) => e.endpoint_id === stepEndpoint.endpoint_id
-          ).length}
-          {@const instanceIndex = step.endpoints
-            .slice(0, endpointIndex + 1)
-            .filter((e: StepEndpoint) => e.endpoint_id === stepEndpoint.endpoint_id).length}
+          {@const { duplicateCount, instanceIndex } = getEndpointMetrics(stepEndpoint.endpoint_id, endpointIndex)}
+          
           {#if endpoint}
             <EndpointCard
               {endpoint}
@@ -524,6 +548,42 @@
               on:openAssertionEditor={openAssertionEditor}
               on:removeEndpoint={() => removeEndpoint(endpointIndex)}
             />
+          {:else}
+            <!-- Show error card for missing endpoint -->
+            <div class="flex-shrink-0 w-80 rounded-lg border-2 border-red-200 bg-red-50 p-4">
+              <div class="flex items-start justify-between">
+                <div class="flex-1">
+                  <div class="flex items-center">
+                    <svg class="h-4 w-4 text-red-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                    </svg>
+                    <span class="text-sm font-medium text-red-800">Missing Endpoint</span>
+                  </div>
+                  <p class="mt-1 text-xs text-red-700">
+                    Endpoint ID: <code class="bg-red-100 px-1 rounded">{stepEndpoint.endpoint_id}</code>
+                  </p>
+                  <p class="mt-1 text-xs text-red-600">
+                    This endpoint no longer exists in the API specification. 
+                    It may have been removed or renamed.
+                  </p>
+                  {#if duplicateCount > 1}
+                    <p class="mt-1 text-xs text-red-600">
+                      Instance {instanceIndex} of {duplicateCount}
+                    </p>
+                  {/if}
+                </div>
+                <button
+                  class="ml-2 p-1 text-red-600 hover:text-red-800 hover:bg-red-100 rounded"
+                  on:click={() => removeEndpoint(endpointIndex)}
+                  title="Remove this missing endpoint"
+                  aria-label="Remove missing endpoint"
+                >
+                  <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                  </svg>
+                </button>
+              </div>
+            </div>
           {/if}
         {/each}
       </div>
@@ -535,23 +595,16 @@
 
 <!-- Parameter Editor Slide-out Panel -->
 {#if isParamEditorMounted && activeEndpointIndex !== null}
-  {@const safeIndex = activeEndpointIndex!}
-  {@const activeEndpoint = findEndpoint(step.endpoints[safeIndex].endpoint_id)}
-  {@const duplicateCount = step.endpoints.filter(
-    (e: StepEndpoint) => e.endpoint_id === step.endpoints[safeIndex].endpoint_id
-  ).length}
-  {@const instanceIndex = step.endpoints
-    .slice(0, safeIndex + 1)
-    .filter((e: StepEndpoint) => e.endpoint_id === step.endpoints[safeIndex].endpoint_id).length}
+  {@const { endpoint, stepEndpoint, duplicateCount, instanceIndex, endpointIndex } = getEditorProps(activeEndpointIndex)}
 
-  {#if activeEndpoint}
+  {#if endpoint}
     <ParameterEditor
       isOpen={isParamEditorOpen}
       isMounted={true}
-      endpoint={activeEndpoint}
-      stepEndpoint={step.endpoints[safeIndex]}
+      {endpoint}
+      {stepEndpoint}
       {stepIndex}
-      endpointIndex={safeIndex}
+      {endpointIndex}
       {duplicateCount}
       {instanceIndex}
       on:close={closeParamEditor}
@@ -562,23 +615,16 @@
 
 <!-- Response Viewer Slide-out Panel -->
 {#if isResponseViewerMounted && activeResponseEndpointIndex !== null}
-  {@const safeIndex = activeResponseEndpointIndex!}
-  {@const activeEndpoint = findEndpoint(step.endpoints[safeIndex].endpoint_id)}
-  {@const duplicateCount = step.endpoints.filter(
-    (e: StepEndpoint) => e.endpoint_id === step.endpoints[safeIndex].endpoint_id
-  ).length}
-  {@const instanceIndex = step.endpoints
-    .slice(0, safeIndex + 1)
-    .filter((e: StepEndpoint) => e.endpoint_id === step.endpoints[safeIndex].endpoint_id).length}
+  {@const { endpoint, stepEndpoint, duplicateCount, instanceIndex, endpointIndex } = getEditorProps(activeResponseEndpointIndex)}
 
-  {#if activeEndpoint}
+  {#if endpoint}
     <ResponseViewer
       isOpen={isResponseViewerOpen}
       isMounted={true}
-      endpoint={activeEndpoint}
-      stepEndpoint={step.endpoints[safeIndex]}
+      {endpoint}
+      {stepEndpoint}
       {stepIndex}
-      endpointIndex={safeIndex}
+      {endpointIndex}
       stepId={step.step_id}
       {duplicateCount}
       {instanceIndex}
@@ -590,25 +636,19 @@
 
 <!-- Transformation Editor Slide-out Panel -->
 {#if isTransformationEditorMounted && activeTransformationEndpointIndex !== null}
-  {@const safeIndex = activeTransformationEndpointIndex!}
-  {@const activeEndpoint = findEndpoint(step.endpoints[safeIndex].endpoint_id)}
-  {@const duplicateCount = step.endpoints
-    .slice(0, safeIndex + 1)
-    .filter((e: StepEndpoint) => e.endpoint_id === step.endpoints[safeIndex].endpoint_id
-    ).length}
-  {@const instanceIndex = duplicateCount}
+  {@const { endpoint, stepEndpoint, duplicateCount, instanceIndex, endpointIndex } = getEditorProps(activeTransformationEndpointIndex)}
 
-  {#if activeEndpoint}
+  {#if endpoint}
     <TransformationEditor
       isOpen={isTransformationEditorOpen}
       isMounted={true}
-      endpoint={activeEndpoint}
-      stepEndpoint={step.endpoints[safeIndex]}
+      {endpoint}
+      {stepEndpoint}
       {duplicateCount}
       {instanceIndex}
-      transformationResults={executionStore[`${step.step_id}-${safeIndex}`]?.transformations || {}}
-      rawResponse={executionStore[`${step.step_id}-${safeIndex}`]?.response?.body}
-      hasExecutionData={!!executionStore[`${step.step_id}-${safeIndex}`]?.response}
+      transformationResults={executionStore[`${step.step_id}-${endpointIndex}`]?.transformations || {}}
+      rawResponse={executionStore[`${step.step_id}-${endpointIndex}`]?.response?.body}
+      hasExecutionData={!!executionStore[`${step.step_id}-${endpointIndex}`]?.response}
       {templateContext}
       on:close={closeTransformationEditor}
       on:change={handleTransformationChange}
@@ -618,27 +658,20 @@
 
 <!-- Assertion Editor Slide-out Panel -->
 {#if isAssertionEditorMounted && activeAssertionEndpointIndex !== null}
-  {@const safeIndex = activeAssertionEndpointIndex!}
-  {@const activeEndpoint = findEndpoint(step.endpoints[safeIndex].endpoint_id)}
-  {@const duplicateCount = step.endpoints.filter(
-    (e: StepEndpoint) => e.endpoint_id === step.endpoints[safeIndex].endpoint_id
-  ).length}
-  {@const instanceIndex = step.endpoints
-    .slice(0, safeIndex + 1)
-    .filter((e: StepEndpoint) => e.endpoint_id === step.endpoints[safeIndex].endpoint_id).length}
+  {@const { endpoint, stepEndpoint, duplicateCount, instanceIndex, endpointIndex } = getEditorProps(activeAssertionEndpointIndex)}
 
-  {#if activeEndpoint}
+  {#if endpoint}
     <AssertionEditor
       isOpen={isAssertionEditorOpen}
       isMounted={true}
-      endpoint={activeEndpoint}
-      stepEndpoint={step.endpoints[safeIndex]}
+      {endpoint}
+      {stepEndpoint}
       {stepIndex}
-      endpointIndex={safeIndex}
+      {endpointIndex}
       {duplicateCount}
       {instanceIndex}
-      assertionResults={executionStore[`${step.step_id}-${safeIndex}`]?.assertions || { passed: true, results: [] }}
-      hasExecutionData={!!executionStore[`${step.step_id}-${safeIndex}`]?.response}
+      assertionResults={executionStore[`${step.step_id}-${endpointIndex}`]?.assertions || { passed: true, results: [] }}
+      hasExecutionData={!!executionStore[`${step.step_id}-${endpointIndex}`]?.response}
       on:close={closeAssertionEditor}
       on:change={handleParamChange}
     />
