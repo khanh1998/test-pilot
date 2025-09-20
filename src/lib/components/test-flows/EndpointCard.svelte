@@ -13,6 +13,8 @@
   export let duplicateCount: number = 1;
   export let instanceIndex: number = 1;
   export let apiHosts: Record<string | number, { url: string; name?: string; description?: string }> = {};
+  export let isDragging: boolean = false;
+  export let isDropTarget: boolean = false;
 
   // Emitted events will be handled by the parent component
   import { createEventDispatcher } from 'svelte';
@@ -116,19 +118,64 @@
     showEndpointDetails = false;
     selectedEndpoint = null;
   }
+
+  // Drag and drop handlers
+  function handleDragStart(event: DragEvent) {
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', JSON.stringify({ endpointIndex, stepIndex }));
+    }
+    console.log('EndpointCard drag start:', { endpointIndex, stepIndex });
+    dispatch('dragstart', { endpointIndex });
+  }
+
+  function handleDragEnd() {
+    console.log('EndpointCard drag end:', { endpointIndex, stepIndex });
+    dispatch('dragend');
+  }
+
+  function handleDragOver(event: DragEvent) {
+    event.preventDefault();
+    dispatch('dragover', { event });
+  }
+
+  function handleDrop(event: DragEvent) {
+    event.preventDefault();
+    dispatch('drop', { event });
+  }
+
+  // Keyboard navigation for accessibility
+  function handleKeyDown(event: KeyboardEvent) {
+    if (event.key === 'ArrowLeft' && event.ctrlKey) {
+      event.preventDefault();
+      dispatch('moveLeft', { endpointIndex });
+    } else if (event.key === 'ArrowRight' && event.ctrlKey) {
+      event.preventDefault();
+      dispatch('moveRight', { endpointIndex });
+    }
+  }
 </script>
 
 <div
-  class="relative max-w-[290px] min-w-[260px] flex-shrink-0 rounded-md border p-2 {isRunning
+  class="relative max-w-[290px] min-w-[260px] flex-shrink-0 rounded-md border p-2 cursor-grab active:cursor-grabbing transition-all duration-200 {isRunning
     ? 'border-blue-400 bg-blue-50 shadow-md shadow-blue-100'
     : 'border-gray-200 bg-gray-50'} {isCompleted ? 'border-green-500 bg-green-50' : ''} {isFailed
     ? 'border-red-500 bg-red-50'
-    : ''} {getResponseStatusClass()}"
+    : ''} {getResponseStatusClass()} {isDragging ? 'opacity-50 transform rotate-2 cursor-grabbing' : ''} {isDropTarget ? 'scale-105 border-2 border-blue-400 border-dashed bg-blue-50' : ''}"
+  draggable="true"
+  role="button"
+  tabindex="0"
+  aria-label="Endpoint card for {endpoint.method} {endpoint.path}. Drag to reorder or use Ctrl+Arrow keys."
+  on:dragstart={handleDragStart}
+  on:dragend={handleDragEnd}
+  on:dragover={handleDragOver}
+  on:drop={handleDrop}
+  on:keydown={handleKeyDown}
 >
   <div class="mb-2 flex items-start justify-between">
-    <div class="flex items-center flex-1">
+    <div class="flex items-center flex-1 min-w-0">
       <span
-        class="mr-1.5 rounded bg-green-100 px-1.5 py-0.5 text-xs font-medium text-green-800 uppercase"
+        class="mr-1.5 rounded bg-green-100 px-1.5 py-0.5 text-xs font-medium text-green-800 uppercase flex-shrink-0"
       >
         {endpoint.method}
       </span>

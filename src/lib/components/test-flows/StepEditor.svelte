@@ -46,11 +46,38 @@
   let isAssertionEditorMounted = false;
   let activeAssertionEndpointIndex: number | null = null;
 
+  // Drag and drop state
+  let draggedEndpointIndex = -1;
+  let dropTargetIndex = -1;
+
   // Step execution state
   let stepExecutionState = { status: 'none' };
 
   // Computed property to handle undefined clearCookiesBeforeExecution values
   $: clearCookiesEnabled = step.clearCookiesBeforeExecution === true;
+
+  // Sort endpoints by order field, fallback to array index
+  $: sortedEndpoints = step.endpoints
+    .map((endpoint, index) => ({ endpoint, originalIndex: index }))
+    .sort((a, b) => {
+      const orderA = a.endpoint.order ?? a.originalIndex;
+      const orderB = b.endpoint.order ?? b.originalIndex;
+      return orderA - orderB;
+    });
+
+  // Ensure all endpoints have order values (migration for old flows)
+  $: {
+    let needsUpdate = false;
+    step.endpoints.forEach((endpoint, index) => {
+      if (endpoint.order === undefined) {
+        endpoint.order = index;
+        needsUpdate = true;
+      }
+    });
+    if (needsUpdate) {
+      dispatch('change');
+    }
+  }
 
   // Helper to determine step execution state
   $: {
@@ -279,6 +306,76 @@
   // Handle transformation changes
   function handleTransformationChange() {
     dispatch('change');
+  }
+
+  // Drag and drop handlers
+  function handleEndpointDragStart(event: CustomEvent<{ endpointIndex: number }>) {
+    draggedEndpointIndex = event.detail.endpointIndex;
+    console.log('Endpoint drag started:', { draggedEndpointIndex });
+  }
+
+  function handleEndpointDragEnd() {
+    console.log('Endpoint drag ended:', { draggedEndpointIndex, dropTargetIndex });
+    draggedEndpointIndex = -1;
+    dropTargetIndex = -1;
+  }
+
+  function handleEndpointDragOver(event: DragEvent, index: number) {
+    event.preventDefault();
+    if (draggedEndpointIndex !== -1 && draggedEndpointIndex !== index) {
+      dropTargetIndex = index;
+      console.log('Endpoint drag over:', { draggedEndpointIndex, dropTargetIndex, index });
+    }
+  }
+
+  function handleEndpointDrop(event: DragEvent, index: number) {
+    event.preventDefault();
+    console.log('Endpoint drop event:', { draggedEndpointIndex, index });
+    if (draggedEndpointIndex !== -1 && draggedEndpointIndex !== index) {
+      // Reorder endpoints
+      reorderEndpoint(draggedEndpointIndex, index);
+    }
+    dropTargetIndex = -1;
+    draggedEndpointIndex = -1;
+  }
+
+  function reorderEndpoint(fromIndex: number, toIndex: number) {
+    const sortedEndpointsList = sortedEndpoints;
+    const fromOriginalIndex = sortedEndpointsList[fromIndex].originalIndex;
+    const toOriginalIndex = sortedEndpointsList[toIndex].originalIndex;
+    
+    // Create a new array with reordered endpoints
+    const newEndpoints = [...step.endpoints];
+    const [movedEndpoint] = newEndpoints.splice(fromOriginalIndex, 1);
+    newEndpoints.splice(toOriginalIndex, 0, movedEndpoint);
+    
+    // Update order property for all endpoints to maintain consistent ordering
+    newEndpoints.forEach((endpoint, index) => {
+      endpoint.order = index;
+    });
+    
+    // Update the step endpoints
+    step.endpoints = newEndpoints;
+    dispatch('change');
+  }
+
+  // Keyboard navigation handlers
+  function handleMoveLeft(event: CustomEvent<{ endpointIndex: number }>) {
+    const currentIndex = sortedEndpoints.findIndex(
+      item => item.originalIndex === event.detail.endpointIndex
+    );
+    if (currentIndex > 0) {
+      reorderEndpoint(currentIndex, currentIndex - 1);
+    }
+  }
+
+  function handleMoveRight(event: CustomEvent<{ endpointIndex: number }>) {
+    const currentIndex = sortedEndpoints.findIndex(
+      item => item.originalIndex === event.detail.endpointIndex
+    );
+    if (currentIndex < sortedEndpoints.length - 1) {
+      reorderEndpoint(currentIndex, currentIndex + 1);
+    }
   }
 </script>
 
@@ -527,26 +624,34 @@
       <!-- Show selector on the left, then all endpoint cards -->
       <div class="flex flex-row gap-3 overflow-x-auto pb-2">
         <slot name="endpoint-selector"></slot>
-        {#each step.endpoints as stepEndpoint, endpointIndex (stepEndpoint.endpoint_id + '-' + endpointIndex)}
+        {#each sortedEndpoints as { endpoint: stepEndpoint, originalIndex }, sortedIndex (`${stepEndpoint.endpoint_id}-${originalIndex}`)}
           {@const endpoint = findEndpoint(stepEndpoint.endpoint_id)}
-          {@const { duplicateCount, instanceIndex } = getEndpointMetrics(stepEndpoint.endpoint_id, endpointIndex)}
+          {@const { duplicateCount, instanceIndex } = getEndpointMetrics(stepEndpoint.endpoint_id, originalIndex)}
           
           {#if endpoint}
             <EndpointCard
               {endpoint}
-              {stepEndpoint}
-              {endpointIndex}
+              stepEndpoint={stepEndpoint}
+              endpointIndex={originalIndex}
               {stepIndex}
               stepId={step.step_id}
               executionState={executionStore}
               {duplicateCount}
               {instanceIndex}
               {apiHosts}
+              isDragging={draggedEndpointIndex === sortedIndex}
+              isDropTarget={dropTargetIndex === sortedIndex}
               on:openParamEditor={openParamEditor}
               on:openTransformationEditor={openTransformationEditor}
               on:openResponseViewer={openResponseViewer}
               on:openAssertionEditor={openAssertionEditor}
-              on:removeEndpoint={() => removeEndpoint(endpointIndex)}
+              on:removeEndpoint={() => removeEndpoint(originalIndex)}
+              on:dragstart={handleEndpointDragStart}
+              on:dragend={handleEndpointDragEnd}
+              on:dragover={(e) => handleEndpointDragOver(e.detail.event, sortedIndex)}
+              on:drop={(e) => handleEndpointDrop(e.detail.event, sortedIndex)}
+              on:moveLeft={handleMoveLeft}
+              on:moveRight={handleMoveRight}
             />
           {:else}
             <!-- Show error card for missing endpoint -->
@@ -574,7 +679,7 @@
                 </div>
                 <button
                   class="ml-2 p-1 text-red-600 hover:text-red-800 hover:bg-red-100 rounded"
-                  on:click={() => removeEndpoint(endpointIndex)}
+                  on:click={() => removeEndpoint(originalIndex)}
                   title="Remove this missing endpoint"
                   aria-label="Remove missing endpoint"
                 >
@@ -677,3 +782,14 @@
     />
   {/if}
 {/if}
+
+<style>
+  .drop-zone {
+    transition: all 0.2s ease-in-out;
+  }
+  
+  .drop-zone:global(.dragging-over) {
+    background-color: #dbeafe;
+    border: 2px dashed #3b82f6;
+  }
+</style>

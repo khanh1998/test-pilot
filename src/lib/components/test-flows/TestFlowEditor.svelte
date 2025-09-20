@@ -192,9 +192,15 @@
       console.log('Endpoint details fetched successfully:', endpointDetails);
       
       // Add endpoint to the step with the fetched details
+      const stepEndpoints = flowData.steps[stepIndex].endpoints;
+      const nextOrder = stepEndpoints.length > 0 
+        ? Math.max(...stepEndpoints.map(ep => ep.order ?? 0)) + 1 
+        : 0;
+      
       flowData.steps[stepIndex].endpoints.push({
         endpoint_id: selectedEndpoint.id,
         api_id: selectedEndpoint.apiId, // Include API ID for multi-API support
+        order: nextOrder, // Assign order for drag and drop
         pathParams: {},
         queryParams: {}
       });
@@ -242,9 +248,15 @@
       console.error('Failed to fetch endpoint details:', error);
       // Still add the endpoint to the step with basic information
       // This ensures the UI doesn't break if the API call fails
+      const stepEndpoints = flowData.steps[stepIndex].endpoints;
+      const nextOrder = stepEndpoints.length > 0 
+        ? Math.max(...stepEndpoints.map(ep => ep.order ?? 0)) + 1 
+        : 0;
+        
       flowData.steps[stepIndex].endpoints.push({
         endpoint_id: selectedEndpoint.id,
         api_id: selectedEndpoint.apiId,
+        order: nextOrder, // Assign order for drag and drop
         pathParams: {},
         queryParams: {}
       });
