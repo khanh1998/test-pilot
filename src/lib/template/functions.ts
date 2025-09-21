@@ -47,6 +47,47 @@ export const defaultTemplateFunctions: Record<string, (...args: unknown[]) => un
   },
 
   /**
+   * Format date with optional day offset and custom format
+   * @param dayOffset Optional number of days to add/subtract (default: 0)
+   * @param format Format string (default: 'YYYY-MM-DD')
+   */
+  dateFormat: (...args: unknown[]): string => {
+    const dayOffset = args.length > 0 && typeof args[0] === 'number' ? args[0] : 0;
+    const format = args.length > 1 && typeof args[1] === 'string' ? args[1] : 'YYYY-MM-DD';
+    
+    const date = new Date();
+    date.setDate(date.getDate() + dayOffset);
+    
+    return formatDate(date, format);
+  },
+
+  /**
+   * Get date in ISO format with optional day offset
+   * @param dayOffset Optional number of days to add/subtract (default: 0)
+   */
+  dateISO: (...args: unknown[]): string => {
+    const dayOffset = args.length > 0 && typeof args[0] === 'number' ? args[0] : 0;
+    
+    const date = new Date();
+    date.setDate(date.getDate() + dayOffset);
+    
+    return date.toISOString().split('T')[0]; // Return only the date part (YYYY-MM-DD)
+  },
+
+  /**
+   * Get date in RFC3339 format with optional day offset
+   * @param dayOffset Optional number of days to add/subtract (default: 0)
+   */
+  dateRFC3339: (...args: unknown[]): string => {
+    const dayOffset = args.length > 0 && typeof args[0] === 'number' ? args[0] : 0;
+    
+    const date = new Date();
+    date.setDate(date.getDate() + dayOffset);
+    
+    return date.toISOString(); // ISO string is RFC3339 compliant
+  },
+
+  /**
    * Generate random integer between min and max (inclusive)
    */
   randomInt: (...args: unknown[]): number => {
@@ -178,6 +219,27 @@ function extractJsonPath(data: unknown, path: string): unknown {
     console.warn(`JSONPath evaluation failed for path "${path}":`, error);
     return undefined;
   }
+}
+
+/**
+ * Format date according to specified format string
+ * Supports basic format tokens: YYYY, MM, DD, HH, mm, ss
+ */
+function formatDate(date: Date, format: string): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+
+  return format
+    .replace('YYYY', String(year))
+    .replace('MM', month)
+    .replace('DD', day)
+    .replace('HH', hours)
+    .replace('mm', minutes)
+    .replace('ss', seconds);
 }
 
 /**
