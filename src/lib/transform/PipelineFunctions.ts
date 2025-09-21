@@ -713,8 +713,15 @@ export function createPipelineFunctions(
       }
       
       return [...data].sort((a, b) => {
-        let valueA = by ? PipelineHelpers.getNestedValue(a, by) : a;
-        let valueB = by ? PipelineHelpers.getNestedValue(b, by) : b;
+        let valueA = a;
+        let valueB = b;
+        
+        if (by) {
+          // Use JSONPath evaluator for JSONPath expression support
+          const jsonPathEvaluator = new SafeJSONPathEvaluator();
+          valueA = jsonPathEvaluator.evaluate(by, a);
+          valueB = jsonPathEvaluator.evaluate(by, b);
+        }
         
         if (valueA === valueB) return 0;
         

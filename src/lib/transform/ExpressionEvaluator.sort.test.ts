@@ -54,7 +54,7 @@ describe('ExpressionEvaluator Sort Function with Numbers', () => {
       { name: 'David', age: 20, score: 88.0 }
     ];
 
-    const result = evaluator.evaluate('data | sort(by: "age")', testData);
+    const result = evaluator.evaluate('data | sort(by: $.age)', testData);
     const expected = [
       { name: 'David', age: 20, score: 88.0 },
       { name: 'Bob', age: 25, score: 92.1 },
@@ -73,7 +73,7 @@ describe('ExpressionEvaluator Sort Function with Numbers', () => {
       { name: 'David', score: 88.0 }
     ];
 
-    const result = evaluator.evaluate('data | sort(by: "score", desc: true)', testData);
+    const result = evaluator.evaluate('data | sort(by: $.score, desc: true)', testData);
     const expected = [
       { name: 'Bob', score: 92.1 },
       { name: 'David', score: 88.0 },
@@ -140,6 +140,84 @@ describe('ExpressionEvaluator Sort Function with Numbers', () => {
     
     const result = evaluator.evaluate('$.numbers | sort()', testData);
     const expected = [1, 2, 3, 5, 8, 9];
+    
+    expect(result).toEqual(expected);
+  });
+
+  it('should sort objects by JSONPath expression in by parameter', () => {
+    const testData = [
+      { user: { profile: { id: 3, name: 'Alice' } }, score: 85 },
+      { user: { profile: { id: 1, name: 'Bob' } }, score: 92 },
+      { user: { profile: { id: 2, name: 'Charlie' } }, score: 78 },
+      { user: { profile: { id: 4, name: 'David' } }, score: 88 }
+    ];
+
+    const result = evaluator.evaluate('data | sort(by: $.user.profile.id)', testData);
+    const expected = [
+      { user: { profile: { id: 1, name: 'Bob' } }, score: 92 },
+      { user: { profile: { id: 2, name: 'Charlie' } }, score: 78 },
+      { user: { profile: { id: 3, name: 'Alice' } }, score: 85 },
+      { user: { profile: { id: 4, name: 'David' } }, score: 88 }
+    ];
+    
+    expect(result).toEqual(expected);
+  });
+
+  it('should sort objects by JSONPath expression in descending order', () => {
+    const testData = [
+      { profile: { score: 85, stats: { rating: 4.2 } } },
+      { profile: { score: 92, stats: { rating: 4.8 } } },
+      { profile: { score: 78, stats: { rating: 3.9 } } },
+      { profile: { score: 88, stats: { rating: 4.5 } } }
+    ];
+
+    const result = evaluator.evaluate('data | sort(by: $.profile.stats.rating, desc: true)', testData);
+    const expected = [
+      { profile: { score: 92, stats: { rating: 4.8 } } },
+      { profile: { score: 88, stats: { rating: 4.5 } } },
+      { profile: { score: 85, stats: { rating: 4.2 } } },
+      { profile: { score: 78, stats: { rating: 3.9 } } }
+    ];
+    
+    expect(result).toEqual(expected);
+  });
+
+  it('should handle JSONPath with array indexing in sort', () => {
+    const testData = [
+      { tags: ['important', 'urgent'], priority: 1 },
+      { tags: ['normal', 'review'], priority: 3 },
+      { tags: ['critical', 'bug'], priority: 2 },
+      { tags: ['minor', 'enhancement'], priority: 4 }
+    ];
+
+    // Sort by first tag alphabetically
+    const result = evaluator.evaluate('data | sort(by: $.tags[0])', testData);
+    const expected = [
+      { tags: ['critical', 'bug'], priority: 2 },
+      { tags: ['important', 'urgent'], priority: 1 },
+      { tags: ['minor', 'enhancement'], priority: 4 },
+      { tags: ['normal', 'review'], priority: 3 }
+    ];
+    
+    expect(result).toEqual(expected);
+  });
+
+  it('should handle missing fields in JSONPath gracefully', () => {
+    const testData = [
+      { name: 'Alice', profile: { age: 30 } },
+      { name: 'Bob' }, // missing profile
+      { name: 'Charlie', profile: { age: 25 } },
+      { name: 'David', profile: {} } // missing age
+    ];
+
+    const result = evaluator.evaluate('data | sort(by: $.profile.age)', testData);
+    // Items with undefined/null values should come first, then sorted by age
+    const expected = [
+      { name: 'Bob' }, 
+      { name: 'David', profile: {} },
+      { name: 'Charlie', profile: { age: 25 } },
+      { name: 'Alice', profile: { age: 30 } }
+    ];
     
     expect(result).toEqual(expected);
   });
