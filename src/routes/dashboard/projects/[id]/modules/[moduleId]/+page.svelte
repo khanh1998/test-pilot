@@ -432,6 +432,32 @@
     }
   }
 
+  async function handleCloneSequence(event: CustomEvent<{ sequence: FlowSequence; name: string; description?: string }>) {
+    try {
+      const { sequence, name, description } = event.detail;
+      const response = await projectClient.cloneSequence(projectId, moduleId, sequence.id, {
+        name,
+        description
+      });
+      
+      // Add the cloned sequence to our list
+      sequences = [...sequences, response.sequence];
+      
+      // Initialize empty flows map for the new sequence
+      sequenceFlowsMap.set(response.sequence.id, []);
+      sequenceFlowsMap = new Map(sequenceFlowsMap); // Trigger reactivity
+      
+      // Load flows for the new sequence
+      await loadSequenceFlows();
+      
+      showExecutionResults('success', 'Sequence Cloned', `Successfully cloned "${sequence.name}" as "${name}"`);
+    } catch (err) {
+      console.error('Failed to clone sequence:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to clone sequence';
+      showExecutionResults('error', 'Clone Failed', 'Failed to clone sequence', errorMessage);
+    }
+  }
+
   function handleEnvironmentSelect(event: CustomEvent<{ environmentId: number | null; subEnvironment: string | null }>) {
     selectedEnvironmentId = event.detail.environmentId;
     selectedSubEnvironment = event.detail.subEnvironment;
@@ -1051,6 +1077,7 @@
                   on:clickFlow={handleFlowClick}
                   on:reorderFlow={handleReorderFlow}
                   on:deleteSequence={handleDeleteSequence}
+                  on:cloneSequence={handleCloneSequence}
                   on:runSequence={handleRunSequence}
                 />
               {/each}

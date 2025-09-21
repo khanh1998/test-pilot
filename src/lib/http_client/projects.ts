@@ -200,6 +200,28 @@ export async function deleteSequence(projectId: number, moduleId: number, sequen
   }
 }
 
+export async function cloneSequence(
+  projectId: number, 
+  moduleId: number, 
+  sequenceId: number, 
+  data: { name: string; description?: string }
+): Promise<{ sequence: FlowSequence }> {
+  const response = await fetchWithAuth(`${API_BASE}/${projectId}/modules/${moduleId}/sequences/${sequenceId}/clone`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(data)
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to clone sequence');
+  }
+  
+  return response.json();
+}
+
 // Flow management in sequences
 export async function addFlowToSequence(
   projectId: number, 

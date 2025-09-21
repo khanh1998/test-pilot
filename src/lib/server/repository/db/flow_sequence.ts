@@ -150,6 +150,42 @@ export class FlowSequenceRepository {
   }
 
   /**
+   * Clone sequence
+   */
+  async cloneSequence(sequenceId: number, moduleId: number, data: { name: string; description?: string }): Promise<FlowSequence | null> {
+    // Get the original sequence
+    const originalSequence = await this.getFlowSequence(sequenceId, moduleId);
+    if (!originalSequence) {
+      return null;
+    }
+
+    // Create cloned sequence config with new step IDs
+    const clonedConfig: FlowSequenceConfig = {
+      ...originalSequence.sequenceConfig,
+      steps: originalSequence.sequenceConfig.steps.map(step => ({
+        ...step,
+        id: `step_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      }))
+    };
+
+    // Create new sequence with cloned data
+    const result = await db
+      .insert(flowSequences)
+      .values({
+        moduleId,
+        name: data.name,
+        description: data.description,
+        sequenceConfig: clonedConfig,
+        displayOrder: originalSequence.displayOrder,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      })
+      .returning();
+
+    return this.mapToFlowSequence(result[0]);
+  }
+
+  /**
    * Add flow to sequence
    */
   async addFlowToSequence(sequenceId: number, testFlowId: number, stepOrder: number, parameterMappings: any[]): Promise<FlowSequence | null> {

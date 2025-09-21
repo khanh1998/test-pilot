@@ -146,6 +146,48 @@ export class FlowSequenceService {
   }
 
   /**
+   * Clone sequence
+   */
+  async cloneSequence(
+    sequenceId: number,
+    moduleId: number,
+    projectId: number,
+    userId: number,
+    data: { name: string; description?: string }
+  ): Promise<FlowSequence> {
+    // Verify user owns the project
+    await this.verifyProjectAccess(projectId, userId);
+
+    // Verify module belongs to project
+    const module = await this.moduleRepo.getProjectModule(moduleId, projectId);
+    if (!module) {
+      throw new Error('Module not found');
+    }
+
+    // Validate required fields
+    if (!data.name || data.name.trim().length === 0) {
+      throw new Error('Sequence name is required');
+    }
+
+    if (data.name.trim().length > 255) {
+      throw new Error('Sequence name cannot exceed 255 characters');
+    }
+
+    const cloneData = {
+      name: data.name.trim(),
+      description: data.description?.trim()
+    };
+
+    const clonedSequence = await this.sequenceRepo.cloneSequence(sequenceId, moduleId, cloneData);
+    
+    if (!clonedSequence) {
+      throw new Error('Original sequence not found');
+    }
+
+    return clonedSequence;
+  }
+
+  /**
    * Add flow to sequence
    */
   async addFlowToSequence(

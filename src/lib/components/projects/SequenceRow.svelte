@@ -8,6 +8,7 @@
   import FlowSearch from './FlowSearch.svelte';
   import FlowResultsPanel from './FlowResultsPanel.svelte';
   import ConfirmDialog from '../ConfirmDialog.svelte';
+  import CloneDialog from '../test-flows/CloneDialog.svelte';
 
   export let sequence: FlowSequence;
   export let sequenceFlows: TestFlow[] = []; // Populated flows from sequence steps
@@ -39,6 +40,7 @@
     deleteSequence: { sequence: FlowSequence };
     clickFlow: { sequence: FlowSequence; flow: TestFlow; stepOrder: number };
     runSequence: { sequence: FlowSequence };
+    cloneSequence: { sequence: FlowSequence; name: string; description?: string };
   }>();
 
   let editingName = sequence.name;
@@ -46,6 +48,7 @@
   let dropTargetIndex = -1;
   let showFlowSearch = false;
   let showDeleteConfirm = false;
+  let showCloneDialog = false;
   let showResultsPanel = false;
   let selectedFlowResult: SequenceFlowResult | null = null;
   let selectedFlowName = '';
@@ -111,6 +114,23 @@
 
   function handleDeleteSequence() {
     showDeleteConfirm = true;
+  }
+
+  function handleCloneSequence() {
+    showCloneDialog = true;
+  }
+
+  function handleConfirmClone(event: CustomEvent<{ name: string; description: string }>) {
+    dispatch('cloneSequence', { 
+      sequence, 
+      name: event.detail.name, 
+      description: event.detail.description 
+    });
+    showCloneDialog = false;
+  }
+
+  function handleCancelClone() {
+    showCloneDialog = false;
   }
 
   function handleConfirmDelete() {
@@ -200,6 +220,19 @@
         {/if}
       </button>
       
+      <!-- Clone Sequence Button -->
+      <button
+        type="button"
+        on:click={handleCloneSequence}
+        class="p-2 text-gray-400 hover:text-blue-600 rounded-md hover:bg-blue-50 transition-colors"
+        aria-label="Clone sequence"
+        title="Clone this sequence"
+      >
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+        </svg>
+      </button>
+      
       <button
         type="button"
         on:click={handleDeleteSequence}
@@ -274,6 +307,15 @@
   confirmVariant="danger"
   on:confirm={handleConfirmDelete}
   on:cancel={handleCancelDelete}
+/>
+
+<!-- Clone Dialog -->
+<CloneDialog
+  bind:isOpen={showCloneDialog}
+  originalName={sequence.name}
+  originalDescription={sequence.description || ''}
+  on:confirm={handleConfirmClone}
+  on:cancel={handleCancelClone}
 />
 
 <!-- Flow Results Panel -->
