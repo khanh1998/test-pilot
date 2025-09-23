@@ -23,22 +23,59 @@ type TauriHttp = {
 
 // Tauri HTTP client reference - will be initialized if in desktop mode
 let tauriHttp: TauriHttp | null = null;
+let tauriHttpPromise: Promise<void> | null = null;
+let tauriHttpReady = false;
 
 // Initialize Tauri HTTP client if we're in desktop mode
 if (isDesktop && typeof window !== 'undefined') {
   // Dynamic import for Tauri HTTP client
-  const loadTauriHttp = async () => {
+  const loadTauriHttp = async (): Promise<void> => {
     try {
+      // Small delay to ensure the Tauri context is fully ready
+      await new Promise(resolve => setTimeout(resolve, 100));
       const module = await import('@tauri-apps/plugin-http');
       tauriHttp = module;
+      tauriHttpReady = true;
       console.log('[HTTP Client] Initialized Tauri HTTP client');
     } catch (error) {
       console.error('[HTTP Client] Failed to load Tauri HTTP client:', error);
+      // Even if it fails, mark as "ready" so we can fallback to regular fetch
+      tauriHttpReady = true;
     }
   };
   
-  // Initialize when this module is loaded
-  loadTauriHttp();
+  // Initialize when this module is loaded and store the promise
+  tauriHttpPromise = loadTauriHttp();
+  
+  // Add a timeout fallback to prevent infinite waiting
+  setTimeout(() => {
+    if (!tauriHttpReady) {
+      console.warn('[HTTP Client] Tauri HTTP client initialization timeout, enabling fallback');
+      tauriHttpReady = true;
+    }
+  }, 5000); // 5 second timeout
+}
+
+/**
+ * Ensure Tauri HTTP client is ready before making requests
+ */
+async function ensureTauriHttpReady(): Promise<void> {
+  if (isDesktop && !tauriHttpReady && tauriHttpPromise) {
+    console.log('[HTTP Client] Waiting for Tauri HTTP client to be ready...');
+    const startTime = Date.now();
+    await tauriHttpPromise;
+    const endTime = Date.now();
+    console.log(`[HTTP Client] Tauri HTTP client ready after ${endTime - startTime}ms`);
+  } else if (isDesktop && tauriHttpReady) {
+    console.log('[HTTP Client] Tauri HTTP client already ready');
+  }
+}
+
+/**
+ * Check if Tauri HTTP client is ready (for debugging purposes)
+ */
+export function isTauriHttpReady(): boolean {
+  return tauriHttpReady;
 }
 
 /**
@@ -46,6 +83,9 @@ if (isDesktop && typeof window !== 'undefined') {
  * Uses Tauri HTTP client in desktop mode to bypass CORS and cookie policies
  */
 export async function fetchWithAuth(url: string, options: RequestInit = {}) {
+  // Ensure Tauri HTTP client is ready before proceeding
+  await ensureTauriHttpReady();
+  
   // Convert relative API URLs to absolute URLs based on environment
   const fullUrl = url.startsWith('http') ? url : apiUrl(url);
   // Get auth headers
