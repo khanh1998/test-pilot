@@ -91,7 +91,7 @@ export async function deleteProject(id: number): Promise<void> {
 }
 
 // Module operations
-export async function getProjectModules(projectId: number): Promise<{ modules: ProjectModule[] }> {
+export async function getProjectModules(projectId: number): Promise<{ modules: ProjectModule[]; total: number }> {
   const response = await fetchWithAuth(`${API_BASE}/${projectId}/modules`);
   if (!response.ok) {
     const error = await response.json();
@@ -267,6 +267,15 @@ export async function getProjectEnvironments(projectId: number): Promise<{ envir
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.error || 'Failed to fetch project environments');
+  }
+  return response.json();
+}
+
+export async function getProjectEnvironment(projectId: number): Promise<{ environment: ProjectEnvironmentLink | null }> {
+  const response = await fetchWithAuth(`${API_BASE}/${projectId}/environment`);
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to fetch project environment');
   }
   return response.json();
 }

@@ -65,9 +65,9 @@
       icon: 'M8 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-2m-4-1v8m0 0l3-3m-3 3L9 8'
     },
     {
-      name: 'Environments',
-      href: '/dashboard/environments',
-      icon: 'M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9'
+      name: 'Environment',
+      href: '/dashboard/environment',
+      icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253'
     },
     {
       name: 'Test Flows',
@@ -121,6 +121,9 @@
               break;
             case 'environments':
               displayName = 'Environments';
+              break;
+            case 'environment':
+              displayName = 'Environment';
               break;
             case 'test-flows':
               displayName = 'Test Flows';

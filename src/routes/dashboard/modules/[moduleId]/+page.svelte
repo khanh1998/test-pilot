@@ -3,6 +3,7 @@
   import { page } from '$app/stores';
   import { fade } from 'svelte/transition';
   import { setBreadcrumbOverride, clearBreadcrumbOverride } from '$lib/store/breadcrumb';
+  import { projectStore } from '$lib/store/project';
   import * as projectClient from '$lib/http_client/projects';
   import * as testFlowClient from '$lib/http_client/test-flow';
   import * as environmentClient from '$lib/http_client/environments';
@@ -20,9 +21,10 @@
   import type { ExecutionPreferences } from '$lib/flow-runner/execution-engine';
   import { isDesktop } from '$lib/environment';
 
-  let projectId: number;
+  let projectId: number | null = null;
   let moduleId: number;
   let project: any = null; // Add project state
+  let selectedProject: any = null;
   let module: ProjectModule | null = null;
   let sequences: FlowSequence[] = [];
   let sequenceFlowsMap: Map<number, TestFlow[]> = new Map(); // Map sequence ID to flows
@@ -86,35 +88,70 @@
     }
   }
 
-  $: projectId = parseInt($page.params.id);
   $: moduleId = parseInt($page.params.moduleId);
 
+  // Subscribe to project store to get the selected project
+  const unsubscribeProject = projectStore.subscribe((state) => {
+    selectedProject = state.selectedProject;
+    projectId = selectedProject?.id || null;
+  });
+
   onMount(async () => {
-    if (projectId && moduleId) {
-      try {
-        await Promise.all([
-          loadModule(),
-          loadSequences(),
-          loadEnvironments() // Still need this for all environments
-        ]);
-      } catch (err) {
-        console.error('Error during initial load:', err);
-        if (!error) {
-          error = 'Failed to load page data';
-        }
-      } finally {
-        loading = false;
-      }
+    // Load projects first to get the selected project
+    try {
+      await projectStore.loadProjects();
+    } catch (err) {
+      console.error('Failed to load projects:', err);
+      error = 'Failed to load projects';
+      loading = false;
+      return;
     }
   });
 
+  // Use reactive statement to load data when projectId changes
+  $: {
+    if (projectId && moduleId) {
+      loadData();
+    }
+  }
+
+  async function loadData() {
+    if (!projectId || !moduleId) return;
+    
+    loading = true;
+    error = null;
+    
+    try {
+      await Promise.all([
+        loadModule(),
+        loadSequences(),
+        loadEnvironments() // Still need this for all environments
+      ]);
+    } catch (err) {
+      console.error('Error during initial load:', err);
+      if (!error) {
+        error = 'Failed to load page data';
+      }
+    } finally {
+      loading = false;
+    }
+  }
+
   onDestroy(() => {
     // Clean up breadcrumb overrides when leaving the page
-    clearBreadcrumbOverride(projectId.toString());
+    if (projectId) {
+      clearBreadcrumbOverride(projectId.toString());
+    }
     clearBreadcrumbOverride(moduleId.toString());
+    // Clean up project store subscription
+    unsubscribeProject();
   });
 
   async function loadModule() {
+    if (!projectId) {
+      throw new Error('No project selected');
+    }
+    
     try {
       // For now, we'll get module info from the project detail endpoint
       // In a real implementation, you might want a dedicated module endpoint
@@ -151,6 +188,10 @@
   }
 
   async function loadSequences() {
+    if (!projectId) {
+      throw new Error('No project selected');
+    }
+    
     try {
       const response = await projectClient.getModuleSequences(projectId, moduleId);
       sequences = Array.isArray(response.sequences) ? response.sequences : [];
@@ -222,6 +263,11 @@
 
   // New event handlers for the redesigned interface
   async function handleCreateSequence(event: CustomEvent<{ name: string }>) {
+    if (!projectId) {
+      showExecutionResults('error', 'No Project Selected', 'Please select a project first');
+      return;
+    }
+    
     try {
       isSubmitting = true;
       const response = await projectClient.createSequence(projectId, moduleId, {
@@ -248,6 +294,11 @@
   }
 
   async function handleEditSequenceName(event: CustomEvent<{ sequence: FlowSequence; newName: string }>) {
+    if (!projectId) {
+      showExecutionResults('error', 'No Project Selected', 'Please select a project first');
+      return;
+    }
+    
     try {
       await projectClient.updateSequence(projectId, moduleId, event.detail.sequence.id, {
         name: event.detail.newName
@@ -267,6 +318,11 @@
   }
 
   async function handleAddFlowToSequence(event: CustomEvent<{ sequence: FlowSequence; flow: TestFlow }>) {
+    if (!projectId) {
+      showExecutionResults('error', 'No Project Selected', 'Please select a project first');
+      return;
+    }
+    
     try {
       const { sequence, flow } = event.detail;
       const currentFlows = sequenceFlowsMap.get(sequence.id) || [];
@@ -317,6 +373,11 @@
   }
 
   async function handleRemoveFlowFromSequence(event: CustomEvent<{ sequence: FlowSequence; stepOrder: number }>) {
+    if (!projectId) {
+      showExecutionResults('error', 'No Project Selected', 'Please select a project first');
+      return;
+    }
+    
     try {
       const { sequence, stepOrder } = event.detail;
       const steps = sequence.sequenceConfig?.steps || [];
@@ -366,6 +427,11 @@
   }
 
   async function handleReorderFlow(event: CustomEvent<{ sequence: FlowSequence; fromIndex: number; toIndex: number }>) {
+    if (!projectId) {
+      showExecutionResults('error', 'No Project Selected', 'Please select a project first');
+      return;
+    }
+    
     try {
       const { sequence, fromIndex, toIndex } = event.detail;
       
@@ -422,6 +488,11 @@
   }
 
   async function handleDeleteSequence(event: CustomEvent<{ sequence: FlowSequence }>) {
+    if (!projectId) {
+      showExecutionResults('error', 'No Project Selected', 'Please select a project first');
+      return;
+    }
+    
     try {
       await projectClient.deleteSequence(projectId, moduleId, event.detail.sequence.id);
       sequences = Array.isArray(sequences) ? sequences.filter(s => s.id !== event.detail.sequence.id) : [];
@@ -433,6 +504,11 @@
   }
 
   async function handleCloneSequence(event: CustomEvent<{ sequence: FlowSequence; name: string; description?: string }>) {
+    if (!projectId) {
+      showExecutionResults('error', 'No Project Selected', 'Please select a project first');
+      return;
+    }
+    
     try {
       const { sequence, name, description } = event.detail;
       const response = await projectClient.cloneSequence(projectId, moduleId, sequence.id, {
@@ -711,6 +787,11 @@
   }
 
   async function handleParameterPanelSave(event: CustomEvent<{ stepOrder: number; parameterMappings: any[] }>) {
+    if (!projectId) {
+      showExecutionResults('error', 'No Project Selected', 'Please select a project first');
+      return;
+    }
+    
     try {
       const { stepOrder, parameterMappings } = event.detail;
       
@@ -818,6 +899,20 @@
 {#if loading}
   <div class="flex justify-center items-center py-12">
     <div class="h-8 w-8 animate-spin rounded-full border-t-2 border-b-2 border-blue-500"></div>
+  </div>
+{:else if !projectId}
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="bg-yellow-50 border border-yellow-200 rounded-md p-4">
+      <div class="flex">
+        <svg class="w-5 h-5 text-yellow-400 mr-2" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+        </svg>
+        <div>
+          <h3 class="text-sm font-medium text-yellow-800">No Project Selected</h3>
+          <p class="text-sm text-yellow-700 mt-1">Please select a project from the sidebar to view module sequences.</p>
+        </div>
+      </div>
+    </div>
   </div>
 {:else if error}
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

@@ -3,8 +3,8 @@
   import { goto } from '$app/navigation';
   import { projectStore, type Project } from '$lib/store/project';
   import * as projectClient from '$lib/http_client/projects';
-  import ModuleCard from '$lib/components/projects/ModuleCard.svelte';
-  import ModuleForm from '$lib/components/projects/ModuleForm.svelte';
+  import ModuleCard from '$lib/components/modules/ModuleCard.svelte';
+  import ModuleForm from '$lib/components/modules/ModuleForm.svelte';
   import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
   import type { ProjectModule } from '$lib/types/project';
 
@@ -61,8 +61,8 @@
     try {
       loading = true;
       error = null;
-      const projectDetail = await projectClient.getProject(selectedProject.id);
-      modules = projectDetail.modules || [];
+      const response = await projectClient.getProjectModules(selectedProject.id);
+      modules = response.modules || [];
     } catch (err) {
       console.error('Failed to load modules:', err);
       error = err instanceof Error ? err.message : 'Failed to load modules';
@@ -95,7 +95,7 @@
 
   function handleEditModule(module: ProjectModule) {
     if (!selectedProject) return;
-    goto(`/dashboard/projects/${selectedProject.id}/modules/${module.id}`);
+    goto(`/dashboard/modules/${module.id}`);
   }
 
   function handleDeleteModule(module: ProjectModule) {
@@ -248,7 +248,7 @@
         {#each modules as module (module.id)}
           <ModuleCard
             {module}
-            href="/dashboard/projects/{selectedProject.id}/modules/{module.id}"
+            href="/dashboard/modules/{module.id}"
             onEdit={handleEditModule}
             onDelete={handleDeleteModule}
           />
