@@ -2,7 +2,7 @@ import { json } from '@sveltejs/kit';
 import { listUserApis } from '$lib/server/service/apis/list_apis';
 import type { RequestEvent } from '@sveltejs/kit';
 
-export async function GET({ locals }: RequestEvent) {
+export async function GET({ locals, url }: RequestEvent) {
   try {
     // Check if user is authenticated
     if (!locals.user) {
@@ -12,8 +12,13 @@ export async function GET({ locals }: RequestEvent) {
       });
     }
 
+    // Get optional projectId from query parameters
+    const projectIdParam = url.searchParams.get('projectId');
+    const projectId = projectIdParam ? parseInt(projectIdParam, 10) : undefined;
+
     const result = await listUserApis({
-      userId: locals.user.userId
+      userId: locals.user.userId,
+      projectId
     });
 
     return json(result);

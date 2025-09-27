@@ -12,9 +12,14 @@ import type {
 	UploadSwaggerResponse
 } from '$lib/types/api';
 
-export async function getApiList(): Promise<GetApisResponse | null> {
+export async function getApiList(projectId?: number): Promise<GetApisResponse | null> {
 	try {
-		const response = await fetchWithAuth('/api/apis');
+		let url = '/api/apis';
+		if (projectId !== undefined) {
+			url += `?projectId=${projectId}`;
+		}
+		
+		const response = await fetchWithAuth(url);
 		if (response.ok) {
 			return await response.json();
 		} else {

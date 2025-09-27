@@ -2,6 +2,7 @@ import * as apiRepo from '$lib/server/repository/db/apis';
 
 interface ListApisParams {
   userId: number;
+  projectId?: number;
 }
 
 interface ListApisResponse {
@@ -17,9 +18,9 @@ interface ListApisResponse {
 }
 
 export async function listUserApis(params: ListApisParams): Promise<ListApisResponse> {
-  const { userId } = params;
+  const { userId, projectId } = params;
 
-  const apisWithCounts = await apiRepo.getApisWithEndpointCounts(userId);
+  const apisWithCounts = await apiRepo.getApisWithEndpointCounts(userId, projectId);
 
   return {
     apis: apisWithCounts.map((api) => ({
