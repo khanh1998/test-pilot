@@ -194,28 +194,51 @@ ALTER TABLE apis ALTER COLUMN project_id SET NOT NULL;
 ### 1. Service Layer Updates
 
 ```typescript
-// Before: test flow service gets flows by user
-async getTestFlowsByUser(userId: number): Promise<TestFlow[]>
+// Enhanced service methods to support flexible filtering
+// Support both user-based and project-based queries during transition
 
-// After: test flow service gets flows by project
-async getTestFlowsByProject(projectId: number): Promise<TestFlow[]>
+// Enhanced service interface
+interface ResourceFilters {
+  userId?: number;     // For backward compatibility
+  projectId?: number;  // For new project-centric queries
+  // Additional filters as needed
+}
 
-// Transition: support both during migration
-async getTestFlows(filters: { userId?: number; projectId?: number }): Promise<TestFlow[]>
+// Updated service methods
+async getTestFlows(filters: ResourceFilters): Promise<TestFlow[]>
+async getApis(filters: ResourceFilters): Promise<Api[]> 
+async getEnvironments(filters: ResourceFilters): Promise<Environment[]>
+
+// Helper methods for common use cases
+async getTestFlowsByUser(userId: number): Promise<TestFlow[]>    // Backward compatibility
+async getTestFlowsByProject(projectId: number): Promise<TestFlow[]>  // New project-centric
+async getUserDefaultProject(userId: number): Promise<Project>    // Get user's default project
 ```
 
 ### 2. API Route Updates
 
 ```typescript
-// New project-aware endpoints
-GET /api/projects/{projectId}/test-flows
-POST /api/projects/{projectId}/test-flows
-GET /api/projects/{projectId}/apis
-POST /api/projects/{projectId}/apis
+// Enhanced existing endpoints with project support
+// Use query parameters for GET requests
+GET /api/test-flows?projectId={projectId}  // Optional filter by project
+GET /api/apis?projectId={projectId}        // Optional filter by project
+GET /api/environments?projectId={projectId} // Optional filter by project
 
-// Keep existing endpoints during transition
-GET /api/test-flows (with optional ?projectId= parameter)
-POST /api/test-flows (require projectId in body)
+// Use request body for POST/PUT requests
+POST /api/test-flows 
+// Body: { name, description, projectId, ... }
+
+PUT /api/test-flows/{id}
+// Body: { name, description, projectId, ... }
+
+POST /api/apis
+// Body: { name, description, projectId, specContent, ... }
+
+PUT /api/apis/{id}
+// Body: { name, description, projectId, ... }
+
+// Keep all existing endpoints working for backward compatibility
+// Gradually migrate client code to include projectId parameters
 ```
 
 ### 3. UI Component Updates
@@ -242,10 +265,34 @@ POST /api/test-flows (require projectId in body)
 - Assign orphaned resources to default projects
 - Allow users to reorganize resources into proper projects later
 
-### 3. API Versioning
-- Maintain existing API endpoints during transition
-- Add new project-aware endpoints alongside old ones
-- Provide clear migration timeline for deprecated endpoints
+### 3. Gradual API Enhancement Strategy
+
+**Core Principle**: Enhance existing endpoints rather than creating new ones
+
+#### GET Endpoints Enhancement
+```typescript
+// Existing: GET /api/test-flows
+// Enhanced: GET /api/test-flows?projectId=123
+// Behavior: 
+//   - No projectId param: return user's resources (backward compatible)
+//   - With projectId param: return project's resources (new functionality)
+```
+
+#### POST/PUT Endpoints Enhancement  
+```typescript
+// Existing: POST /api/test-flows { name, description, flowJson }
+// Enhanced: POST /api/test-flows { name, description, flowJson, projectId }
+// Behavior:
+//   - No projectId in body: assign to user's default project
+//   - With projectId in body: assign to specified project
+```
+
+#### Implementation Benefits
+- ✅ No breaking changes to existing client code
+- ✅ No new routes to document or maintain  
+- ✅ Simple progressive enhancement
+- ✅ Easy to test and rollback
+- ✅ Clear upgrade path for frontend applications
 
 ## Benefits of This Approach
 

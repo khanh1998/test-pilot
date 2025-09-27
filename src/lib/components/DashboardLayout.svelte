@@ -3,6 +3,8 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { authStore } from '$lib/store/auth';
+  import { projectStore } from '$lib/store/project';
+  import ProjectSelector from './ProjectSelector.svelte';
   import type { User } from '$lib/store/auth';
   import type { Snippet } from 'svelte';
 
@@ -32,6 +34,8 @@
   async function handleSignOut() {
     try {
       await authStore.signOut();
+      // Clear project store on logout
+      projectStore.clear();
       goto('/');
     } catch (err: any) {
       error = err?.message || 'An error occurred during sign out';
@@ -51,8 +55,8 @@
       icon: 'M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z'
     },
     {
-      name: 'Projects',
-      href: '/dashboard/projects',
+      name: 'Modules',
+      href: '/dashboard/modules',
       icon: 'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10'
     },
     {
@@ -112,12 +116,8 @@
             case 'apis':
               displayName = 'APIs';
               break;
-            case 'projects':
-              displayName = 'Projects';
-              break;
             case 'modules':
-              // If we reach here, it means this is the last segment (a specific module)
-              displayName = 'Module';
+              displayName = 'Modules';
               break;
             case 'environments':
               displayName = 'Environments';
@@ -204,8 +204,13 @@
       </button>
     </div>
 
+    <!-- Project Selector -->
+    <div class="px-4 py-2">
+      <ProjectSelector isCollapsed={!sidebarOpen} />
+    </div>
+
     <!-- Navigation -->
-    <nav class="mt-8 flex-1 space-y-1 px-2">
+    <nav class="mt-4 flex-1 space-y-1 px-2">
       {#each navigationItems as item}
         <a
           href={item.href}

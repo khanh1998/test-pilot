@@ -18,17 +18,25 @@ export const users = pgTable('users', {
 });
 
 // APIs table - stores uploaded Swagger/OpenAPI specifications
-export const apis = pgTable('apis', {
-  id: serial('id').primaryKey(),
-  name: text('name').notNull(),
-  description: text('description'),
-  specFormat: varchar('spec_format', { length: 10 }).notNull(), // "yaml" or "json"
-  specContent: text('spec_content').notNull(), // The full OpenAPI/Swagger spec content
-  host: text('host'), // The host URL for the API (can be extracted from swagger or user-provided)
-  userId: integer('user_id').references(() => users.id),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull()
-});
+export const apis = pgTable(
+  'apis',
+  {
+    id: serial('id').primaryKey(),
+    name: text('name').notNull(),
+    description: text('description'),
+    specFormat: varchar('spec_format', { length: 10 }).notNull(), // "yaml" or "json"
+    specContent: text('spec_content').notNull(), // The full OpenAPI/Swagger spec content
+    host: text('host'), // The host URL for the API (can be extracted from swagger or user-provided)
+    userId: integer('user_id').references(() => users.id),
+    projectId: integer('project_id').references(() => projects.id), // Optional project reference for new project-centric model
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull()
+  },
+  (table) => [
+    index('apis_project_id_idx').on(table.projectId),
+    index('apis_user_id_idx').on(table.userId)
+  ]
+);
 
 // API Endpoints table - stores individual endpoints extracted from APIs
 export const apiEndpoints = pgTable('api_endpoints', {
@@ -49,16 +57,25 @@ export const apiEndpoints = pgTable('api_endpoints', {
 });
 
 // Test Flows table - stores blueprints for API test flows
-export const testFlows = pgTable('test_flows', {
-  id: serial('id').primaryKey(),
-  name: text('name').notNull(),
-  description: text('description'),
-  userId: integer('user_id').references(() => users.id),
-  flowJson: jsonb('flow_json').notNull(), // Will store the entire flow structure including steps, inputs, assertions
-  environmentId: integer('environment_id').references(() => environments.id), // Link to environment for execution
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull()
-});
+export const testFlows = pgTable(
+  'test_flows',
+  {
+    id: serial('id').primaryKey(),
+    name: text('name').notNull(),
+    description: text('description'),
+    userId: integer('user_id').references(() => users.id),
+    projectId: integer('project_id').references(() => projects.id), // Optional project reference for new project-centric model
+    flowJson: jsonb('flow_json').notNull(), // Will store the entire flow structure including steps, inputs, assertions
+    environmentId: integer('environment_id').references(() => environments.id), // Link to environment for execution
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull()
+  },
+  (table) => [
+    index('test_flows_project_id_idx').on(table.projectId),
+    index('test_flows_user_id_idx').on(table.userId),
+    index('test_flows_environment_id_idx').on(table.environmentId)
+  ]
+);
 
 // Join table for many-to-many relationship between test_flows and apis
 export const testFlowApis = pgTable('test_flow_apis', {
@@ -70,6 +87,26 @@ export const testFlowApis = pgTable('test_flow_apis', {
     .references(() => apis.id, { onDelete: 'cascade' })
   // Composite primary key is defined in relations.ts
 });
+
+// Project-test flows relationship table for many-to-many support
+export const projectTestFlows = pgTable(
+  'project_test_flows',
+  {
+    id: serial('id').primaryKey(),
+    projectId: integer('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    testFlowId: integer('test_flow_id')
+      .notNull()
+      .references(() => testFlows.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at').defaultNow().notNull()
+  },
+  (table) => [
+    index('project_test_flows_project_id_idx').on(table.projectId),
+    index('project_test_flows_test_flow_id_idx').on(table.testFlowId),
+    uniqueIndex('project_test_flows_unique_idx').on(table.projectId, table.testFlowId)
+  ]
+);
 
 // Environments table - stores all environment configurations in JSONB
 export const environments = pgTable(
