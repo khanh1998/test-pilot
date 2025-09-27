@@ -21,7 +21,6 @@
 
   let projectId: number | null = null;
   let moduleId: number;
-  let project: any = null; // Add project state
   let selectedProject: any = null;
   let module: ProjectModule | null = null;
   let sequences: FlowSequence[] = [];
@@ -65,9 +64,6 @@
   let selectedSequence: any = null;
   let selectedStepOrder = 1;
 
-  // Reactive statements to calculate data for parameter mapping
-  $: projectVariables = project ? getProjectVariables() : [];
-  
   // Reactive statement to calculate previous flow outputs
   $: previousFlowOutputs = getPreviousFlowOutputs(selectedSequence, selectedStepOrder, sequenceFlowsMap);
 
@@ -149,25 +145,21 @@
     }
     
     try {
-      // For now, we'll get module info from the project detail endpoint
-      // In a real implementation, you might want a dedicated module endpoint
-      const response = await projectClient.getProject(projectId);
-      project = response.project; // Store project data
-      module = response.modules.find(m => m.id === moduleId) || null;
+      // Use dedicated lightweight API to get just the module
+      const response = await projectClient.getModule(projectId, moduleId);
+      module = response.module;
       
       if (!module) {
         error = 'Module not found';
       } else {
         // Set breadcrumb overrides for both project and module
-        if (project?.name) {
-          setBreadcrumbOverride(projectId.toString(), project.name);
+        if (selectedProject?.name) {
+          setBreadcrumbOverride(projectId.toString(), selectedProject.name);
         }
         if (module?.name) {
           setBreadcrumbOverride(moduleId.toString(), module.name);
         }
       }
-
-
       
     } catch (err) {
       console.error('Failed to load module:', err);
@@ -626,8 +618,7 @@
           const sequenceOptions: SequenceRunnerOptions = {
             sequence,
             flows,
-            project, // Add project information
-            environments: projectEnvironment ? [projectEnvironment] : [],
+            project: selectedProject, // Add project information
             selectedEnvironment: selectedEnv,
             selectedSubEnvironment: selectedSubEnvironment,
             environmentVariables,
@@ -722,8 +713,7 @@
       const sequenceOptions: SequenceRunnerOptions = {
         sequence,
         flows,
-        project, // Add project information
-        environments: projectEnvironment ? [projectEnvironment] : [],
+        project: selectedProject, // Add project information
         selectedEnvironment: selectedEnv,
         selectedSubEnvironment: selectedSubEnvironment,
         environmentVariables,
@@ -846,20 +836,6 @@
       const errorMessage = err instanceof Error ? err.message : 'Failed to save parameter mappings';
       showExecutionResults('error', 'Save Failed', 'Failed to save parameter mappings', errorMessage);
     }
-  }
-
-  function getProjectVariables() {
-    if (!project?.projectJson?.variables) {
-      return [];
-    }
-
-    const variables = project.projectJson.variables.map((variable: any) => ({
-      name: variable.name,
-      type: variable.type,
-      description: variable.description || `Project variable of type ${variable.type}`
-    }));
-    
-    return variables;
   }
 
   function getPreviousFlowOutputs(currentSelectedSequence: any, currentSelectedStepOrder: number, currentSequenceFlowsMap: Map<number, TestFlow[]>) {
@@ -1208,7 +1184,6 @@
   flow={selectedFlow}
   sequence={selectedSequence}
   stepOrder={selectedStepOrder}
-  projectVariables={projectVariables}
   previousFlowOutputs={previousFlowOutputs}
   selectedEnvironment={projectEnvironment}
   selectedSubEnvironment={selectedSubEnvironment}

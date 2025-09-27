@@ -8,7 +8,6 @@ import { FlowValidator } from './validator';
 export interface FlowRunnerOptions {
   flowData: TestFlowData;
   preferences: ExecutionPreferences;
-  environments: import('$lib/types/environment').Environment[];
   selectedEnvironment: import('$lib/types/environment').Environment | null;
   environmentVariables: Record<string, unknown>;
   onLog: (level: 'info' | 'debug' | 'error' | 'warning', message: string, details?: string) => void;

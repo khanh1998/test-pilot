@@ -140,7 +140,6 @@
     const options: FlowRunnerOptions = {
       flowData,
       preferences,
-      environments,
       selectedEnvironment,
       environmentVariables,
       onLog: addLog,

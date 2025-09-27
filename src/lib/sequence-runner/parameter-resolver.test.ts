@@ -55,7 +55,7 @@ describe('SequenceParameterResolver', () => {
           }
         ],
         outputs: [
-          { name: 'access_token', value: '{{response.token}}', description: 'Auth token', isTemplate: true }
+          { name: 'access_token', value: '{{response.token}}', description: 'Auth token', isTemplate: true, type: 'string' }
         ],
         steps: []
       }
@@ -94,7 +94,7 @@ describe('SequenceParameterResolver', () => {
           }
         ],
         outputs: [
-          { name: 'user_id', value: '{{response.user.id}}', description: 'Created user ID', isTemplate: true }
+          { name: 'user_id', value: '{{response.user.id}}', description: 'Created user ID', isTemplate: true, type: 'number' }
         ],
         steps: []
       }

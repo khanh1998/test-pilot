@@ -9,7 +9,6 @@ export interface SequenceRunnerOptions {
   sequence: FlowSequence;
   flows: TestFlow[]; // All flows in the sequence, ordered by step_order
   project: Project; // Project information for variable resolution
-  environments: Environment[];
   selectedEnvironment: Environment | null;
   selectedSubEnvironment: string | null; // Selected sub-environment (dev, sit, uat, etc.)
   environmentVariables: Record<string, unknown>;

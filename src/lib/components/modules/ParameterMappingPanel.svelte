@@ -8,7 +8,6 @@
   export let flow: TestFlow | null = null;
   export let sequence: any = null; // Using any for now since FlowSequence type doesn't exist
   export let stepOrder: number = 1;
-  export let projectVariables: ProjectVariable[] = [];
   export let previousFlowOutputs: FlowOutput[] = [];
   export let selectedEnvironment: Environment | null = null; // Environment with variables
   export let selectedSubEnvironment: string | null = null;
@@ -20,12 +19,6 @@
       parameterMappings: ParameterMapping[];
     };
   }>();
-
-  interface ProjectVariable {
-    name: string;
-    type: 'string' | 'number' | 'boolean' | 'object';
-    description?: string;
-  }
 
   interface FlowOutput {
     flowName: string;
@@ -39,8 +32,8 @@
 
   interface ParameterMapping {
     flow_parameter_name: string;
-    source_type: 'project_variable' | 'previous_output' | 'static_value' | 'environment_variable';
-    source_value: string; // For project_variable: variable name, for previous_output: output field name, for static_value: the actual value, for environment_variable: variable name
+    source_type: 'previous_output' | 'static_value' | 'environment_variable';
+    source_value: string; // For previous_output: output field name, for static_value: the actual value, for environment_variable: variable name
     data_type?: 'string' | 'number' | 'boolean' | 'array' | 'null'; // Only used for static_value
     source_flow_step?: number; // Only used for previous_output
     source_output_field?: string; // Only used for previous_output
@@ -154,7 +147,7 @@
       if (value !== 'static_value') {
         parameterMappings[index].data_type = undefined;
       }
-      if (value !== 'project_variable' && value !== 'environment_variable') {
+      if (value !== 'environment_variable') {
         parameterMappings[index].source_value = '';
       }
     }
@@ -264,7 +257,6 @@
                     class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                   >
                     <option value="static_value">Fixed Value</option>
-                    <option value="project_variable">Project Variable</option>
                     <option value="environment_variable">Environment Variable</option>
                     {#if availableFlowOutputs.length > 0}
                       <option value="previous_output">Previous Flow Output</option>
@@ -340,23 +332,7 @@
                       />
                     {/if}
                   </div>
-                {:else if parameterMappings[index].source_type === 'project_variable'}
-                  <div class="flex-1">
-                    <label for="projectVar-{index}" class="block text-sm font-medium text-gray-700 mb-2">Project Variable</label>
-                    <select
-                      id="projectVar-{index}"
-                      bind:value={parameterMappings[index].source_value}
-                      on:change={(e) => handleSelectChange(e, index, 'source_value')}
-                      class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                    >
-                      <option value="">Select variable...</option>
-                      {#each projectVariables as variable}
-                        <option value={variable.name}>{variable.name} ({variable.type})</option>
-                      {/each}
-                    </select>
-                  </div>
-                  <!-- Empty flex item to maintain spacing -->
-                  <div class="flex-1"></div>
+
                 {:else if parameterMappings[index].source_type === 'environment_variable'}
                   <div class="flex-1">
                     <label for="envVar-{index}" class="block text-sm font-medium text-gray-700 mb-2">Environment Variable</label>
@@ -433,15 +409,7 @@
               </div>
 
               <!-- Status/Info Messages -->
-              {#if parameterMappings[index].source_type === 'project_variable'}
-                {#if projectVariables.length === 0}
-                  <p class="text-xs text-gray-500 mb-3">No project variables defined</p>
-                {:else if parameterMappings[index].source_value}
-                  <p class="text-xs text-gray-500 mb-3">
-                    Selected: <strong>{parameterMappings[index].source_value}</strong>
-                  </p>
-                {/if}
-              {:else if parameterMappings[index].source_type === 'environment_variable'}
+              {#if parameterMappings[index].source_type === 'environment_variable'}
                 {#if environmentVariables.length === 0}
                   <p class="text-xs text-gray-500 mb-3">
                     {#if !selectedEnvironment}

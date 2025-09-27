@@ -100,6 +100,15 @@ export async function getProjectModules(projectId: number): Promise<{ modules: P
   return response.json();
 }
 
+export async function getModule(projectId: number, moduleId: number): Promise<{ module: ProjectModule }> {
+  const response = await fetchWithAuth(`${API_BASE}/${projectId}/modules/${moduleId}`);
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to fetch module');
+  }
+  return response.json();
+}
+
 export async function createModule(projectId: number, data: { name: string; description?: string }): Promise<{ module: ProjectModule }> {
   const response = await fetchWithAuth(`${API_BASE}/${projectId}/modules`, {
     method: 'POST',
