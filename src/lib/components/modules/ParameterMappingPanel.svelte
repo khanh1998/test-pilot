@@ -2,6 +2,7 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import type { TestFlow } from '../../types/test-flow.js';
+  import type { Environment } from '$lib/types/environment.js';
 
   export let isOpen: boolean = false;
   export let flow: TestFlow | null = null;
@@ -9,6 +10,8 @@
   export let stepOrder: number = 1;
   export let projectVariables: ProjectVariable[] = [];
   export let previousFlowOutputs: FlowOutput[] = [];
+  export let selectedEnvironment: Environment | null = null; // Environment with variables
+  export let selectedSubEnvironment: string | null = null;
 
   const dispatch = createEventDispatcher<{
     close: void;
@@ -36,8 +39,8 @@
 
   interface ParameterMapping {
     flow_parameter_name: string;
-    source_type: 'project_variable' | 'previous_output' | 'static_value';
-    source_value: string; // For project_variable: variable name, for previous_output: output field name, for static_value: the actual value
+    source_type: 'project_variable' | 'previous_output' | 'static_value' | 'environment_variable';
+    source_value: string; // For project_variable: variable name, for previous_output: output field name, for static_value: the actual value, for environment_variable: variable name
     data_type?: 'string' | 'number' | 'boolean' | 'array' | 'null'; // Only used for static_value
     source_flow_step?: number; // Only used for previous_output
     source_output_field?: string; // Only used for previous_output
@@ -52,6 +55,9 @@
   $: availableFlowOutputs = previousFlowOutputs.filter(output => {
     return output.stepOrder < stepOrder;
   });
+
+  // Get environment variables from the selected environment and sub-environment
+  $: environmentVariables = getEnvironmentVariables(selectedEnvironment, selectedSubEnvironment);
   
   $: if (flow && isOpen) {
     initializeParameterMappings();
@@ -72,6 +78,34 @@
                typeof param.value === 'number' ? param.value.toString() :
                typeof param.value === 'boolean' ? param.value.toString() :
                param.defaultValue ? String(param.defaultValue) : ''
+    }));
+  }
+
+  function getEnvironmentVariables(environment: Environment | null, subEnvironmentName: string | null) {
+    if (!environment || !environment.config) {
+      return [];
+    }
+    
+    // Always get variable list from environment.config.variable_definitions
+    const variableDefinitions = environment.config.variable_definitions || {};
+    
+    // If no sub-environment is selected, return variables without preview values
+    if (!subEnvironmentName) {
+      return Object.entries(variableDefinitions).map(([name, definition]) => ({
+        name,
+        value: null, // No preview value when no sub-env selected
+        type: definition.type
+      }));
+    }
+    
+    // With sub-environment selected, get concrete values for preview
+    const subEnv = environment.config.environments?.[subEnvironmentName];
+    const subEnvVariables = subEnv?.variables || {};
+    
+    return Object.entries(variableDefinitions).map(([name, definition]) => ({
+      name,
+      value: subEnvVariables[name] ?? definition.default_value ?? null, // Preview value from sub-env or default
+      type: definition.type
     }));
   }
 
@@ -120,7 +154,7 @@
       if (value !== 'static_value') {
         parameterMappings[index].data_type = undefined;
       }
-      if (value !== 'project_variable') {
+      if (value !== 'project_variable' && value !== 'environment_variable') {
         parameterMappings[index].source_value = '';
       }
     }
@@ -231,6 +265,7 @@
                   >
                     <option value="static_value">Fixed Value</option>
                     <option value="project_variable">Project Variable</option>
+                    <option value="environment_variable">Environment Variable</option>
                     {#if availableFlowOutputs.length > 0}
                       <option value="previous_output">Previous Flow Output</option>
                     {/if}
@@ -322,6 +357,37 @@
                   </div>
                   <!-- Empty flex item to maintain spacing -->
                   <div class="flex-1"></div>
+                {:else if parameterMappings[index].source_type === 'environment_variable'}
+                  <div class="flex-1">
+                    <label for="envVar-{index}" class="block text-sm font-medium text-gray-700 mb-2">Environment Variable</label>
+                    <select
+                      id="envVar-{index}"
+                      bind:value={parameterMappings[index].source_value}
+                      on:change={(e) => handleSelectChange(e, index, 'source_value')}
+                      class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    >
+                      <option value="">Select variable...</option>
+                      {#each environmentVariables as envVar}
+                        <option value={envVar.name}>{envVar.name} ({envVar.type})</option>
+                      {/each}
+                    </select>
+                  </div>
+                  <!-- Show preview value if selected and sub-environment is chosen -->
+                  {#if parameterMappings[index].source_value && selectedSubEnvironment}
+                    {@const selectedEnvVar = environmentVariables.find(v => v.name === parameterMappings[index].source_value)}
+                    {#if selectedEnvVar && selectedEnvVar.value !== null}
+                      <div class="flex-1">
+                        <span class="block text-sm font-medium text-gray-700 mb-2">Preview Value</span>
+                        <div class="w-full px-3 py-2 border border-gray-200 rounded-md bg-gray-50 text-sm text-gray-600">
+                          {typeof selectedEnvVar.value === 'object' ? JSON.stringify(selectedEnvVar.value) : String(selectedEnvVar.value)}
+                        </div>
+                      </div>
+                    {:else}
+                      <div class="flex-1"></div>
+                    {/if}
+                  {:else}
+                    <div class="flex-1"></div>
+                  {/if}
                 {:else if parameterMappings[index].source_type === 'previous_output'}
                   <div class="flex-1">
                     <label for="sourceFlow-{index}" class="block text-sm font-medium text-gray-700 mb-2">Source Flow</label>
@@ -373,6 +439,36 @@
                 {:else if parameterMappings[index].source_value}
                   <p class="text-xs text-gray-500 mb-3">
                     Selected: <strong>{parameterMappings[index].source_value}</strong>
+                  </p>
+                {/if}
+              {:else if parameterMappings[index].source_type === 'environment_variable'}
+                {#if environmentVariables.length === 0}
+                  <p class="text-xs text-gray-500 mb-3">
+                    {#if !selectedEnvironment}
+                      No environment selected
+                    {:else}
+                      No environment variables available in current environment
+                    {/if}
+                  </p>
+                {:else if parameterMappings[index].source_value}
+                  {@const selectedEnvVar = environmentVariables.find(v => v.name === parameterMappings[index].source_value)}
+                  {#if selectedEnvVar}
+                    {#if selectedSubEnvironment && selectedEnvVar.value !== null}
+                      <p class="text-xs text-gray-500 mb-3">
+                        Selected: <strong>{parameterMappings[index].source_value}</strong> = <span class="font-mono">{typeof selectedEnvVar.value === 'object' ? JSON.stringify(selectedEnvVar.value) : String(selectedEnvVar.value)}</span>
+                      </p>
+                    {:else}
+                      <p class="text-xs text-gray-500 mb-3">
+                        Selected: <strong>{parameterMappings[index].source_value}</strong> 
+                        {#if !selectedSubEnvironment}
+                          <span class="text-amber-600">(select sub-environment to see preview value)</span>
+                        {/if}
+                      </p>
+                    {/if}
+                  {/if}
+                {:else if !selectedSubEnvironment && environmentVariables.length > 0}
+                  <p class="text-xs text-amber-600 mb-3">
+                    Select a sub-environment to see preview values for variables
                   </p>
                 {/if}
               {:else if parameterMappings[index].source_type === 'previous_output' && parameterMappings[index].source_flow_step && parameterMappings[index].source_output_field}

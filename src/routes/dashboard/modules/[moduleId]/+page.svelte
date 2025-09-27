@@ -6,7 +6,6 @@
   import { projectStore } from '$lib/store/project';
   import * as projectClient from '$lib/http_client/projects';
   import * as testFlowClient from '$lib/http_client/test-flow';
-  import * as environmentClient from '$lib/http_client/environments';
   import { SequenceRunner, type SequenceRunnerOptions } from '$lib/sequence-runner';
   import type { SequenceFlowResult } from '$lib/sequence-runner/types';
   import SequenceRow from '$lib/components/modules/SequenceRow.svelte';
@@ -17,7 +16,6 @@
   import type { FlowSequence } from '$lib/types/flow_sequence';
   import type { TestFlow } from '$lib/types/test-flow';
   import type { Environment } from '$lib/types/environment';
-  import type { EnvironmentMapping } from '$lib/components/test-flows/types';
   import type { ExecutionPreferences } from '$lib/flow-runner/execution-engine';
   import { isDesktop } from '$lib/environment';
 
@@ -29,8 +27,7 @@
   let sequences: FlowSequence[] = [];
   let sequenceFlowsMap: Map<number, TestFlow[]> = new Map(); // Map sequence ID to flows
   let sequenceResultsMap: Map<number, SequenceFlowResult[]> = new Map(); // Map sequence ID to execution results
-  let environments: Environment[] = [];
-  let linkedEnvironments: EnvironmentMapping[] = [];
+  let projectEnvironment: Environment | null = null;
   
   let loading = true;
   let error: string | null = null;
@@ -48,7 +45,6 @@
   let isSubmitting = false;
 
   // Environment and execution states
-  let selectedEnvironmentId: number | null = null;
   let selectedSubEnvironment: string | null = null;
   let isRunningAll = false;
   let runningSequences = new Set<number>(); // Track which sequences are running
@@ -76,7 +72,7 @@
   $: previousFlowOutputs = getPreviousFlowOutputs(selectedSequence, selectedStepOrder, sequenceFlowsMap);
 
   // Reactive statement to check if we can run all sequences
-  $: canRunAll = sequences.length > 0 && selectedEnvironmentId && selectedSubEnvironment;
+  $: canRunAll = sequences.length > 0 && projectEnvironment && selectedSubEnvironment;
   
   // Debug execution results
   $: {
@@ -171,15 +167,7 @@
         }
       }
 
-      // Extract linked environments from project data
-      if (response.environments && Array.isArray(response.environments)) {
-        linkedEnvironments = response.environments.map(projectEnv => ({
-          environmentId: projectEnv.environment?.id || 0,
-          environmentName: projectEnv.environment?.name || 'Unknown Environment',
-          selectedSubEnvironment: undefined, // Will be set when user selects
-          parameterMappings: projectEnv.variableMappings || {}
-        })).filter(env => env.environmentId > 0); // Filter out invalid environments
-      }
+
       
     } catch (err) {
       console.error('Failed to load module:', err);
@@ -206,17 +194,48 @@
   }
 
   async function loadEnvironments() {
+    if (!projectId) {
+      projectEnvironment = null;
+      selectedSubEnvironment = null;
+      return;
+    }
+    
     try {
-      // Load all environments for the user (needed for the environment selector)
-      environments = await environmentClient.getEnvironments();
+      // Load the single project environment (each project has maximum one environment)
+      const response = await projectClient.getProjectEnvironment(projectId);
+      if (response.environment) {
+        // Convert ProjectEnvironmentLink to Environment format for compatibility
+        const projectEnv = response.environment;
+        projectEnvironment = {
+          id: projectEnv.environmentId,
+          name: projectEnv.environment?.name || 'Project Environment',
+          description: projectEnv.environment?.description || 'Default project environment',
+          config: projectEnv.environment?.config || { environments: {}, variable_definitions: {}, linked_apis: [] },
+          createdAt: typeof projectEnv.createdAt === 'string' ? projectEnv.createdAt : new Date(projectEnv.createdAt).toISOString(),
+          updatedAt: typeof projectEnv.createdAt === 'string' ? projectEnv.createdAt : new Date(projectEnv.createdAt).toISOString(), // Use same as createdAt since we don't have updatedAt
+          userId: 0 // Not relevant for project environment
+        };
+        
+        // Auto-select the first sub-environment if available
+        if (projectEnv.environment?.config?.environments) {
+          const subEnvKeys = Object.keys(projectEnv.environment.config.environments);
+          if (subEnvKeys.length > 0) {
+            selectedSubEnvironment = subEnvKeys[0];
+          }
+        }
+      } else {
+        projectEnvironment = null;
+        selectedSubEnvironment = null;
+      }
     } catch (err) {
-      console.error('Failed to load environments:', err);
-      environments = [];
+      console.error('Failed to load project environment:', err);
+      projectEnvironment = null;
+      selectedSubEnvironment = null;
       // Don't set error here as environments are optional
     }
   }
 
-    async function loadSequenceFlows() {
+  async function loadSequenceFlows() {
     
     // Step 1: Collect all unique flow IDs from all sequences
     const uniqueFlowIds = new Set<number>();
@@ -535,7 +554,6 @@
   }
 
   function handleEnvironmentSelect(event: CustomEvent<{ environmentId: number | null; subEnvironment: string | null }>) {
-    selectedEnvironmentId = event.detail.environmentId;
     selectedSubEnvironment = event.detail.subEnvironment;
   }
 
@@ -563,8 +581,8 @@
   }
 
   async function handleRunAllSequences() {
-    if (!selectedEnvironmentId || !selectedSubEnvironment) {
-      alert('Please select an environment first');
+    if (!projectEnvironment || !selectedSubEnvironment) {
+      alert('Please select a sub-environment first');
       return;
     }
 
@@ -573,16 +591,12 @@
       return;
     }
 
-    // Find the selected environment
-    const selectedEnv = environments.find(env => env.id === selectedEnvironmentId);
-    if (!selectedEnv) {
-      alert('Selected environment not found');
-      return;
-    }
+    // Use the current project environment
+    const selectedEnv = projectEnvironment;
 
     isRunningAll = true;
     console.log('Running all sequences with environment:', {
-      environmentId: selectedEnvironmentId,
+      environment: selectedEnv.name,
       subEnvironment: selectedSubEnvironment,
       sequences: sequences.map(s => s.name)
     });
@@ -613,7 +627,7 @@
             sequence,
             flows,
             project, // Add project information
-            environments,
+            environments: projectEnvironment ? [projectEnvironment] : [],
             selectedEnvironment: selectedEnv,
             selectedSubEnvironment: selectedSubEnvironment,
             environmentVariables,
@@ -671,8 +685,8 @@
   async function handleRunSequence(event: CustomEvent<{ sequence: FlowSequence }>) {
     const sequence = event.detail.sequence;
     
-    if (!selectedEnvironmentId || !selectedSubEnvironment) {
-      alert('Please select an environment first');
+    if (!projectEnvironment || !selectedSubEnvironment) {
+      alert('Please select a sub-environment first');
       return;
     }
 
@@ -682,12 +696,8 @@
       return;
     }
 
-    // Find the selected environment
-    const selectedEnv = environments.find(env => env.id === selectedEnvironmentId);
-    if (!selectedEnv) {
-      alert('Selected environment not found');
-      return;
-    }
+    // Use the current project environment
+    const selectedEnv = projectEnvironment;
 
     // Prepare environment variables
     let environmentVariables: Record<string, unknown> = {};
@@ -701,7 +711,7 @@
 
     console.log('Running sequence:', {
       sequenceName: sequence.name,
-      environmentId: selectedEnvironmentId,
+      environment: selectedEnv.name,
       subEnvironment: selectedSubEnvironment,
       flows: flows.map(f => f.name),
       environmentVariables: Object.keys(environmentVariables)
@@ -713,7 +723,7 @@
         sequence,
         flows,
         project, // Add project information
-        environments,
+        environments: projectEnvironment ? [projectEnvironment] : [],
         selectedEnvironment: selectedEnv,
         selectedSubEnvironment: selectedSubEnvironment,
         environmentVariables,
@@ -987,11 +997,9 @@
             </label>
             <SimplifiedEnvironmentSelector
               id="environment-selector"
-              {environments}
-              {linkedEnvironments}
-              {selectedEnvironmentId}
+              environment={projectEnvironment}
               {selectedSubEnvironment}
-              placeholder="Select environment for execution..."
+              placeholder="Select sub-environment..."
               on:select={handleEnvironmentSelect}
             />
           </div>
@@ -1016,7 +1024,7 @@
               on:click={handleRunAllSequences}
               disabled={!canRunAll || isRunningAll}
               class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-              title={!canRunAll ? 'Select an environment and ensure all sequences have flows' : 'Run all sequences in this module'}
+              title={!canRunAll ? 'Ensure project environment is configured and sequences have flows' : 'Run all sequences in this module'}
             >
               {#if isRunningAll}
                 <svg class="w-4 h-4 mr-2 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1033,17 +1041,17 @@
           </div>
         </div>
         
-        {#if selectedEnvironmentId && selectedSubEnvironment}
+        {#if projectEnvironment && selectedSubEnvironment}
           <div class="mt-3 text-xs text-green-600">
-            ✓ Ready to execute with selected environment
+            ✓ Ready to execute with project environment
           </div>
-        {:else if linkedEnvironments.length === 0}
+        {:else if !projectEnvironment}
           <div class="mt-3 text-xs text-yellow-600">
-            ⚠ No environments linked to this project. Link environments in project settings to enable execution.
+            ⚠ No environment configured for this project. Configure an environment in project settings to enable execution.
           </div>
         {:else}
           <div class="mt-3 text-xs text-gray-500">
-            Select an environment to enable sequence execution
+            Configuring project environment...
           </div>
         {/if}
       </div>
@@ -1163,7 +1171,7 @@
                   {sequence}
                   sequenceFlows={sequenceFlowsMap.get(sequence.id) || []}
                   executionResults={sequenceResultsMap.get(sequence.id) || []}
-                  {selectedEnvironmentId}
+                  selectedEnvironment={projectEnvironment}
                   {selectedSubEnvironment}
                   isRunning={runningSequences.has(sequence.id)}
                   on:editName={handleEditSequenceName}
@@ -1202,6 +1210,8 @@
   stepOrder={selectedStepOrder}
   projectVariables={projectVariables}
   previousFlowOutputs={previousFlowOutputs}
+  selectedEnvironment={projectEnvironment}
+  selectedSubEnvironment={selectedSubEnvironment}
   on:close={handleParameterPanelClose}
   on:save={handleParameterPanelSave}
 />

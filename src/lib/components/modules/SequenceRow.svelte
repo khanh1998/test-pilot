@@ -2,6 +2,7 @@
 <script lang="ts">
   import type { FlowSequence } from '../../types/flow_sequence.js';
   import type { TestFlow } from '../../types/test-flow.js';
+  import type { Environment } from '../../types/environment.js';
   import type { SequenceFlowResult } from '$lib/sequence-runner/types';
   import { createEventDispatcher } from 'svelte';
   import FlowCard from './FlowCard.svelte';
@@ -13,7 +14,7 @@
   export let sequence: FlowSequence;
   export let sequenceFlows: TestFlow[] = []; // Populated flows from sequence steps
   export let isEditing: boolean = false;
-  export let selectedEnvironmentId: number | null = null;
+  export let selectedEnvironment: Environment | null = null;
   export let selectedSubEnvironment: string | null = null;
   export let isRunning: boolean = false;
   export let executionResults: SequenceFlowResult[] = []; // New prop for execution results
@@ -159,7 +160,7 @@
   }
 
   $: steps = sequence.sequenceConfig?.steps || [];
-  $: canRun = sequenceFlows.length > 0 && selectedEnvironmentId && selectedSubEnvironment;
+  $: canRun = sequenceFlows.length > 0 && selectedEnvironment && selectedSubEnvironment;
 </script>
 
 <div class="sequence-row bg-white border border-gray-200 rounded-lg p-4 mb-4 {isRunning ? 'ring-2 ring-green-500 ring-opacity-50 bg-green-50' : ''}" class:animate-pulse={isRunning}>
