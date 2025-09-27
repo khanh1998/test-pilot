@@ -36,16 +36,18 @@ export async function getTestFlowsForUser(
     page?: number;
     limit?: number;
     search?: string;
+    projectId?: number;
   } = {}
 ): Promise<TestFlowListResponse> {
-  const { page = 1, limit = 20, search } = options;
+  const { page = 1, limit = 20, search, projectId } = options;
   const offset = (page - 1) * limit;
 
   // Get test flows with pagination from repository
   const { testFlows: userTestFlows, total } = await getUserTestFlows(userId, {
     limit,
     offset,
-    search
+    search,
+    projectId
   });
 
   // Get associated APIs for each test flow

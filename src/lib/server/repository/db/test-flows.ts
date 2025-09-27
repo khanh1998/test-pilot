@@ -54,6 +54,7 @@ export async function getUserTestFlows(
     limit?: number;
     offset?: number;
     search?: string;
+    projectId?: number;
   } = {}
 ): Promise<{
   testFlows: Array<{
@@ -65,10 +66,15 @@ export async function getUserTestFlows(
   }>;
   total: number;
 }> {
-  const { limit = 20, offset = 0, search } = options;
+  const { limit = 20, offset = 0, search, projectId } = options;
 
-  // Build the base query
-  let whereConditions = eq(testFlows.userId, userId);
+  // Build the base query conditions
+  const whereConditions = [eq(testFlows.userId, userId)];
+  
+  // Add project filter if provided
+  if (projectId !== undefined) {
+    whereConditions.push(eq(testFlows.projectId, projectId));
+  }
   
   // Add search condition if provided
   if (search && search.trim()) {
@@ -77,14 +83,16 @@ export async function getUserTestFlows(
       ilike(testFlows.name, searchTerm),
       ilike(testFlows.description, searchTerm)
     );
-    whereConditions = and(whereConditions, searchCondition)!;
+    whereConditions.push(searchCondition!);
   }
+
+  const finalWhereCondition = and(...whereConditions);
 
   // Get the total count
   const totalResult = await db
     .select({ count: count() })
     .from(testFlows)
-    .where(whereConditions);
+    .where(finalWhereCondition);
   
   const total = totalResult[0]?.count || 0;
 
@@ -98,7 +106,7 @@ export async function getUserTestFlows(
       updatedAt: testFlows.updatedAt
     })
     .from(testFlows)
-    .where(whereConditions)
+    .where(finalWhereCondition)
     .orderBy(desc(testFlows.updatedAt))
     .limit(limit)
     .offset(offset);

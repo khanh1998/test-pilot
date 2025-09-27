@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
+  import { projectStore, type Project } from '$lib/store/project';
   import * as testFlowClient from '$lib/http_client/test-flow';
   import * as apiClient from '$lib/http_client/apis';
   import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
@@ -19,6 +20,11 @@
   let loading = true;
   let error: string | null = null;
   let showCreateModal = false;
+
+  // Project state
+  let selectedProject: Project | null = null;
+  let isProjectLoading = false;
+  let projectError: string | null = null;
 
   // Pagination state
   let currentPage = 1;
@@ -53,9 +59,28 @@
   } | null = null;
   let cloneLoading = false;
 
+  // Subscribe to project store
+  const unsubscribe = projectStore.subscribe((state) => {
+    const previousProjectId = selectedProject?.id;
+    selectedProject = state.selectedProject;
+    isProjectLoading = state.isLoading;
+    projectError = state.error;
+    
+    // Reload test flows and APIs when project selection changes
+    if (previousProjectId !== selectedProject?.id) {
+      fetchTestFlows();
+      fetchAvailableApis();
+    }
+  });
+
   onMount(async () => {
-    await fetchTestFlows();
-    await fetchAvailableApis();
+    // Load projects first
+    await projectStore.loadProjects();
+    // fetchTestFlows and fetchAvailableApis will be called via the subscription
+  });
+
+  onDestroy(() => {
+    unsubscribe();
   });
 
   async function fetchTestFlows() {
@@ -66,7 +91,8 @@
       const result = await testFlowClient.getTestFlows({
         page: currentPage,
         limit: pageSize,
-        search: searchTerm.trim() || undefined
+        search: searchTerm.trim() || undefined,
+        projectId: selectedProject?.id
       });
       
       if (result) {
@@ -123,7 +149,7 @@
 
   async function fetchAvailableApis() {
     try {
-      const result = await apiClient.getApiList();
+      const result = await apiClient.getApiList(selectedProject?.id);
       if (result && result.apis) {
         availableApis = result.apis as { id: number; name: string; host: string; selected?: boolean }[];
       } else {
@@ -175,6 +201,7 @@
         name: newFlowName,
         description: newFlowDescription,
         apiIds: selectedApiIds,
+        projectId: selectedProject?.id,
         flowJson: {
           settings: { 
             api_hosts: apiHosts
@@ -295,9 +322,20 @@
   <div class="mb-6 flex items-center justify-between">
     <div>
       <h1 class="text-2xl font-bold text-gray-900">Test Flows</h1>
-      <p class="mt-1 text-sm text-gray-600">
-        Create and manage API test sequences
-      </p>
+      <div class="mt-1">
+        <p class="text-sm text-gray-600">
+          Create and manage API test sequences
+        </p>
+        {#if selectedProject}
+          <p class="text-sm text-gray-600 mt-1">
+            Showing test flows for project: <span class="font-medium">{selectedProject.name}</span>
+          </p>
+        {:else}
+          <p class="text-sm text-gray-600 mt-1">
+            No project selected
+          </p>
+        {/if}
+      </div>
     </div>
     <div class="flex gap-3">
       <button
@@ -362,18 +400,40 @@
         {searchTerm.trim() ? 'No Test Flows Found' : 'No Test Flows Yet'}
       </h3>
       <p class="mb-6 text-gray-600">
-        {searchTerm.trim() 
-          ? `No test flows match "${searchTerm}". Try adjusting your search terms.`
-          : 'Create your first test flow to define reusable sequences of API calls.'
-        }
+        {#if searchTerm.trim()}
+          No test flows match "{searchTerm}". Try adjusting your search terms.
+        {:else if selectedProject}
+          No test flows found for project "{selectedProject.name}". Create your first test flow for this project.
+        {:else}
+          Select a project to view its test flows, or create your first test flow.
+        {/if}
       </p>
       {#if !searchTerm.trim()}
-        <button
-          class="rounded-md bg-blue-600 px-4 py-2 text-white transition hover:bg-blue-700"
-          on:click={() => (showCreateModal = true)}
-        >
-          Create New Test Flow
-        </button>
+        {#if selectedProject}
+          <button
+            class="rounded-md bg-blue-600 px-4 py-2 text-white transition hover:bg-blue-700"
+            on:click={() => (showCreateModal = true)}
+          >
+            Create Test Flow for {selectedProject.name}
+          </button>
+        {:else}
+          <div class="space-y-2">
+            <div>
+              <a href="/dashboard/projects" class="text-blue-500 hover:text-blue-600">
+                Create or select a project
+              </a>
+            </div>
+            <div class="text-gray-400">or</div>
+            <div>
+              <button
+                class="rounded-md bg-blue-600 px-4 py-2 text-white transition hover:bg-blue-700"
+                on:click={() => (showCreateModal = true)}
+              >
+                Create Test Flow
+              </button>
+            </div>
+          </div>
+        {/if}
       {/if}
     </div>
   {:else}
@@ -445,7 +505,14 @@
 {#if showCreateModal}
   <div class="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-black">
     <div class="mx-4 w-full max-w-lg rounded-lg bg-white p-6">
-      <h2 class="mb-4 text-2xl font-bold">Create New Test Flow</h2>
+      <div class="mb-4">
+        <h2 class="text-2xl font-bold">Create New Test Flow</h2>
+        {#if selectedProject}
+          <p class="text-sm text-gray-600 mt-1">
+            Creating test flow for project: <span class="font-medium">{selectedProject.name}</span>
+          </p>
+        {/if}
+      </div>
 
       <div class="mb-4">
         <label for="flowName" class="mb-1 block text-sm font-medium text-gray-700">Name</label>
@@ -477,7 +544,13 @@
         >
 
         {#if availableApis.length === 0}
-          <p class="text-gray-500 italic">No APIs available. Please upload an API first.</p>
+          <p class="text-gray-500 italic">
+            {#if selectedProject}
+              No APIs available for project "{selectedProject.name}". Please upload an API to this project first.
+            {:else}
+              No APIs available. Please select a project and upload an API first.
+            {/if}
+          </p>
         {:else}
           <div class="max-h-60 overflow-y-auto rounded-md border border-gray-300 p-2">
             {#each availableApis as api (api.id)}
