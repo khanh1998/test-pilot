@@ -9,9 +9,8 @@ export interface SequenceRunnerOptions {
   sequence: FlowSequence;
   flows: TestFlow[]; // All flows in the sequence, ordered by step_order
   project: Project; // Project information for variable resolution
-  selectedEnvironment: Environment | null;
-  selectedSubEnvironment: string | null; // Selected sub-environment (dev, sit, uat, etc.)
-  environmentVariables: Record<string, unknown>;
+  selectedEnvironment: Environment;
+  selectedSubEnvironment: string; // Selected sub-environment (dev, sit, uat, etc.)
   preferences: ExecutionPreferences;
   onLog: (level: 'info' | 'debug' | 'error' | 'warning', message: string, details?: string) => void;
   onSequenceStart?: () => void;

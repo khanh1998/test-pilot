@@ -607,12 +607,6 @@
 
         console.log(`\n🚀 Running sequence: ${sequence.name}`);
         
-        // Prepare environment variables
-        let environmentVariables: Record<string, unknown> = {};
-        if (selectedEnv.config.environments[selectedSubEnvironment]) {
-          environmentVariables = selectedEnv.config.environments[selectedSubEnvironment].variables;
-        }
-
         try {
           // Create sequence runner options
           const sequenceOptions: SequenceRunnerOptions = {
@@ -621,7 +615,6 @@
             project: selectedProject, // Add project information
             selectedEnvironment: selectedEnv,
             selectedSubEnvironment: selectedSubEnvironment,
-            environmentVariables,
             preferences: executionPreferences,
             onLog: (level, message, details) => {
               console.log(`[${sequence.name}] [${level}] ${message}`, details);
@@ -690,13 +683,6 @@
     // Use the current project environment
     const selectedEnv = projectEnvironment;
 
-    // Prepare environment variables
-    let environmentVariables: Record<string, unknown> = {};
-    
-    if (selectedEnv.config.environments[selectedSubEnvironment]) {
-      environmentVariables = selectedEnv.config.environments[selectedSubEnvironment].variables;
-    }
-
     runningSequences.add(sequence.id);
     runningSequences = new Set(runningSequences); // Trigger reactivity
 
@@ -705,7 +691,6 @@
       environment: selectedEnv.name,
       subEnvironment: selectedSubEnvironment,
       flows: flows.map(f => f.name),
-      environmentVariables: Object.keys(environmentVariables)
     });
 
     try {
@@ -716,7 +701,6 @@
         project: selectedProject, // Add project information
         selectedEnvironment: selectedEnv,
         selectedSubEnvironment: selectedSubEnvironment,
-        environmentVariables,
         preferences: executionPreferences,
         onLog: (level, message, details) => {
           console.log(`[SEQUENCE ${sequence.name}] [${level}] ${message}`, details);
