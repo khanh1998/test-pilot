@@ -21,11 +21,7 @@
   export let executionState: ExecutionState = {};
 
   // Environment context for template resolution
-  export let environments: import('$lib/types/environment').Environment[] = [];
   export let selectedEnvironment: import('$lib/types/environment').Environment | null = null;
-
-  // Ensure environments is used (prevent Svelte warning)
-  $: void environments;
 
   // Parameter input modal state
   let showParameterInputModal = false;

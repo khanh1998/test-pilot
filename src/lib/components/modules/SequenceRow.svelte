@@ -249,37 +249,38 @@
 
   <!-- Flow Cards Container -->
   <div class="flex items-center gap-3 overflow-x-auto py-2" style="min-height: 11rem;">
-      {#each sequenceFlows as flow, index (`${flow.id}-${index}`)}
-        {@const flowIdNum = parseInt(flow.id)}
-        {@const sequenceStep = sequence.sequenceConfig?.steps?.find(s => s.test_flow_id === flowIdNum)}
-        {@const stepOrder = sequenceStep?.step_order || (index + 1)}
-        {console.log(`🔍 Rendering FlowCard for ${flow.name}: flowId=${flowIdNum}, stepOrder=${stepOrder}, from sequenceStep=${!!sequenceStep}`)}
-        <div
-          class="drop-zone transition-all duration-200"
-          class:border-2={dropTargetIndex === index}
-          class:border-blue-400={dropTargetIndex === index}
-          class:border-dashed={dropTargetIndex === index}
-          class:bg-blue-50={dropTargetIndex === index}
-          class:rounded-lg={dropTargetIndex === index}
-          class:p-1={dropTargetIndex === index}
-          on:dragover={(e) => handleDragOver(e, index)}
-          on:drop={(e) => handleDrop(e, index)}
-          role="button"
-          tabindex="0"
-        >
-          <FlowCard
-            {flow}
-            stepOrder={stepOrder}
-            isDragging={draggedIndex === index}
-            isDropTarget={dropTargetIndex === index}
-            {executionResults}
-            on:click={handleFlowClick}
-            on:dragstart={handleDragStart}
-            on:dragend={handleDragEnd}
-            on:remove={handleFlowRemove}
-            on:showResults={handleShowResults}
-          />
-        </div>
+      {#each steps as sequenceStep, index (`${sequenceStep.test_flow_id}-${index}`)}
+        {@const flow = sequenceFlows.find(f => parseInt(f.id) === sequenceStep.test_flow_id)}
+        {@const stepOrder = sequenceStep.step_order}
+        {console.log(`🔍 Rendering FlowCard for step ${stepOrder}: flowId=${sequenceStep.test_flow_id}, flow=${flow?.name || 'NOT FOUND'}`)}
+        {#if flow}
+          <div
+            class="drop-zone transition-all duration-200"
+            class:border-2={dropTargetIndex === index}
+            class:border-blue-400={dropTargetIndex === index}
+            class:border-dashed={dropTargetIndex === index}
+            class:bg-blue-50={dropTargetIndex === index}
+            class:rounded-lg={dropTargetIndex === index}
+            class:p-1={dropTargetIndex === index}
+            on:dragover={(e) => handleDragOver(e, index)}
+            on:drop={(e) => handleDrop(e, index)}
+            role="button"
+            tabindex="0"
+          >
+            <FlowCard
+              {flow}
+              {stepOrder}
+              isDragging={draggedIndex === index}
+              isDropTarget={dropTargetIndex === index}
+              {executionResults}
+              on:click={handleFlowClick}
+              on:dragstart={handleDragStart}
+              on:dragend={handleDragEnd}
+              on:remove={handleFlowRemove}
+              on:showResults={handleShowResults}
+            />
+          </div>
+        {/if}
       {/each}    <!-- Add Flow Search -->
     <div class="flex-shrink-0">
       <FlowSearch
