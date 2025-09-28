@@ -12,7 +12,6 @@
     id: number;
     name: string;
     description: string;
-    apis: { id: number; name: string }[];
     createdAt: string;
     updatedAt: string;
   }[] = [];

@@ -36,7 +36,7 @@ export class SequenceParameterResolver {
           ),
           // All parameters resolved to concrete values, no environment info needed
           environment: undefined,
-          linkedEnvironments: undefined
+          linkedEnvironment: undefined
         },
         parameters: flow.flowJson.parameters || [],
         outputs: flow.flowJson.outputs || [],

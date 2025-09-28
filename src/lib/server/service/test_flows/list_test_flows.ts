@@ -1,4 +1,4 @@
-import { getUserTestFlows, getMultipleTestFlowApiAssociations } from '$lib/server/repository/db/test-flows';
+import { getUserTestFlows } from '$lib/server/repository/db/test-flows';
 
 export interface TestFlowListItem {
   id: number;
@@ -6,10 +6,6 @@ export interface TestFlowListItem {
   description: string | null;
   createdAt: Date;
   updatedAt: Date;
-  apis: Array<{
-    id: number;
-    name: string;
-  }>;
 }
 
 export interface TestFlowListResponse {
@@ -50,35 +46,8 @@ export async function getTestFlowsForUser(
     projectId
   });
 
-  // Get associated APIs for each test flow
-  const testFlowIds = userTestFlows.map((flow) => flow.id);
-
-  let testFlowApisMap: Record<number, { id: number; name: string }[]> = {};
-
-  if (testFlowIds.length > 0) {
-    const testFlowApiAssociations = await getMultipleTestFlowApiAssociations(testFlowIds);
-
-    // Group APIs by test flow
-    testFlowApisMap = testFlowApiAssociations.reduce(
-      (acc, item) => {
-        if (!acc[item.testFlowId]) {
-          acc[item.testFlowId] = [];
-        }
-        acc[item.testFlowId].push({
-          id: item.apiId,
-          name: item.apiName
-        });
-        return acc;
-      },
-      {} as Record<number, { id: number; name: string }[]>
-    );
-  }
-
-  // Add APIs to each test flow
-  const testFlows = userTestFlows.map((flow) => ({
-    ...flow,
-    apis: testFlowApisMap[flow.id] || []
-  }));
+  // Map test flows to the response format
+  const testFlows = userTestFlows;
 
   // Calculate pagination info
   const totalPages = Math.ceil(total / limit);

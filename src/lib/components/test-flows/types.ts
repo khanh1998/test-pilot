@@ -129,7 +129,7 @@ export type TestFlowData = {
       environmentId: number | null;
       subEnvironment: string | null;
     };
-    linkedEnvironments?: EnvironmentMapping[]; // New: environment-parameter mappings
+    linkedEnvironment?: EnvironmentMapping | null; // Single environment-parameter mapping per project
     // Other settings
   };
   parameters: FlowParameter[];

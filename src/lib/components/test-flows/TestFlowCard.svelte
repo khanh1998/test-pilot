@@ -3,7 +3,6 @@
     id: number;
     name: string;
     description: string;
-    apis: { id: number; name: string }[];
     createdAt: string;
     updatedAt: string;
   }
@@ -20,23 +19,7 @@
       {flow.description || 'No description'}
     </p>
 
-    <!-- APIs Section - More Compact -->
-    {#if flow.apis.length > 0}
-      <div class="mb-3">
-        <div class="flex flex-wrap gap-1">
-          {#each flow.apis.slice(0, 3) as api (api.id)}
-            <span class="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">
-              {api.name}
-            </span>
-          {/each}
-          {#if flow.apis.length > 3}
-            <span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
-              +{flow.apis.length - 3} more
-            </span>
-          {/if}
-        </div>
-      </div>
-    {/if}
+
 
     <!-- Date and Actions -->
     <div class="flex items-center justify-between text-xs text-gray-500 mb-3">

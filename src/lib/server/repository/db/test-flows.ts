@@ -22,10 +22,6 @@ export interface TestFlowListItem {
   description: string | null;
   createdAt: Date;
   updatedAt: Date;
-  apis: Array<{
-    id: number;
-    name: string;
-  }>;
 }
 
 export interface EndpointInfo {
@@ -107,7 +103,7 @@ export async function getUserTestFlows(
     })
     .from(testFlows)
     .where(finalWhereCondition)
-    .orderBy(desc(testFlows.updatedAt))
+    .orderBy(desc(testFlows.createdAt))
     .limit(limit)
     .offset(offset);
 

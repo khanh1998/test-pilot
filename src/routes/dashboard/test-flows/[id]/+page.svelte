@@ -10,7 +10,8 @@
   // Import the components we created
   import TestFlowEditor from '$lib/components/test-flows/TestFlowEditor.svelte';
   import EnvironmentLinkingManager from '$lib/components/environments/EnvironmentLinkingManager.svelte';
-  import { getEnvironments } from '$lib/http_client/environments';
+  import { getProjectEnvironment } from '$lib/http_client/projects';
+  import { projectStore } from '$lib/store/project';
   import type { Environment } from '$lib/types/environment';
 
   let testFlowId = $derived(parseInt($page.params.id || '0'));
@@ -40,10 +41,15 @@
   let availableApis: any[] = $state([]);
   let showAddApiModal = $state(false);
 
-  // Environments for linking
-  let environments: Environment[] = $state([]);
+  // Environment for linking (single environment per project)
+  let environment: Environment | null = $state(null);
 
+  // Load projects on mount if not already loaded
   onMount(async () => {
+    // Ensure projects are loaded and project is selected
+    if (!$projectStore.selectedProject && $projectStore.projects.length === 0) {
+      await projectStore.loadProjects();
+    }
     await fetchTestFlow();
 
     // Initialize api_hosts if not existing
@@ -51,16 +57,16 @@
       flowJson.settings.api_hosts = {};
     }
 
-    // Initialize linkedEnvironments if not existing
-    if (!flowJson.settings.linkedEnvironments) {
-      flowJson.settings.linkedEnvironments = [];
+    // Initialize linkedEnvironment if not existing (single environment per project)
+    if (!flowJson.settings.linkedEnvironment) {
+      flowJson.settings.linkedEnvironment = null;
     }
 
     // Load available APIs for the dropdown
     await loadAvailableApis();
 
-    // Load available environments for linking
-    await loadEnvironments();
+    // Load project environment for linking
+    await loadEnvironment();
   });
 
   // Update document title and breadcrumb when testFlow is loaded
@@ -140,13 +146,35 @@
     }
   }
 
-  async function loadEnvironments() {
+  async function loadEnvironment() {
     try {
-      environments = await getEnvironments();
-      console.log('Environments loaded:', environments);
+      // Get selected project from store
+      const selectedProject = $projectStore.selectedProject;
+      if (!selectedProject) {
+        console.warn('No project selected, cannot load environment');
+        return;
+      }
+
+      const response = await getProjectEnvironment(selectedProject.id);
+      // Convert ProjectEnvironmentLink.environment to Environment type
+      if (response.environment?.environment) {
+        const envData = response.environment.environment;
+        environment = {
+          id: envData.id,
+          name: envData.name,
+          description: envData.description,
+          config: envData.config,
+          userId: 0, // Not needed for display purposes
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+      } else {
+        environment = null;
+      }
+      console.log('Environment loaded:', environment);
     } catch (err) {
-      console.error('Error loading environments:', err);
-      environments = [];
+      console.error('Error loading environment:', err);
+      environment = null;
     }
   }
   
@@ -566,16 +594,13 @@
               <!-- Environment Links Settings -->
               <div class="mb-6">
                 <EnvironmentLinkingManager
-                  {environments}
-                  linkedEnvironments={flowJson.settings.linkedEnvironments || []}
+                  {environment}
+                  linkedEnvironment={flowJson.settings.linkedEnvironment || null}
                   flowParameters={flowJson.parameters || []}
                   disabled={isSaving}
                   on:change={(event) => {
-                    const { linkedEnvironments } = event.detail;
-                    if (!flowJson.settings.linkedEnvironments) {
-                      flowJson.settings.linkedEnvironments = [];
-                    }
-                    flowJson.settings.linkedEnvironments = linkedEnvironments;
+                    const { linkedEnvironment } = event.detail;
+                    flowJson.settings.linkedEnvironment = linkedEnvironment;
                     markDirty();
                   }}
                 />
