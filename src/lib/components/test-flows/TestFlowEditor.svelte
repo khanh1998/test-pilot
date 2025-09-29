@@ -8,7 +8,6 @@
   import { fade } from 'svelte/transition';
   import type { TestFlowData, Endpoint, ExecutionState, EndpointExecutionState, Parameter } from './types';
   import { getEndpointById, type EndpointDetails } from '$lib/http_client/endpoints';
-  import { getProjectEnvironment } from '$lib/http_client/projects';
   import type { Environment } from '$lib/types/environment';
   import { createTemplateContextFromFlowRunner } from '$lib/template/utils';
   import { createTemplateFunctions } from '$lib/template/functions';
@@ -24,6 +23,10 @@
   // flowData includes settings.api_hosts which contains multiple API host configurations
   export let flowData: TestFlowData;
   export let endpoints: Endpoint[] = [];
+  
+  // Environment props passed from parent
+  export let environment: Environment | null = null;
+  export let selectedSubEnvironment: string | null = null;
 
   // Initialize outputs if not present
   $: if (flowData && !flowData.outputs) {
@@ -61,8 +64,8 @@
 
       // Compute environment variables from selected environment
       const environmentVariables: Record<string, unknown> = {};
-      // Ensure we have environment loaded and valid selection before computing variables
-      if (!isLoadingEnvironment && environment && selectedSubEnvironment) {
+      // Use environment prop directly
+      if (environment && selectedSubEnvironment) {
         if (environment.config.environments[selectedSubEnvironment]) {
           const subEnvConfig = environment.config.environments[selectedSubEnvironment];
           
@@ -99,7 +102,6 @@
         }
       } else {
         console.log('Template context computed without environment variables:', {
-          isLoadingEnvironment,
           hasEnvironment: !!environment,
           selectedSubEnvironment
         });
@@ -134,9 +136,7 @@
   // Bind to FlowRunner's current parameter values to use in template context
   let currentParameterValues: Record<string, unknown> = {};
 
-  // Environment selection state
-  let environment: Environment | null = null;
-  let selectedSubEnvironment: string | null = null;
+  // Loading state for environment operations
   let isLoadingEnvironment = false;
   let selectedProject: import('$lib/store/project').Project | null = null;
 
@@ -282,11 +282,8 @@
     selectedProject = state.selectedProject;
   });
 
-  // Add event listener on mount
+    // Add event listener on mount
   onMount(async () => {
-    // Load environment for the current project
-    await loadEnvironment();
-    
     // Listen for custom events on the component's node
     const node = document.querySelector('svelte-component[this="TestFlowEditor"]');
     if (node) {
@@ -298,50 +295,6 @@
       });
     }
   });
-
-  // Watch for project changes and reload environment
-  $: if (selectedProject) {
-    loadEnvironment();
-  }
-
-  async function loadEnvironment() {
-    if (!selectedProject) {
-      environment = null;
-      return;
-    }
-
-    try {
-      isLoadingEnvironment = true;
-      
-      // Get the project's environment using the new project client
-      const response = await getProjectEnvironment(selectedProject.id);
-      
-      if (response.environment?.environment) {
-        // Extract the actual environment data from the link
-        environment = response.environment.environment as Environment;
-        
-        // Initialize environment selection from existing flowData
-        if (flowData.settings.environment) {
-          const subEnv = flowData.settings.environment.subEnvironment;
-          selectedSubEnvironment = subEnv;
-          
-          console.log('Environment selection initialized:', { 
-            environmentId: environment?.id, 
-            selectedSubEnvironment,
-            hasEnvironmentData: !!environment
-          });
-        }
-      } else {
-        environment = null;
-        console.log('No environment configured for project:', selectedProject.name);
-      }
-    } catch (error) {
-      console.error('Failed to load environment:', error);
-      environment = null;
-    } finally {
-      isLoadingEnvironment = false;
-    }
-  }
 
   function handleEnvironmentSelection(event: CustomEvent<{ environmentId: number | null; subEnvironment: string | null }>) {
     const { environmentId, subEnvironment } = event.detail;
@@ -670,7 +623,7 @@
       <!-- Environment Selection -->
       <div class="flex items-center space-x-4">
         <div class="min-w-0 flex-1">
-          <div class="w-64">
+          <div class="w-32">
             <SimplifiedEnvironmentSelector
               id="environment-selector"
               {environment}

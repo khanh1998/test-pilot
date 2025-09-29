@@ -69,11 +69,6 @@
     </p>
   {:else}
     <div class="space-y-2">
-      <!-- Show the project environment name -->
-      <div class="text-sm text-gray-600">
-        Environment: <span class="font-medium text-gray-900">{environmentName}</span>
-      </div>
-      
       <!-- Sub-environment selector -->
       {#if subEnvironmentOptions.length > 0}
         <select

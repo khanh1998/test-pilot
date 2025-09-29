@@ -263,10 +263,7 @@ export class FlowRunner {
     this.state.isRunning = false;
     this.state.parameterValues = {};
     this.state.shouldStopExecution = false;
-
-    if (this.options.preferences.serverCookieHandling) {
-      this.state.cookieStore.clear();
-    }
+    this.state.cookieStore.clear();
   }
 
   updateParameterValues(parametersWithMissingValues: FlowParameter[]): void {

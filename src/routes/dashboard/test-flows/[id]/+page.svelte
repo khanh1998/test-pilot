@@ -46,10 +46,6 @@
 
   // Load projects on mount if not already loaded
   onMount(async () => {
-    // Ensure projects are loaded and project is selected
-    if (!$projectStore.selectedProject && $projectStore.projects.length === 0) {
-      await projectStore.loadProjects();
-    }
     await fetchTestFlow();
 
     // Initialize api_hosts if not existing
@@ -136,10 +132,18 @@
 
   async function loadAvailableApis() {
     try {
-      const apisData = await getApiList();
+      // Get selected project from store
+      const selectedProject = $projectStore.selectedProject;
+      if (!selectedProject) {
+        console.warn('No project selected, cannot load APIs');
+        availableApis = [];
+        return;
+      }
+
+      const apisData = await getApiList(selectedProject.id);
       if (apisData && apisData.apis && Array.isArray(apisData.apis)) {
         availableApis = apisData.apis;
-        console.log('Available APIs loaded:', availableApis);
+        console.log('Available APIs loaded for project:', selectedProject.id, availableApis);
       }
     } catch (err) {
       console.error('Error loading available APIs:', err);
@@ -277,6 +281,45 @@
     }
   }
 
+  function handleTestFlowChange(event: CustomEvent) {
+    // Extract and update the flow data from the event
+    const updatedFlowData = event.detail;
+    if (updatedFlowData) {
+      // Update flowJson with the changes, preserving endpoints reference
+      const updatedSteps = updatedFlowData.steps || [];
+
+      // Create a mapping from old step IDs to new ones
+      const stepIdMap = new Map();
+
+      // Normalize step IDs to ensure they follow the format "step1", "step2", etc.
+      const normalizedSteps = updatedSteps.map((step: any, index: number) => {
+        // If the step ID uses the timestamp format (step-12345), convert it
+        if (step.step_id && step.step_id.startsWith('step-')) {
+          const oldId = step.step_id;
+          const newId = `step${index + 1}`;
+          stepIdMap.set(oldId, newId);
+
+          return {
+            ...step,
+            step_id: newId
+          };
+        }
+        return step;
+      });
+
+      // Ensure parameters are properly updated - prioritize updatedFlowData.parameters
+      const updatedParameters = updatedFlowData.parameters || flowJson.parameters || [];
+
+      flowJson = {
+        settings: updatedFlowData.settings || flowJson.settings,
+        steps: normalizedSteps,
+        parameters: updatedParameters,
+        outputs: updatedFlowData.outputs || flowJson.outputs || []
+      };
+    }
+    markDirty();
+  }
+
   function addStep() {
     if (!newStepLabel.trim()) {
       error = 'Step label is required';
@@ -385,44 +428,9 @@
               <TestFlowEditor
                 flowData={{ ...flowJson, endpoints }}
                 {endpoints}
-                on:change={(event: CustomEvent) => {
-                  // Extract and update the flow data from the event
-                  const updatedFlowData = event.detail;
-                  if (updatedFlowData) {
-                    // Update flowJson with the changes, preserving endpoints reference
-                    const updatedSteps = updatedFlowData.steps || [];
-
-                    // Create a mapping from old step IDs to new ones
-                    const stepIdMap = new Map();
-
-                    // Normalize step IDs to ensure they follow the format "step1", "step2", etc.
-                    const normalizedSteps = updatedSteps.map((step: any, index: number) => {
-                      // If the step ID uses the timestamp format (step-12345), convert it
-                      if (step.step_id && step.step_id.startsWith('step-')) {
-                        const oldId = step.step_id;
-                        const newId = `step${index + 1}`;
-                        stepIdMap.set(oldId, newId);
-
-                        return {
-                          ...step,
-                          step_id: newId
-                        };
-                      }
-                      return step;
-                    });
-
-                    // Ensure parameters are properly updated - prioritize updatedFlowData.parameters
-                    const updatedParameters = updatedFlowData.parameters || flowJson.parameters || [];
-
-                    flowJson = {
-                      settings: updatedFlowData.settings || flowJson.settings,
-                      steps: normalizedSteps,
-                      parameters: updatedParameters,
-                      outputs: updatedFlowData.outputs || flowJson.outputs || []
-                    };
-                  }
-                  markDirty();
-                }}
+                {environment}
+                selectedSubEnvironment={flowJson.settings.environment?.subEnvironment || null}
+                on:change={handleTestFlowChange}
                 on:reset={handleReset}
                 on:executionComplete={handleExecutionComplete}
                 on:log={handleLog}
