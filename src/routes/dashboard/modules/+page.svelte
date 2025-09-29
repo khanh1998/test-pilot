@@ -37,9 +37,6 @@
     if (!selectedProject && !storeLoading) {
       await projectStore.loadProjects();
     }
-    
-    // Load modules if we have a selected project
-    await loadModules();
   });
 
   $effect(() => {

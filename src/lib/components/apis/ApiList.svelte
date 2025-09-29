@@ -25,13 +25,25 @@
 
   // Watch for changes in selectedProject and reload APIs
   $effect(() => {
-    loadApis();
+    if (selectedProject) {
+      loadApis();
+    } else {
+      // Clear APIs and reset state when no project is selected
+      apis = [];
+      loading = false;
+      error = null;
+    }
   });
 
   async function loadApis() {
+    if (!selectedProject) {
+      return;
+    }
+
     try {
       loading = true;
-      const apiList = await getApiList(selectedProject?.id);
+      error = null;
+      const apiList = await getApiList(selectedProject.id);
       apis = apiList && apiList.apis ? apiList.apis : [];
     } catch (err) {
       error = err instanceof Error ? err.message : 'An error occurred while fetching APIs';
@@ -39,11 +51,6 @@
       loading = false;
     }
   }
-
-  onMount(() => {
-    // Load APIs when component mounts
-    loadApis();
-  });
 
   function viewApi(apiId: number) {
     goto(`/dashboard/apis/${apiId}`);

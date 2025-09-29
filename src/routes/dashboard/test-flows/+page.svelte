@@ -72,12 +72,6 @@
     }
   });
 
-  onMount(async () => {
-    // Load projects first
-    await projectStore.loadProjects();
-    // fetchTestFlows and fetchAvailableApis will be called via the subscription
-  });
-
   onDestroy(() => {
     unsubscribe();
   });

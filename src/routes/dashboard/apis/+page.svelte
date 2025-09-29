@@ -14,11 +14,6 @@
     projectError = state.error;
   });
 
-  onMount(() => {
-    // Load projects when page mounts
-    projectStore.loadProjects().catch(console.error);
-  });
-
   onDestroy(() => {
     unsubscribe();
   });
