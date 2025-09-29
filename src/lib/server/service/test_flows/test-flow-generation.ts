@@ -58,7 +58,8 @@ export async function fetchEndpointsForFlow(endpointIds: number[], userId?: numb
 export async function generateTestFlow(
   endpointIds: number[],
   description: string,
-  userId: number
+  userId: number,
+  projectId?: number
 ): Promise<TestFlowGenerationResult> {
   // Fetch and validate endpoints
   const endpoints = await fetchEndpointsForFlow(endpointIds, userId);
@@ -79,7 +80,8 @@ export async function generateTestFlow(
     name,
     description: flowDescription,
     flowJson,
-    userId
+    userId,
+    projectId
   }).returning();
 
   // Add settings info to flow - get unique API IDs from endpoints

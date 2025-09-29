@@ -8,6 +8,7 @@ export interface TestFlowWithApis {
   description: string | null;
   flowJson: any;
   userId: number | null;
+  projectId: number | null;
   createdAt: Date;
   updatedAt: Date;
   apis: Array<{
@@ -141,7 +142,16 @@ export async function getMultipleTestFlowApiAssociations(testFlowIds: number[]):
 // Get a test flow by ID and user ID
 export async function getTestFlowById(id: number, userId: number): Promise<TestFlowWithApis | null> {
   const [testFlow] = await db
-    .select()
+    .select({
+      id: testFlows.id,
+      name: testFlows.name,
+      description: testFlows.description,
+      flowJson: testFlows.flowJson,
+      userId: testFlows.userId,
+      projectId: testFlows.projectId,
+      createdAt: testFlows.createdAt,
+      updatedAt: testFlows.updatedAt
+    })
     .from(testFlows)
     .where(and(eq(testFlows.id, id), eq(testFlows.userId, userId)));
 
@@ -308,6 +318,7 @@ export async function createTestFlow(testFlowData: {
   name: string;
   description?: string | null;
   userId: number;
+  projectId?: number | null;
   flowJson: any;
 }): Promise<{
   id: number;
@@ -315,6 +326,7 @@ export async function createTestFlow(testFlowData: {
   description: string | null;
   flowJson: any;
   userId: number | null;
+  projectId: number | null;
   createdAt: Date;
   updatedAt: Date;
 }> {
