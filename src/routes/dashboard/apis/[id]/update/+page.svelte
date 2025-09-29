@@ -1,8 +1,9 @@
 <script lang="ts">
   import { page } from '$app/stores';
   import ApiFileUpload from '$lib/components/apis/ApiFileUpload.svelte';
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { getApiDetails } from '$lib/http_client/apis';
+  import { setBreadcrumbOverride, clearBreadcrumbOverride } from '$lib/store/breadcrumb';
 
   const apiId = parseInt($page.params.id);
 
@@ -23,21 +24,25 @@
       }
       
       api = data.api as typeof api;
+      
+      // Set breadcrumb override for the API name
+      if (api?.name) {
+        setBreadcrumbOverride(apiId.toString(), api.name);
+      }
     } catch (err) {
       error = err instanceof Error ? err.message : 'An error occurred while fetching API details';
     } finally {
       loading = false;
     }
   });
+  
+  onDestroy(() => {
+    // Clean up breadcrumb override when leaving the page
+    clearBreadcrumbOverride(apiId.toString());
+  });
 </script>
 
 <div class="container mx-auto px-4 py-6">
-  <div class="mb-6">
-    <a href={`/dashboard/apis/${apiId}`} class="text-blue-500 hover:text-blue-700">
-      &larr; Back to API Details
-    </a>
-  </div>
-
   {#if loading}
     <div class="flex justify-center py-12">
       <div class="animate-pulse text-gray-500">Loading API details...</div>

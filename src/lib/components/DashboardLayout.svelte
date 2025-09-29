@@ -50,11 +50,6 @@
   // Navigation items
   const navigationItems = [
     {
-      name: 'Dashboard',
-      href: '/dashboard',
-      icon: 'M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z'
-    },
-    {
       name: 'Modules',
       href: '/dashboard/modules',
       icon: 'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10'
@@ -86,10 +81,9 @@
     const path = $page.url.pathname;
     const segments = path.split('/').filter(Boolean);
     
-    const breadcrumbs = [
-      { name: 'Dashboard', href: '/dashboard', isLast: false }
-    ];
+    const breadcrumbs = [];
 
+    // Skip the dashboard segment (index 0) and start from meaningful segments
     if (segments.length > 1) {
       let currentPath = '';
       
@@ -97,11 +91,6 @@
         currentPath += '/' + segments[i];
         const fullPath = '/dashboard' + currentPath;
         const isLast = i === segments.length - 1;
-        
-        // Skip the "modules" segment as it's not a real page
-        if (segments[i] === 'modules' && !isLast) {
-          continue;
-        }
         
         // Map segment names to display names
         let displayName = segments[i];
@@ -118,9 +107,6 @@
               break;
             case 'modules':
               displayName = 'Modules';
-              break;
-            case 'environments':
-              displayName = 'Environments';
               break;
             case 'environment':
               displayName = 'Environment';
@@ -151,9 +137,6 @@
                 } else if (parentSegment === 'test-flows') {
                   displayName = 'Test Flow Details';
                   href = isLast ? fullPath : fullPath;
-                } else if (parentSegment === 'environments') {
-                  displayName = 'Environment Details';
-                  href = isLast ? fullPath : fullPath;
                 } else {
                   displayName = `#${segments[i]}`;
                 }
@@ -170,11 +153,10 @@
           isLast
         });
       }
-    } else {
-      // We're on the main dashboard page
-      breadcrumbs[0].isLast = true;
     }
-
+    
+    // If we're on the main dashboard page or no breadcrumbs were generated, return empty array
+    // This will hide the breadcrumb bar on the main dashboard
     return breadcrumbs;
   }
 
@@ -273,66 +255,36 @@
 
   <!-- Main content -->
   <div class="flex flex-1 flex-col overflow-hidden">
-    <!-- Breadcrumb Navigation - Fixed at top -->
-    <div class="flex-shrink-0 border-b border-gray-200 bg-white px-6 py-3 shadow-sm">
-      <nav class="flex" aria-label="Breadcrumb">
-        <ol class="flex items-center space-x-2">
-          {#each breadcrumbs as crumb, index}
-            <li class="flex items-center">
-              {#if index > 0}
-                <svg class="mr-2 h-4 w-4 flex-shrink-0 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-                  <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 111.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
-                </svg>
-              {/if}
-              {#if crumb.isLast}
-                <span class="text-sm font-medium text-gray-900">{crumb.name}</span>
-              {:else}
-                <a 
-                  href={crumb.href} 
-                  class="text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors duration-150"
-                >
-                  {crumb.name}
-                </a>
-              {/if}
-            </li>
-          {/each}
-        </ol>
-      </nav>
-    </div>
-
-    <!-- Top bar for mobile (hamburger menu + breadcrumbs) -->
-    <header class="w-full border-b border-gray-200 bg-white px-4 py-2 shadow-sm lg:hidden">
-      <div class="flex items-center justify-between">
-        <button
-          type="button"
-          onclick={toggleSidebar}
-          class="rounded-md p-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          aria-label="Toggle sidebar menu"
-        >
-          <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-        </button>
-        
-        <!-- Mobile breadcrumb (simplified) -->
-        <nav class="flex-1 ml-4" aria-label="Mobile Breadcrumb">
-          <div class="flex items-center">
-            {#if breadcrumbs.length > 1}
-              <a 
-                href={breadcrumbs[breadcrumbs.length - 2].href}
-                class="text-sm text-gray-500 hover:text-gray-700"
-              >
-                ← Back
-              </a>
-              <span class="mx-2 text-gray-400">•</span>
-            {/if}
-            <span class="text-sm font-medium text-gray-900">
-              {breadcrumbs[breadcrumbs.length - 1].name}
-            </span>
-          </div>
+    <!-- Breadcrumb Navigation - Fixed at top (only show if there are breadcrumbs) -->
+    {#if breadcrumbs.length > 0}
+      <div class="flex-shrink-0 border-b border-gray-200 bg-white px-6 py-3 shadow-sm">
+        <nav class="flex" aria-label="Breadcrumb">
+          <ol class="flex items-center space-x-2">
+            {#each breadcrumbs as crumb, index}
+              <li class="flex items-center">
+                {#if index > 0}
+                  <svg class="mr-2 h-4 w-4 flex-shrink-0 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 111.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+                  </svg>
+                {/if}
+                {#if crumb.isLast}
+                  <span class="text-sm font-medium text-gray-900">{crumb.name}</span>
+                {:else}
+                  <a 
+                    href={crumb.href} 
+                    class="text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors duration-150"
+                  >
+                    {crumb.name}
+                  </a>
+                {/if}
+              </li>
+            {/each}
+          </ol>
         </nav>
       </div>
-    </header>
+    {/if}
+
+
 
     <!-- Page content -->
     <main class="flex-1 overflow-y-auto bg-white">

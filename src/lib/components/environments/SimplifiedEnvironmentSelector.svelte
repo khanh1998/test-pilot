@@ -71,21 +71,30 @@
     <div class="space-y-2">
       <!-- Sub-environment selector -->
       {#if subEnvironmentOptions.length > 0}
-        <select
-          {id}
-          class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm {disabled ? 'bg-gray-50 cursor-not-allowed' : ''}"
-          value={selectedSubEnvironment || ''}
-          on:change={handleSelectionChange}
-          {disabled}
-        >
-          <option value="">{placeholder}</option>
-          
-          {#each subEnvironmentOptions as option}
-            <option value={option.value}>
-              {option.label}
-            </option>
-          {/each}
-        </select>
+        <div class="relative">
+          <!-- Sub-environment indicator -->
+          <div class="absolute left-2 top-1/2 -translate-y-1/2 z-10 pointer-events-none flex items-center gap-1">
+            <svg class="h-3 w-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+            </svg>
+            <span class="text-xs text-gray-400 font-medium">env</span>
+          </div>
+          <select
+            {id}
+            class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm pl-14 {disabled ? 'bg-gray-50 cursor-not-allowed' : ''}"
+            value={selectedSubEnvironment || ''}
+            on:change={handleSelectionChange}
+            {disabled}
+          >
+            <option value="">{placeholder}</option>
+            
+            {#each subEnvironmentOptions as option}
+              <option value={option.value}>
+                {option.label}
+              </option>
+            {/each}
+          </select>
+        </div>
       {:else}
         <div class="block w-full rounded-md border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-500">
           No sub-environments configured

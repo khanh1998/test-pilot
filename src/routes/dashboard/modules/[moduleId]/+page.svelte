@@ -952,9 +952,6 @@
       <div class="bg-white shadow rounded-lg p-6 mb-6">
         <div class="flex items-center justify-between">
           <div class="flex-1 max-w-md">
-            <label for="environment-selector" class="block text-sm font-medium text-gray-700 mb-2">
-              Execution Environment
-            </label>
             <SimplifiedEnvironmentSelector
               id="environment-selector"
               environment={projectEnvironment}

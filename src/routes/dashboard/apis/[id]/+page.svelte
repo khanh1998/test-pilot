@@ -4,6 +4,8 @@
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { getApiDetails, deleteApi as deleteApiCall } from '$lib/http_client/apis';
+  import { setBreadcrumbOverride, clearBreadcrumbOverride } from '$lib/store/breadcrumb';
+  import { onDestroy } from 'svelte';
 
   // Define the ApiDetails type locally based on what we expect from the server
   type ApiDetails = {
@@ -36,6 +38,11 @@
       if (apiData) {
         apiDetails = apiData.api as ApiDetails;
         apiName = apiDetails?.name || 'API';
+        
+        // Set breadcrumb override for the API name
+        if (apiDetails?.name) {
+          setBreadcrumbOverride(apiId.toString(), apiDetails.name);
+        }
       } else {
         // If API not found, redirect to APIs list
         goto('/dashboard/apis');
@@ -45,6 +52,11 @@
       error = err instanceof Error ? err.message : 'Failed to load API details';
     }
   }
+  
+  onDestroy(() => {
+    // Clean up breadcrumb override when leaving the page
+    clearBreadcrumbOverride(apiId.toString());
+  });
 
   // Call fetchApiDetails when apiId changes or on initial load
   $: if (apiId) {

@@ -24,7 +24,7 @@
     const result = await authStore.signIn(email, password);
 
     if (result.success) {
-      goto('/dashboard');
+      goto('/dashboard/modules');
     } else {
       error = result.error || 'Sign in failed';
     }
@@ -59,7 +59,7 @@
   // Check for existing session on mount
   onMount(async () => {
     if (await authStore.checkAuth()) {
-      goto('/dashboard');
+      goto('/dashboard/modules');
     }
   });
 </script>
