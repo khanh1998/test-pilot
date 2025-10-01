@@ -19,6 +19,17 @@
   let sidebarOpen = $state(true);
   let user: User | null = $state(null);
   let error: string | null = $state(null);
+  let hoveredItem: string | null = $state(null);
+
+  // Initialize sidebar state from localStorage on mount
+  $effect(() => {
+    if (typeof window !== 'undefined') {
+      const savedState = localStorage.getItem('sidebarOpen');
+      if (savedState !== null) {
+        sidebarOpen = JSON.parse(savedState);
+      }
+    }
+  });
 
   // Subscribe to the auth store
   const unsubscribe = authStore.subscribe((state) => {
@@ -45,29 +56,33 @@
   // Toggle sidebar
   function toggleSidebar() {
     sidebarOpen = !sidebarOpen;
+    // Save to localStorage
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('sidebarOpen', JSON.stringify(sidebarOpen));
+    }
   }
 
   // Navigation items
   const navigationItems = [
     {
-      name: 'Modules',
-      href: '/dashboard/modules',
-      icon: 'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10'
-    },
-    {
       name: 'APIs',
       href: '/dashboard/apis',
-      icon: 'M8 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-2m-4-1v8m0 0l3-3m-3 3L9 8'
+      icon: 'M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4'
     },
     {
       name: 'Environment',
       href: '/dashboard/environment',
-      icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253'
+      icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z'
     },
     {
       name: 'Test Flows',
       href: '/dashboard/test-flows',
-      icon: 'M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2'
+      icon: 'M13 10V3L4 14h7v7l9-11h-7z'
+    },
+    {
+      name: 'Modules',
+      href: '/dashboard/modules',
+      icon: 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4'
     }
   ];
 
@@ -190,31 +205,53 @@
     </div>
 
     <!-- Project Selector -->
-    <div class="px-4 py-2">
+    <div 
+      class="px-4 py-2 relative"
+      role="region"
+      aria-label="Project selector"
+      onmouseenter={() => { if (!sidebarOpen) hoveredItem = 'Project Selector'; }}
+      onmouseleave={() => hoveredItem = null}
+    >
       <ProjectSelector isCollapsed={!sidebarOpen} />
+      {#if !sidebarOpen && hoveredItem === 'Project Selector'}
+        <div class="absolute left-full top-1/2 transform -translate-y-1/2 ml-1 bg-gray-800 text-gray-200 text-sm px-3 py-2 rounded-md shadow-xl border border-gray-700 whitespace-nowrap z-50 transition-all duration-200">
+          <div class="absolute left-0 top-1/2 transform -translate-y-1/2 -translate-x-1 w-2 h-2 bg-gray-800 border-l border-t border-gray-700 rotate-45"></div>
+          Project Selector
+        </div>
+      {/if}
     </div>
 
     <!-- Navigation -->
     <nav class="mt-4 flex-1 space-y-1 px-2">
       {#each navigationItems as item}
-        <a
-          href={item.href}
-          class="group flex items-center rounded-md px-2 py-2 text-sm font-medium transition-colors duration-200 {isActiveRoute(item.href)
-            ? 'bg-gray-800 text-white'
-            : 'text-gray-300 hover:bg-gray-700 hover:text-white'}"
-        >
-          <svg
-            class="mr-3 h-5 w-5 flex-shrink-0 {isActiveRoute(item.href) ? 'text-white' : 'text-gray-400 group-hover:text-white'}"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
+        <div class="relative" role="presentation">
+          <a
+            href={item.href}
+            onmouseenter={() => { if (!sidebarOpen) hoveredItem = item.name; }}
+            onmouseleave={() => hoveredItem = null}
+            class="group flex items-center rounded-md px-2 py-2 text-sm font-medium transition-colors duration-200 {isActiveRoute(item.href)
+              ? 'bg-gray-800 text-white'
+              : 'text-gray-300 hover:bg-gray-700 hover:text-white'} {!sidebarOpen ? 'justify-center' : ''}"
           >
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={item.icon} />
-          </svg>
-          {#if sidebarOpen}
-            {item.name}
+            <svg
+              class="{sidebarOpen ? 'mr-3' : ''} h-5 w-5 flex-shrink-0 {isActiveRoute(item.href) ? 'text-white' : 'text-gray-400 group-hover:text-white'}"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={item.icon} />
+            </svg>
+            {#if sidebarOpen}
+              {item.name}
+            {/if}
+          </a>
+          {#if !sidebarOpen && hoveredItem === item.name}
+            <div class="absolute left-full top-1/2 transform -translate-y-1/2 ml-3 bg-gray-800 text-gray-200 text-sm px-3 py-2 rounded-md shadow-xl border border-gray-700 whitespace-nowrap z-50 transition-all duration-200">
+              <div class="absolute left-0 top-1/2 transform -translate-y-1/2 -translate-x-1 w-2 h-2 bg-gray-800 border-l border-t border-gray-700 rotate-45"></div>
+              {item.name}
+            </div>
           {/if}
-        </a>
+        </div>
       {/each}
     </nav>
 
