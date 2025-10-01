@@ -48,6 +48,37 @@
   let isRunningAll = false;
   let runningSequences = new Set<number>(); // Track which sequences are running
   
+  // Local storage key for selected sub-environment per module
+  $: localStorageKey = `selectedSubEnvironment_module_${moduleId}`;
+  
+  // Save selected sub-environment to local storage
+  function saveSelectedSubEnvironment(moduleId: number, subEnv: string | null) {
+    if (typeof window !== 'undefined') {
+      const key = `selectedSubEnvironment_module_${moduleId}`;
+      if (subEnv) {
+        localStorage.setItem(key, subEnv);
+      } else {
+        localStorage.removeItem(key);
+      }
+    }
+  }
+  
+  // Load selected sub-environment from local storage
+  function loadSelectedSubEnvironment(moduleId: number): string | null {
+    if (typeof window !== 'undefined') {
+      const key = `selectedSubEnvironment_module_${moduleId}`;
+      return localStorage.getItem(key);
+    }
+    return null;
+  }
+  
+  // Reactive statement to save to local storage when selectedSubEnvironment changes
+  $: {
+    if (moduleId && selectedSubEnvironment !== null) {
+      saveSelectedSubEnvironment(moduleId, selectedSubEnvironment);
+    }
+  }
+  
   // Execution options state
   let showExecutionOptions = false;
   let executionPreferences: ExecutionPreferences = {
@@ -137,6 +168,10 @@
     clearBreadcrumbOverride(moduleId.toString());
     // Clean up project store subscription
     unsubscribeProject();
+    // Save final state to localStorage if needed
+    if (moduleId && selectedSubEnvironment) {
+      saveSelectedSubEnvironment(moduleId, selectedSubEnvironment);
+    }
   });
 
   async function loadModule() {
@@ -208,11 +243,18 @@
           userId: 0 // Not relevant for project environment
         };
         
-        // Auto-select the first sub-environment if available
+        // Try to restore from local storage first, then auto-select the first sub-environment
         if (projectEnv.environment?.config?.environments) {
           const subEnvKeys = Object.keys(projectEnv.environment.config.environments);
           if (subEnvKeys.length > 0) {
-            selectedSubEnvironment = subEnvKeys[0];
+            // Try to restore from local storage
+            const savedSubEnv = loadSelectedSubEnvironment(moduleId);
+            if (savedSubEnv && subEnvKeys.includes(savedSubEnv)) {
+              selectedSubEnvironment = savedSubEnv;
+            } else {
+              // Auto-select the first sub-environment if no saved preference or saved preference is invalid
+              selectedSubEnvironment = subEnvKeys[0];
+            }
           }
         }
       } else {
@@ -547,6 +589,7 @@
 
   function handleEnvironmentSelect(event: CustomEvent<{ environmentId: number | null; subEnvironment: string | null }>) {
     selectedSubEnvironment = event.detail.subEnvironment;
+    // The reactive statement will handle saving to localStorage automatically
   }
 
   function showExecutionResults(type: 'success' | 'error' | 'warning', title: string, message: string, details?: string) {
