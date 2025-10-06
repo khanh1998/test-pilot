@@ -39,8 +39,8 @@ export interface FlowSequenceStep {
 
 export interface FlowParameterMapping {
   flow_parameter_name: string;
-  source_type: 'project_variable' | 'previous_output' | 'static_value';
-  source_value: string; // For project_variable: variable name, for previous_output: output field name, for static_value: the actual value
+  source_type: 'environment_variable' | 'previous_output' | 'static_value';
+  source_value: string; // For environment_variable: variable name, for previous_output: output field name, for static_value: the actual value
   data_type?: 'string' | 'number' | 'boolean'; // Only used for static_value
   source_flow_step?: number; // Only used for previous_output
   source_output_field?: string; // Only used for previous_output

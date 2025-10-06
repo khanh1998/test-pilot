@@ -97,11 +97,15 @@ export class ParameterManager {
   }
 
   private getSelectedEnvironmentMapping(): EnvironmentMapping | null {
-    if (!this.context.flowData.settings.linkedEnvironments || !this.context.flowData.settings.environment) {
+    if (!this.context.flowData.settings.linkedEnvironment || !this.context.flowData.settings.environment) {
       return null;
     }
 
     const selectedEnvId = this.context.flowData.settings.environment.environmentId;
-    return this.context.flowData.settings.linkedEnvironments.find(mapping => mapping.environmentId === selectedEnvId) || null;
+    // Since we only have one environment per project now, check if it matches
+    if (this.context.flowData.settings.linkedEnvironment.environmentId === selectedEnvId) {
+      return this.context.flowData.settings.linkedEnvironment;
+    }
+    return null;
   }
 }

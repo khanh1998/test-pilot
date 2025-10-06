@@ -3,6 +3,8 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { authStore } from '$lib/store/auth';
+  import { projectStore } from '$lib/store/project';
+  import ProjectSelector from './ProjectSelector.svelte';
   import type { User } from '$lib/store/auth';
   import type { Snippet } from 'svelte';
 
@@ -17,6 +19,17 @@
   let sidebarOpen = $state(true);
   let user: User | null = $state(null);
   let error: string | null = $state(null);
+  let hoveredItem: string | null = $state(null);
+
+  // Initialize sidebar state from localStorage on mount
+  $effect(() => {
+    if (typeof window !== 'undefined') {
+      const savedState = localStorage.getItem('sidebarOpen');
+      if (savedState !== null) {
+        sidebarOpen = JSON.parse(savedState);
+      }
+    }
+  });
 
   // Subscribe to the auth store
   const unsubscribe = authStore.subscribe((state) => {
@@ -32,6 +45,8 @@
   async function handleSignOut() {
     try {
       await authStore.signOut();
+      // Clear project store on logout
+      projectStore.clear();
       goto('/');
     } catch (err: any) {
       error = err?.message || 'An error occurred during sign out';
@@ -41,34 +56,33 @@
   // Toggle sidebar
   function toggleSidebar() {
     sidebarOpen = !sidebarOpen;
+    // Save to localStorage
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('sidebarOpen', JSON.stringify(sidebarOpen));
+    }
   }
 
   // Navigation items
   const navigationItems = [
     {
-      name: 'Dashboard',
-      href: '/dashboard',
-      icon: 'M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z'
-    },
-    {
-      name: 'Projects',
-      href: '/dashboard/projects',
-      icon: 'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10'
-    },
-    {
       name: 'APIs',
       href: '/dashboard/apis',
-      icon: 'M8 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-2m-4-1v8m0 0l3-3m-3 3L9 8'
+      icon: 'M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4'
     },
     {
-      name: 'Environments',
-      href: '/dashboard/environments',
-      icon: 'M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9'
+      name: 'Environment',
+      href: '/dashboard/environment',
+      icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z'
     },
     {
       name: 'Test Flows',
       href: '/dashboard/test-flows',
-      icon: 'M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2'
+      icon: 'M13 10V3L4 14h7v7l9-11h-7z'
+    },
+    {
+      name: 'Modules',
+      href: '/dashboard/modules',
+      icon: 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4'
     }
   ];
 
@@ -82,10 +96,9 @@
     const path = $page.url.pathname;
     const segments = path.split('/').filter(Boolean);
     
-    const breadcrumbs = [
-      { name: 'Dashboard', href: '/dashboard', isLast: false }
-    ];
+    const breadcrumbs = [];
 
+    // Skip the dashboard segment (index 0) and start from meaningful segments
     if (segments.length > 1) {
       let currentPath = '';
       
@@ -93,11 +106,6 @@
         currentPath += '/' + segments[i];
         const fullPath = '/dashboard' + currentPath;
         const isLast = i === segments.length - 1;
-        
-        // Skip the "modules" segment as it's not a real page
-        if (segments[i] === 'modules' && !isLast) {
-          continue;
-        }
         
         // Map segment names to display names
         let displayName = segments[i];
@@ -112,15 +120,11 @@
             case 'apis':
               displayName = 'APIs';
               break;
-            case 'projects':
-              displayName = 'Projects';
-              break;
             case 'modules':
-              // If we reach here, it means this is the last segment (a specific module)
-              displayName = 'Module';
+              displayName = 'Modules';
               break;
-            case 'environments':
-              displayName = 'Environments';
+            case 'environment':
+              displayName = 'Environment';
               break;
             case 'test-flows':
               displayName = 'Test Flows';
@@ -148,9 +152,6 @@
                 } else if (parentSegment === 'test-flows') {
                   displayName = 'Test Flow Details';
                   href = isLast ? fullPath : fullPath;
-                } else if (parentSegment === 'environments') {
-                  displayName = 'Environment Details';
-                  href = isLast ? fullPath : fullPath;
                 } else {
                   displayName = `#${segments[i]}`;
                 }
@@ -167,11 +168,10 @@
           isLast
         });
       }
-    } else {
-      // We're on the main dashboard page
-      breadcrumbs[0].isLast = true;
     }
-
+    
+    // If we're on the main dashboard page or no breadcrumbs were generated, return empty array
+    // This will hide the breadcrumb bar on the main dashboard
     return breadcrumbs;
   }
 
@@ -204,27 +204,54 @@
       </button>
     </div>
 
+    <!-- Project Selector -->
+    <div 
+      class="px-4 py-2 relative"
+      role="region"
+      aria-label="Project selector"
+      onmouseenter={() => { if (!sidebarOpen) hoveredItem = 'Project Selector'; }}
+      onmouseleave={() => hoveredItem = null}
+    >
+      <ProjectSelector isCollapsed={!sidebarOpen} />
+      {#if !sidebarOpen && hoveredItem === 'Project Selector'}
+        <div class="absolute left-full top-1/2 transform -translate-y-1/2 ml-1 bg-gray-800 text-gray-200 text-sm px-3 py-2 rounded-md shadow-xl border border-gray-700 whitespace-nowrap z-50 transition-all duration-200">
+          <div class="absolute left-0 top-1/2 transform -translate-y-1/2 -translate-x-1 w-2 h-2 bg-gray-800 border-l border-t border-gray-700 rotate-45"></div>
+          Project Selector
+        </div>
+      {/if}
+    </div>
+
     <!-- Navigation -->
-    <nav class="mt-8 flex-1 space-y-1 px-2">
+    <nav class="mt-4 flex-1 space-y-1 px-2">
       {#each navigationItems as item}
-        <a
-          href={item.href}
-          class="group flex items-center rounded-md px-2 py-2 text-sm font-medium transition-colors duration-200 {isActiveRoute(item.href)
-            ? 'bg-gray-800 text-white'
-            : 'text-gray-300 hover:bg-gray-700 hover:text-white'}"
-        >
-          <svg
-            class="mr-3 h-5 w-5 flex-shrink-0 {isActiveRoute(item.href) ? 'text-white' : 'text-gray-400 group-hover:text-white'}"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
+        <div class="relative" role="presentation">
+          <a
+            href={item.href}
+            onmouseenter={() => { if (!sidebarOpen) hoveredItem = item.name; }}
+            onmouseleave={() => hoveredItem = null}
+            class="group flex items-center rounded-md px-2 py-2 text-sm font-medium transition-colors duration-200 {isActiveRoute(item.href)
+              ? 'bg-gray-800 text-white'
+              : 'text-gray-300 hover:bg-gray-700 hover:text-white'} {!sidebarOpen ? 'justify-center' : ''}"
           >
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={item.icon} />
-          </svg>
-          {#if sidebarOpen}
-            {item.name}
+            <svg
+              class="{sidebarOpen ? 'mr-3' : ''} h-5 w-5 flex-shrink-0 {isActiveRoute(item.href) ? 'text-white' : 'text-gray-400 group-hover:text-white'}"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={item.icon} />
+            </svg>
+            {#if sidebarOpen}
+              {item.name}
+            {/if}
+          </a>
+          {#if !sidebarOpen && hoveredItem === item.name}
+            <div class="absolute left-full top-1/2 transform -translate-y-1/2 ml-3 bg-gray-800 text-gray-200 text-sm px-3 py-2 rounded-md shadow-xl border border-gray-700 whitespace-nowrap z-50 transition-all duration-200">
+              <div class="absolute left-0 top-1/2 transform -translate-y-1/2 -translate-x-1 w-2 h-2 bg-gray-800 border-l border-t border-gray-700 rotate-45"></div>
+              {item.name}
+            </div>
           {/if}
-        </a>
+        </div>
       {/each}
     </nav>
 
@@ -265,66 +292,36 @@
 
   <!-- Main content -->
   <div class="flex flex-1 flex-col overflow-hidden">
-    <!-- Breadcrumb Navigation - Fixed at top -->
-    <div class="flex-shrink-0 border-b border-gray-200 bg-white px-6 py-3 shadow-sm">
-      <nav class="flex" aria-label="Breadcrumb">
-        <ol class="flex items-center space-x-2">
-          {#each breadcrumbs as crumb, index}
-            <li class="flex items-center">
-              {#if index > 0}
-                <svg class="mr-2 h-4 w-4 flex-shrink-0 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-                  <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 111.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
-                </svg>
-              {/if}
-              {#if crumb.isLast}
-                <span class="text-sm font-medium text-gray-900">{crumb.name}</span>
-              {:else}
-                <a 
-                  href={crumb.href} 
-                  class="text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors duration-150"
-                >
-                  {crumb.name}
-                </a>
-              {/if}
-            </li>
-          {/each}
-        </ol>
-      </nav>
-    </div>
-
-    <!-- Top bar for mobile (hamburger menu + breadcrumbs) -->
-    <header class="w-full border-b border-gray-200 bg-white px-4 py-2 shadow-sm lg:hidden">
-      <div class="flex items-center justify-between">
-        <button
-          type="button"
-          onclick={toggleSidebar}
-          class="rounded-md p-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          aria-label="Toggle sidebar menu"
-        >
-          <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-        </button>
-        
-        <!-- Mobile breadcrumb (simplified) -->
-        <nav class="flex-1 ml-4" aria-label="Mobile Breadcrumb">
-          <div class="flex items-center">
-            {#if breadcrumbs.length > 1}
-              <a 
-                href={breadcrumbs[breadcrumbs.length - 2].href}
-                class="text-sm text-gray-500 hover:text-gray-700"
-              >
-                ← Back
-              </a>
-              <span class="mx-2 text-gray-400">•</span>
-            {/if}
-            <span class="text-sm font-medium text-gray-900">
-              {breadcrumbs[breadcrumbs.length - 1].name}
-            </span>
-          </div>
+    <!-- Breadcrumb Navigation - Fixed at top (only show if there are breadcrumbs) -->
+    {#if breadcrumbs.length > 0}
+      <div class="flex-shrink-0 border-b border-gray-200 bg-white px-6 py-3 shadow-sm">
+        <nav class="flex" aria-label="Breadcrumb">
+          <ol class="flex items-center space-x-2">
+            {#each breadcrumbs as crumb, index}
+              <li class="flex items-center">
+                {#if index > 0}
+                  <svg class="mr-2 h-4 w-4 flex-shrink-0 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 111.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+                  </svg>
+                {/if}
+                {#if crumb.isLast}
+                  <span class="text-sm font-medium text-gray-900">{crumb.name}</span>
+                {:else}
+                  <a 
+                    href={crumb.href} 
+                    class="text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors duration-150"
+                  >
+                    {crumb.name}
+                  </a>
+                {/if}
+              </li>
+            {/each}
+          </ol>
         </nav>
       </div>
-    </header>
+    {/if}
+
+
 
     <!-- Page content -->
     <main class="flex-1 overflow-y-auto bg-white">

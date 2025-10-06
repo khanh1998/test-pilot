@@ -8,11 +8,11 @@
   import { fade } from 'svelte/transition';
   import type { TestFlowData, Endpoint, ExecutionState, EndpointExecutionState, Parameter } from './types';
   import { getEndpointById, type EndpointDetails } from '$lib/http_client/endpoints';
-  import { getEnvironments } from '$lib/http_client/environments';
   import type { Environment } from '$lib/types/environment';
   import { createTemplateContextFromFlowRunner } from '$lib/template/utils';
   import { createTemplateFunctions } from '$lib/template/functions';
   import type { TemplateContext } from '$lib/template/types';
+  import { projectStore } from '$lib/store/project';
 
   import { writable } from 'svelte/store';
   import { onMount, onDestroy } from 'svelte';
@@ -23,6 +23,10 @@
   // flowData includes settings.api_hosts which contains multiple API host configurations
   export let flowData: TestFlowData;
   export let endpoints: Endpoint[] = [];
+  
+  // Environment props passed from parent
+  export let environment: Environment | null = null;
+  export let selectedSubEnvironment: string | null = null;
 
   // Initialize outputs if not present
   $: if (flowData && !flowData.outputs) {
@@ -60,14 +64,13 @@
 
       // Compute environment variables from selected environment
       const environmentVariables: Record<string, unknown> = {};
-      // Ensure we have environments loaded and valid selection before computing variables
-      if (!isLoadingEnvironments && selectedEnvironmentId && selectedSubEnvironment && environments.length > 0) {
-        const selectedEnv = environments.find(env => env.id === selectedEnvironmentId);
-        if (selectedEnv && selectedEnv.config.environments[selectedSubEnvironment]) {
-          const subEnvConfig = selectedEnv.config.environments[selectedSubEnvironment];
+      // Use environment prop directly
+      if (environment && selectedSubEnvironment) {
+        if (environment.config.environments[selectedSubEnvironment]) {
+          const subEnvConfig = environment.config.environments[selectedSubEnvironment];
           
           // Add variable values from the selected sub-environment
-          Object.entries(selectedEnv.config.variable_definitions).forEach(([varName, varDef]) => {
+          Object.entries(environment.config.variable_definitions).forEach(([varName, varDef]) => {
             const value = subEnvConfig.variables[varName];
             if (value !== undefined) {
               environmentVariables[varName] = value;
@@ -84,27 +87,23 @@
           }
           
           console.log('Template context computed with environment variables:', {
-            selectedEnvironmentId,
+            environmentId: environment.id,
             selectedSubEnvironment,
-            environmentName: selectedEnv.name,
+            environmentName: environment.name,
             subEnvironmentName: subEnvConfig.name,
             variableCount: Object.keys(environmentVariables).length,
             variables: Object.keys(environmentVariables)
           });
         } else {
-          console.warn('Selected environment or sub-environment not found:', {
-            selectedEnvironmentId,
+          console.warn('Selected sub-environment not found:', {
             selectedSubEnvironment,
-            hasEnvironment: !!selectedEnv,
-            availableSubEnvs: selectedEnv ? Object.keys(selectedEnv.config.environments) : []
+            availableSubEnvs: environment ? Object.keys(environment.config.environments) : []
           });
         }
       } else {
         console.log('Template context computed without environment variables:', {
-          isLoadingEnvironments,
-          selectedEnvironmentId,
-          selectedSubEnvironment,
-          environmentsCount: environments.length
+          hasEnvironment: !!environment,
+          selectedSubEnvironment
         });
       }
 
@@ -137,11 +136,9 @@
   // Bind to FlowRunner's current parameter values to use in template context
   let currentParameterValues: Record<string, unknown> = {};
 
-  // Environment selection state
-  let environments: Environment[] = [];
-  let selectedEnvironmentId: number | null = null;
-  let selectedSubEnvironment: string | null = null;
-  let isLoadingEnvironments = false;
+  // Loading state for environment operations
+  let isLoadingEnvironment = false;
+  let selectedProject: import('$lib/store/project').Project | null = null;
 
   // Create a store to track execution state changes - we'll use this directly
   // instead of maintaining a separate executionState variable
@@ -280,11 +277,13 @@
     showParametersPanel = true;
   }
 
-  // Add event listener on mount
+  // Subscribe to project store to get current project
+  const unsubscribeProject = projectStore.subscribe((state) => {
+    selectedProject = state.selectedProject;
+  });
+
+    // Add event listener on mount
   onMount(async () => {
-    // Load available environments for the environment selector
-    await loadEnvironments();
-    
     // Listen for custom events on the component's node
     const node = document.querySelector('svelte-component[this="TestFlowEditor"]');
     if (node) {
@@ -292,48 +291,13 @@
 
       onDestroy(() => {
         node.removeEventListener('showParametersPanel', handleshowParametersPanel as EventListener);
+        unsubscribeProject();
       });
     }
   });
 
-  async function loadEnvironments() {
-    try {
-      isLoadingEnvironments = true;
-      environments = await getEnvironments();
-      
-      // Initialize environment selection from existing flowData
-      if (flowData.settings.environment) {
-        const envId = flowData.settings.environment.environmentId;
-        const subEnv = flowData.settings.environment.subEnvironment;
-        
-        selectedEnvironmentId = envId;
-        selectedSubEnvironment = subEnv;
-        
-        // Force reactive update to ensure template context recalculation
-        // Use tick to ensure this happens after the DOM update
-        await new Promise(resolve => setTimeout(resolve, 0));
-        
-        // Trigger a manual reactive update by reassigning the variables
-        selectedEnvironmentId = envId;
-        selectedSubEnvironment = subEnv;
-        
-        console.log('Environment selection initialized:', { 
-          selectedEnvironmentId, 
-          selectedSubEnvironment,
-          hasEnvironmentData: !!environments.find(env => env.id === envId)
-        });
-      }
-    } catch (error) {
-      console.error('Failed to load environments:', error);
-      environments = [];
-    } finally {
-      isLoadingEnvironments = false;
-    }
-  }
-
   function handleEnvironmentSelection(event: CustomEvent<{ environmentId: number | null; subEnvironment: string | null }>) {
     const { environmentId, subEnvironment } = event.detail;
-    selectedEnvironmentId = environmentId;
     selectedSubEnvironment = subEnvironment;
     
     // Update flowData with environment selection
@@ -659,15 +623,13 @@
       <!-- Environment Selection -->
       <div class="flex items-center space-x-4">
         <div class="min-w-0 flex-1">
-          <div class="w-64">
+          <div class="w-32">
             <SimplifiedEnvironmentSelector
               id="environment-selector"
-              {environments}
-              linkedEnvironments={flowData.settings.linkedEnvironments || []}
-              {selectedEnvironmentId}
+              {environment}
               {selectedSubEnvironment}
-              placeholder={isLoadingEnvironments ? "Loading environments..." : "Select environment..."}
-              disabled={isRunning || isLoadingEnvironments}
+              placeholder={isLoadingEnvironment ? "Loading environment..." : "Select sub-environment..."}
+              disabled={isRunning || isLoadingEnvironment}
               on:select={handleEnvironmentSelection}
             />
           </div>
@@ -931,8 +893,7 @@
       bind:preferences
       bind:showParametersPanel
       showButtons={false}
-      {environments}
-      selectedEnvironment={selectedEnvironmentId ? environments.find(env => env.id === selectedEnvironmentId) || null : null}
+      selectedEnvironment={environment}
       on:reset={handleReset}
       on:change={(event: CustomEvent<{ flowData: TestFlowData }>) => {
         console.log('Change event from FlowRunner:', event.detail);

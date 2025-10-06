@@ -19,6 +19,8 @@ export async function GET({ locals, url }: RequestEvent) {
     const page = parseInt(url.searchParams.get('page') || '1');
     const limit = parseInt(url.searchParams.get('limit') || '20');
     const search = url.searchParams.get('search') || '';
+    const projectIdParam = url.searchParams.get('projectId');
+    const projectId = projectIdParam ? parseInt(projectIdParam, 10) : undefined;
 
     // Validate parameters
     if (page < 1 || limit < 1 || limit > 100) {
@@ -32,7 +34,8 @@ export async function GET({ locals, url }: RequestEvent) {
     const result = await getTestFlowsForUser(locals.user.userId, {
       page,
       limit,
-      search: search.trim() || undefined
+      search: search.trim() || undefined,
+      projectId
     });
 
     return json(result);
@@ -57,7 +60,7 @@ export async function POST({ request, locals }: RequestEvent) {
     }
 
     const body = await request.json();
-    const { name, description, apiIds, flowJson } = body;
+    const { name, description, apiIds, projectId, flowJson } = body;
 
     // Validate required fields
     if (!name || !apiIds || !Array.isArray(apiIds) || apiIds.length === 0) {
@@ -72,6 +75,7 @@ export async function POST({ request, locals }: RequestEvent) {
       name,
       description,
       apiIds,
+      projectId,
       flowJson
     });
 

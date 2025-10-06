@@ -8,6 +8,7 @@ export interface TestFlowWithApis {
   description: string | null;
   flowJson: any;
   userId: number | null;
+  projectId: number | null;
   createdAt: Date;
   updatedAt: Date;
   apis: Array<{
@@ -22,10 +23,6 @@ export interface TestFlowListItem {
   description: string | null;
   createdAt: Date;
   updatedAt: Date;
-  apis: Array<{
-    id: number;
-    name: string;
-  }>;
 }
 
 export interface EndpointInfo {
@@ -54,6 +51,7 @@ export async function getUserTestFlows(
     limit?: number;
     offset?: number;
     search?: string;
+    projectId?: number;
   } = {}
 ): Promise<{
   testFlows: Array<{
@@ -65,10 +63,15 @@ export async function getUserTestFlows(
   }>;
   total: number;
 }> {
-  const { limit = 20, offset = 0, search } = options;
+  const { limit = 20, offset = 0, search, projectId } = options;
 
-  // Build the base query
-  let whereConditions = eq(testFlows.userId, userId);
+  // Build the base query conditions
+  const whereConditions = [eq(testFlows.userId, userId)];
+  
+  // Add project filter if provided
+  if (projectId !== undefined) {
+    whereConditions.push(eq(testFlows.projectId, projectId));
+  }
   
   // Add search condition if provided
   if (search && search.trim()) {
@@ -77,14 +80,16 @@ export async function getUserTestFlows(
       ilike(testFlows.name, searchTerm),
       ilike(testFlows.description, searchTerm)
     );
-    whereConditions = and(whereConditions, searchCondition)!;
+    whereConditions.push(searchCondition!);
   }
+
+  const finalWhereCondition = and(...whereConditions);
 
   // Get the total count
   const totalResult = await db
     .select({ count: count() })
     .from(testFlows)
-    .where(whereConditions);
+    .where(finalWhereCondition);
   
   const total = totalResult[0]?.count || 0;
 
@@ -98,8 +103,8 @@ export async function getUserTestFlows(
       updatedAt: testFlows.updatedAt
     })
     .from(testFlows)
-    .where(whereConditions)
-    .orderBy(desc(testFlows.updatedAt))
+    .where(finalWhereCondition)
+    .orderBy(desc(testFlows.createdAt))
     .limit(limit)
     .offset(offset);
 
@@ -137,7 +142,16 @@ export async function getMultipleTestFlowApiAssociations(testFlowIds: number[]):
 // Get a test flow by ID and user ID
 export async function getTestFlowById(id: number, userId: number): Promise<TestFlowWithApis | null> {
   const [testFlow] = await db
-    .select()
+    .select({
+      id: testFlows.id,
+      name: testFlows.name,
+      description: testFlows.description,
+      flowJson: testFlows.flowJson,
+      userId: testFlows.userId,
+      projectId: testFlows.projectId,
+      createdAt: testFlows.createdAt,
+      updatedAt: testFlows.updatedAt
+    })
     .from(testFlows)
     .where(and(eq(testFlows.id, id), eq(testFlows.userId, userId)));
 
@@ -304,6 +318,7 @@ export async function createTestFlow(testFlowData: {
   name: string;
   description?: string | null;
   userId: number;
+  projectId?: number | null;
   flowJson: any;
 }): Promise<{
   id: number;
@@ -311,6 +326,7 @@ export async function createTestFlow(testFlowData: {
   description: string | null;
   flowJson: any;
   userId: number | null;
+  projectId: number | null;
   createdAt: Date;
   updatedAt: Date;
 }> {

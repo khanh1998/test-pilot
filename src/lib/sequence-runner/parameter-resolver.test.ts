@@ -55,7 +55,7 @@ describe('SequenceParameterResolver', () => {
           }
         ],
         outputs: [
-          { name: 'access_token', value: '{{response.token}}', description: 'Auth token', isTemplate: true }
+          { name: 'access_token', value: '{{response.token}}', description: 'Auth token', isTemplate: true, type: 'string' }
         ],
         steps: []
       }
@@ -94,7 +94,7 @@ describe('SequenceParameterResolver', () => {
           }
         ],
         outputs: [
-          { name: 'user_id', value: '{{response.user.id}}', description: 'Created user ID', isTemplate: true }
+          { name: 'user_id', value: '{{response.user.id}}', description: 'Created user ID', isTemplate: true, type: 'number' }
         ],
         steps: []
       }
@@ -247,17 +247,17 @@ describe('SequenceParameterResolver', () => {
           },
           {
             flow_parameter_name: 'base_url',
-            source_type: 'project_variable',
+            source_type: 'environment_variable',
             source_value: 'base_url'
           },
           {
             flow_parameter_name: 'api_timeout',
-            source_type: 'project_variable',
+            source_type: 'environment_variable',
             source_value: 'api_timeout'
           },
           {
             flow_parameter_name: 'debug_mode',
-            source_type: 'project_variable',
+            source_type: 'environment_variable',
             source_value: 'debug_mode'
           }
         ]
@@ -405,7 +405,7 @@ describe('SequenceParameterResolver', () => {
           },
           {
             flow_parameter_name: 'base_url',
-            source_type: 'project_variable',
+            source_type: 'environment_variable',
             source_value: 'base_url'
           }
         ]
@@ -413,7 +413,7 @@ describe('SequenceParameterResolver', () => {
 
       // No sub-environment selected, should use project variable default
       const loginResult = SequenceParameterResolver.resolveFlowParameters(
-        loginFlow, loginStep, {}, {}, environment, null, project, mockOnLog
+        loginFlow, loginStep, {}, {}, environment,  mockOnLog
       );
 
       expect(loginResult.resolvedParameters).toEqual({
@@ -421,38 +421,6 @@ describe('SequenceParameterResolver', () => {
         base_url: 'https://api.prod.ecommerce.com', // project variable default
         api_timeout: 30000,
         debug_mode: false,
-      });
-    });
-
-    it('should resolve API hosts with environment override', () => {
-      // With dev environment
-      const devHosts = SequenceParameterResolver.resolveApiHosts(environment, 'dev', project, mockOnLog);
-      expect(devHosts).toEqual({
-        '1': {
-          url: 'https://api.dev.ecommerce.com',
-          name: 'Main API',
-          description: 'Environment Testing Environment (dev) host'
-        }
-      });
-
-      // With staging environment
-      const stagingHosts = SequenceParameterResolver.resolveApiHosts(environment, 'staging', project, mockOnLog);
-      expect(stagingHosts).toEqual({
-        '1': {
-          url: 'https://api.staging.ecommerce.com',
-          name: 'Main API',
-          description: 'Environment Testing Environment (staging) host'
-        }
-      });
-
-      // No environment - fallback to project default
-      const prodHosts = SequenceParameterResolver.resolveApiHosts(null, null, project, mockOnLog);
-      expect(prodHosts).toEqual({
-        '1': {
-          url: 'https://api.prod.ecommerce.com',
-          name: 'Main API',
-          description: 'Project default host'
-        }
       });
     });
   });

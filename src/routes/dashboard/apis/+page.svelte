@@ -1,5 +1,22 @@
 <script lang="ts">
+  import { onMount, onDestroy } from 'svelte';
+  import { projectStore, type Project } from '$lib/store/project';
   import ApiList from '$lib/components/apis/ApiList.svelte';
+
+  let selectedProject: Project | null = $state(null);
+  let isProjectLoading = $state(false);
+  let projectError: string | null = $state(null);
+
+  // Subscribe to project store
+  const unsubscribe = projectStore.subscribe((state) => {
+    selectedProject = state.selectedProject;
+    isProjectLoading = state.isLoading;
+    projectError = state.error;
+  });
+
+  onDestroy(() => {
+    unsubscribe();
+  });
 </script>
 
 <div class="p-6">
@@ -10,5 +27,5 @@
     </p>
   </div>
 
-  <ApiList />
+  <ApiList {selectedProject} />
 </div>

@@ -148,15 +148,23 @@ export class SequenceRunner {
       `Step order: ${sequenceStep.step_order}, Flow ID: ${flow.id}`);
 
     try {
+      // Prepare environment variables
+      const {selectedEnvironment, selectedSubEnvironment} = this.options;
+      let environmentVariables: Record<string, unknown> = {};
+      let apiHosts: Record<string, string> = {};
+      
+      if (selectedEnvironment.config.environments[selectedSubEnvironment]) {
+        const {variables, api_hosts} = selectedEnvironment.config.environments[selectedSubEnvironment];
+        environmentVariables = variables;
+        apiHosts = api_hosts;
+      }
       // Resolve parameters for this flow
       const resolvedExecution = SequenceParameterResolver.resolveFlowParameters(
         flow,
         sequenceStep,
         this.state.accumulatedOutputs,
-        this.options.environmentVariables,
-        this.options.selectedEnvironment,
-        this.options.selectedSubEnvironment,
-        this.options.project,
+        environmentVariables,
+        apiHosts,
         this.options.onLog
       );
 
@@ -169,7 +177,6 @@ export class SequenceRunner {
       const flowRunnerOptions: FlowRunnerOptions = {
         flowData: resolvedExecution.flowData,
         preferences: this.options.preferences,
-        environments: this.options.environments,
         selectedEnvironment: this.options.selectedEnvironment,
         environmentVariables: resolvedExecution.environmentVariables,
         onLog: this.options.onLog,

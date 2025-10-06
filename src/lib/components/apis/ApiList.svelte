@@ -3,23 +3,47 @@
   import { goto } from '$app/navigation';
   import { getApiList, deleteApi as deleteApiStore } from '$lib/http_client/apis';
   import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+  import type { Project } from '$lib/store/project';
   import type { Api } from '$lib/types/api';
 
-  let apis : Api[] = []; // Initialize with current store value
-  let loading = true;
-  let error: string | null = null;
-  let isDeleting = false;
-  let deleteApiId: number | null = null;
-  let deleteError: string | null = null;
+  interface Props {
+    selectedProject: Project | null;
+  }
+
+  let { selectedProject }: Props = $props();
+
+  let apis : Api[] = $state([]); // Initialize with current store value
+  let loading = $state(true);
+  let error: string | null = $state(null);
+  let isDeleting = $state(false);
+  let deleteApiId: number | null = $state(null);
+  let deleteError: string | null = $state(null);
   
   // Confirm dialog state
-  let showConfirmDialog = false;
-  let pendingDeleteApiId: number | null = null;
+  let showConfirmDialog = $state(false);
+  let pendingDeleteApiId: number | null = $state(null);
+
+  // Watch for changes in selectedProject and reload APIs
+  $effect(() => {
+    if (selectedProject) {
+      loadApis();
+    } else {
+      // Clear APIs and reset state when no project is selected
+      apis = [];
+      loading = false;
+      error = null;
+    }
+  });
 
   async function loadApis() {
+    if (!selectedProject) {
+      return;
+    }
+
     try {
       loading = true;
-      const apiList = await getApiList();
+      error = null;
+      const apiList = await getApiList(selectedProject.id);
       apis = apiList && apiList.apis ? apiList.apis : [];
     } catch (err) {
       error = err instanceof Error ? err.message : 'An error occurred while fetching APIs';
@@ -27,8 +51,6 @@
       loading = false;
     }
   }
-
-  onMount(loadApis);
 
   function viewApi(apiId: number) {
     goto(`/dashboard/apis/${apiId}`);
@@ -73,7 +95,18 @@
 
 <div class="container mx-auto px-4 py-8">
   <div class="mb-6 flex items-center justify-between">
-    <h1 class="text-2xl font-bold">My APIs</h1>
+    <div>
+      <h1 class="text-2xl font-bold">My APIs</h1>
+      {#if selectedProject}
+        <p class="text-sm text-gray-600 mt-1">
+          Showing APIs for project: <span class="font-medium">{selectedProject.name}</span>
+        </p>
+      {:else}
+        <p class="text-sm text-gray-600 mt-1">
+          No project selected
+        </p>
+      {/if}
+    </div>
     <a
       href="/dashboard/apis/upload"
       class="rounded bg-blue-500 px-4 py-2 text-white hover:bg-blue-600"
@@ -103,11 +136,31 @@
     <div class="rounded-md border border-gray-200 bg-gray-50 p-8 text-center">
       <h3 class="mb-2 text-lg font-medium text-gray-700">No APIs found</h3>
       <p class="mb-4 text-gray-500">
-        Upload your first Swagger/OpenAPI specification to get started.
+        {#if selectedProject}
+          No APIs found for project "{selectedProject.name}". Upload a Swagger/OpenAPI specification for this project.
+        {:else}
+          Select a project to view its APIs, or upload your first Swagger/OpenAPI specification.
+        {/if}
       </p>
-      <a href="/dashboard/apis/upload" class="text-blue-500 hover:text-blue-600">
-        Upload Swagger Spec
-      </a>
+      {#if selectedProject}
+        <a href="/dashboard/apis/upload" class="text-blue-500 hover:text-blue-600">
+          Upload Swagger Spec for {selectedProject.name}
+        </a>
+      {:else}
+        <div class="space-y-2">
+          <div>
+            <a href="/dashboard/projects" class="text-blue-500 hover:text-blue-600">
+              Create or select a project
+            </a>
+          </div>
+          <div class="text-gray-400">or</div>
+          <div>
+            <a href="/dashboard/apis/upload" class="text-blue-500 hover:text-blue-600">
+              Upload Swagger Spec
+            </a>
+          </div>
+        </div>
+      {/if}
     </div>
   {:else}
     <div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">

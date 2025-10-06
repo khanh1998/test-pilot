@@ -8,7 +8,6 @@ import { FlowValidator } from './validator';
 export interface FlowRunnerOptions {
   flowData: TestFlowData;
   preferences: ExecutionPreferences;
-  environments: import('$lib/types/environment').Environment[];
   selectedEnvironment: import('$lib/types/environment').Environment | null;
   environmentVariables: Record<string, unknown>;
   onLog: (level: 'info' | 'debug' | 'error' | 'warning', message: string, details?: string) => void;
@@ -264,10 +263,7 @@ export class FlowRunner {
     this.state.isRunning = false;
     this.state.parameterValues = {};
     this.state.shouldStopExecution = false;
-
-    if (this.options.preferences.serverCookieHandling) {
-      this.state.cookieStore.clear();
-    }
+    this.state.cookieStore.clear();
   }
 
   updateParameterValues(parametersWithMissingValues: FlowParameter[]): void {

@@ -117,7 +117,13 @@ export async function verifyApiOwnership(apiId: number, userId: number): Promise
   return api ? api.userId === userId : false;
 }
 
-export async function getApisByUserId(userId: number) {
+export async function getApisByUserId(userId: number, projectId?: number) {
+  const whereConditions = [eq(apis.userId, userId)];
+  
+  if (projectId !== undefined) {
+    whereConditions.push(eq(apis.projectId, projectId));
+  }
+
   return await db
     .select({
       id: apis.id,
@@ -129,13 +135,13 @@ export async function getApisByUserId(userId: number) {
       updatedAt: apis.updatedAt
     })
     .from(apis)
-    .where(eq(apis.userId, userId))
+    .where(and(...whereConditions))
     .orderBy(apis.createdAt);
 }
 
-export async function getApisWithEndpointCounts(userId: number): Promise<ApiWithEndpointCount[]> {
-  // Get all APIs for the user
-  const userApis = await getApisByUserId(userId);
+export async function getApisWithEndpointCounts(userId: number, projectId?: number): Promise<ApiWithEndpointCount[]> {
+  // Get all APIs for the user, optionally filtered by project
+  const userApis = await getApisByUserId(userId, projectId);
 
   if (userApis.length === 0) {
     return [];

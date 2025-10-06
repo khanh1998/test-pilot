@@ -10,7 +10,8 @@
   // Import the components we created
   import TestFlowEditor from '$lib/components/test-flows/TestFlowEditor.svelte';
   import EnvironmentLinkingManager from '$lib/components/environments/EnvironmentLinkingManager.svelte';
-  import { getEnvironments } from '$lib/http_client/environments';
+  import { getProjectEnvironment } from '$lib/http_client/projects';
+  import { projectStore } from '$lib/store/project';
   import type { Environment } from '$lib/types/environment';
 
   let testFlowId = $derived(parseInt($page.params.id || '0'));
@@ -40,9 +41,10 @@
   let availableApis: any[] = $state([]);
   let showAddApiModal = $state(false);
 
-  // Environments for linking
-  let environments: Environment[] = $state([]);
+  // Environment for linking (single environment per project)
+  let environment: Environment | null = $state(null);
 
+  // Load projects on mount if not already loaded
   onMount(async () => {
     await fetchTestFlow();
 
@@ -51,16 +53,16 @@
       flowJson.settings.api_hosts = {};
     }
 
-    // Initialize linkedEnvironments if not existing
-    if (!flowJson.settings.linkedEnvironments) {
-      flowJson.settings.linkedEnvironments = [];
+    // Initialize linkedEnvironment if not existing (single environment per project)
+    if (!flowJson.settings.linkedEnvironment) {
+      flowJson.settings.linkedEnvironment = null;
     }
 
     // Load available APIs for the dropdown
     await loadAvailableApis();
 
-    // Load available environments for linking
-    await loadEnvironments();
+    // Load project environment for linking
+    await loadEnvironment();
   });
 
   // Update document title and breadcrumb when testFlow is loaded
@@ -130,23 +132,53 @@
 
   async function loadAvailableApis() {
     try {
-      const apisData = await getApiList();
+      // Get selected project from store
+      const selectedProject = $projectStore.selectedProject;
+      if (!selectedProject) {
+        console.warn('No project selected, cannot load APIs');
+        availableApis = [];
+        return;
+      }
+
+      const apisData = await getApiList(selectedProject.id);
       if (apisData && apisData.apis && Array.isArray(apisData.apis)) {
         availableApis = apisData.apis;
-        console.log('Available APIs loaded:', availableApis);
+        console.log('Available APIs loaded for project:', selectedProject.id, availableApis);
       }
     } catch (err) {
       console.error('Error loading available APIs:', err);
     }
   }
 
-  async function loadEnvironments() {
+  async function loadEnvironment() {
     try {
-      environments = await getEnvironments();
-      console.log('Environments loaded:', environments);
+      // Get selected project from store
+      const selectedProject = $projectStore.selectedProject;
+      if (!selectedProject) {
+        console.warn('No project selected, cannot load environment');
+        return;
+      }
+
+      const response = await getProjectEnvironment(selectedProject.id);
+      // Convert ProjectEnvironmentLink.environment to Environment type
+      if (response.environment?.environment) {
+        const envData = response.environment.environment;
+        environment = {
+          id: envData.id,
+          name: envData.name,
+          description: envData.description,
+          config: envData.config,
+          userId: 0, // Not needed for display purposes
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+      } else {
+        environment = null;
+      }
+      console.log('Environment loaded:', environment);
     } catch (err) {
-      console.error('Error loading environments:', err);
-      environments = [];
+      console.error('Error loading environment:', err);
+      environment = null;
     }
   }
   
@@ -247,6 +279,45 @@
     } finally {
       isSaving = false;
     }
+  }
+
+  function handleTestFlowChange(event: CustomEvent) {
+    // Extract and update the flow data from the event
+    const updatedFlowData = event.detail;
+    if (updatedFlowData) {
+      // Update flowJson with the changes, preserving endpoints reference
+      const updatedSteps = updatedFlowData.steps || [];
+
+      // Create a mapping from old step IDs to new ones
+      const stepIdMap = new Map();
+
+      // Normalize step IDs to ensure they follow the format "step1", "step2", etc.
+      const normalizedSteps = updatedSteps.map((step: any, index: number) => {
+        // If the step ID uses the timestamp format (step-12345), convert it
+        if (step.step_id && step.step_id.startsWith('step-')) {
+          const oldId = step.step_id;
+          const newId = `step${index + 1}`;
+          stepIdMap.set(oldId, newId);
+
+          return {
+            ...step,
+            step_id: newId
+          };
+        }
+        return step;
+      });
+
+      // Ensure parameters are properly updated - prioritize updatedFlowData.parameters
+      const updatedParameters = updatedFlowData.parameters || flowJson.parameters || [];
+
+      flowJson = {
+        settings: updatedFlowData.settings || flowJson.settings,
+        steps: normalizedSteps,
+        parameters: updatedParameters,
+        outputs: updatedFlowData.outputs || flowJson.outputs || []
+      };
+    }
+    markDirty();
   }
 
   function addStep() {
@@ -357,44 +428,9 @@
               <TestFlowEditor
                 flowData={{ ...flowJson, endpoints }}
                 {endpoints}
-                on:change={(event: CustomEvent) => {
-                  // Extract and update the flow data from the event
-                  const updatedFlowData = event.detail;
-                  if (updatedFlowData) {
-                    // Update flowJson with the changes, preserving endpoints reference
-                    const updatedSteps = updatedFlowData.steps || [];
-
-                    // Create a mapping from old step IDs to new ones
-                    const stepIdMap = new Map();
-
-                    // Normalize step IDs to ensure they follow the format "step1", "step2", etc.
-                    const normalizedSteps = updatedSteps.map((step: any, index: number) => {
-                      // If the step ID uses the timestamp format (step-12345), convert it
-                      if (step.step_id && step.step_id.startsWith('step-')) {
-                        const oldId = step.step_id;
-                        const newId = `step${index + 1}`;
-                        stepIdMap.set(oldId, newId);
-
-                        return {
-                          ...step,
-                          step_id: newId
-                        };
-                      }
-                      return step;
-                    });
-
-                    // Ensure parameters are properly updated - prioritize updatedFlowData.parameters
-                    const updatedParameters = updatedFlowData.parameters || flowJson.parameters || [];
-
-                    flowJson = {
-                      settings: updatedFlowData.settings || flowJson.settings,
-                      steps: normalizedSteps,
-                      parameters: updatedParameters,
-                      outputs: updatedFlowData.outputs || flowJson.outputs || []
-                    };
-                  }
-                  markDirty();
-                }}
+                {environment}
+                selectedSubEnvironment={flowJson.settings.environment?.subEnvironment || null}
+                on:change={handleTestFlowChange}
                 on:reset={handleReset}
                 on:executionComplete={handleExecutionComplete}
                 on:log={handleLog}
@@ -566,16 +602,13 @@
               <!-- Environment Links Settings -->
               <div class="mb-6">
                 <EnvironmentLinkingManager
-                  {environments}
-                  linkedEnvironments={flowJson.settings.linkedEnvironments || []}
+                  {environment}
+                  linkedEnvironment={flowJson.settings.linkedEnvironment || null}
                   flowParameters={flowJson.parameters || []}
                   disabled={isSaving}
                   on:change={(event) => {
-                    const { linkedEnvironments } = event.detail;
-                    if (!flowJson.settings.linkedEnvironments) {
-                      flowJson.settings.linkedEnvironments = [];
-                    }
-                    flowJson.settings.linkedEnvironments = linkedEnvironments;
+                    const { linkedEnvironment } = event.detail;
+                    flowJson.settings.linkedEnvironment = linkedEnvironment;
                     markDirty();
                   }}
                 />

@@ -17,9 +17,9 @@ export async function GET({ params, locals }: RequestEvent) {
       return json({ error: 'Invalid project ID' }, { status: 400 });
     }
 
-    const modules = await projectModuleService.listProjectModules(projectId, locals.user.userId);
+    const moduleListResponse = await projectModuleService.listProjectModules(projectId, locals.user.userId);
     
-    return json({ modules });
+    return json(moduleListResponse);
   } catch (error: any) {
     console.error('Error listing modules:', error);
     

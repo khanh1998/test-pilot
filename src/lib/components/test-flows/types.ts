@@ -92,7 +92,7 @@ export type FlowOutput = {
   description?: string;
   value: string; // JSON template expression or hardcoded value
   isTemplate?: boolean; // Whether the value is a template expression
-  type?: 'string' | 'number' | 'boolean' | 'object' | 'array' | 'null'; // Expected data type
+  type?: 'string' | 'number' | 'boolean' | 'object' | 'array' | 'null' | 'unknown'; // Expected data type
   castToType?: boolean; // Whether to cast template expression result to the specified type
 };
 
@@ -129,7 +129,7 @@ export type TestFlowData = {
       environmentId: number | null;
       subEnvironment: string | null;
     };
-    linkedEnvironments?: EnvironmentMapping[]; // New: environment-parameter mappings
+    linkedEnvironment?: EnvironmentMapping | null; // Single environment-parameter mapping per project
     // Other settings
   };
   parameters: FlowParameter[];

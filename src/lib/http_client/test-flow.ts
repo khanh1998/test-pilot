@@ -13,14 +13,18 @@ export async function getTestFlows(options: {
 	page?: number;
 	limit?: number;
 	search?: string;
+	projectId?: number;
 } = {}) {
 	try {
-		const { page = 1, limit = 20, search } = options;
+		const { page = 1, limit = 20, search, projectId } = options;
 		const params = new URLSearchParams();
 		params.set('page', page.toString());
 		params.set('limit', limit.toString());
 		if (search) {
 			params.set('search', search);
+		}
+		if (projectId !== undefined) {
+			params.set('projectId', projectId.toString());
 		}
 
 		const response = await fetchWithAuth(`/api/test-flows?${params.toString()}`);

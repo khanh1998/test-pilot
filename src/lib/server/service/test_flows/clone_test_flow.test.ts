@@ -20,6 +20,7 @@ describe('cloneTestFlow', () => {
       description: 'Original description',
       flowJson: { settings: {}, steps: [] },
       userId: 100,
+      projectId: 5,
       createdAt: new Date(),
       updatedAt: new Date(),
       apis: [{ id: 1, name: 'API 1' }, { id: 2, name: 'API 2' }]
@@ -31,6 +32,7 @@ describe('cloneTestFlow', () => {
       description: 'New description',
       flowJson: { settings: {}, steps: [] },
       userId: 100,
+      projectId: 5,
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -53,6 +55,7 @@ describe('cloneTestFlow', () => {
       name: 'Copy of Original Flow',
       description: 'New description',
       userId: 100,
+      projectId: 5,
       flowJson: { settings: {}, steps: [] }
     });
     expect(getTestFlowApiIds).toHaveBeenCalledWith(originalTestFlowId);

@@ -12,6 +12,7 @@ export interface CloneTestFlowOutput {
     description: string | null;
     flowJson: any;
     userId: number | null;
+    projectId: number | null;
     createdAt: Date;
     updatedAt: Date;
     apis: Array<{ id: number }>;
@@ -43,6 +44,7 @@ export async function cloneTestFlow(
     name,
     description: description || originalFlow.description,
     userId,
+    projectId: originalFlow.projectId,
     flowJson: originalFlow.flowJson
   });
 
