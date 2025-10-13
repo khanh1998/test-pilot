@@ -521,7 +521,7 @@
               class="ml-2 text-xs text-gray-600"
               title="Clear all stored cookies before this step executes. Useful when you need to test different user roles (e.g., Step 1: Login as customer, Step 2: Clear cookies + Login as admin)"
             >
-              🍪 Clear before this step
+              🍪 Clear
             </span>
           </label>
         </div>
@@ -615,16 +615,21 @@
 
     {#if step.endpoints.length === 0}
       <!-- When no endpoints, show selector and message side by side -->
-      <div class="flex flex-row gap-3 overflow-x-auto pb-2">
-        <slot name="endpoint-selector"></slot>
+      <div class="flex flex-row gap-3">
+        <div class="flex-shrink-0">
+          <slot name="endpoint-selector"></slot>
+        </div>
         <div class="flex items-center text-sm text-gray-400 italic">
           No endpoints in this step yet
         </div>
       </div>
     {:else}
-      <!-- Show selector on the left, then all endpoint cards -->
-      <div class="flex flex-row gap-3 overflow-x-auto pb-2">
-        <slot name="endpoint-selector"></slot>
+      <!-- Show selector on the left (sticky), then all endpoint cards (scrollable) -->
+      <div class="flex flex-row gap-3">
+        <div class="flex-shrink-0 sticky left-0 z-10 bg-white">
+          <slot name="endpoint-selector"></slot>
+        </div>
+        <div class="flex flex-row gap-3 overflow-x-auto pb-2 flex-1">
         {#each sortedEndpoints as { endpoint: stepEndpoint, originalIndex }, sortedIndex (`${stepEndpoint.endpoint_id}-${originalIndex}`)}
           {@const endpoint = findEndpoint(stepEndpoint.endpoint_id)}
           {@const { duplicateCount, instanceIndex } = getEndpointMetrics(stepEndpoint.endpoint_id, originalIndex)}
@@ -692,6 +697,7 @@
             </div>
           {/if}
         {/each}
+        </div>
       </div>
     {/if}
   </div>

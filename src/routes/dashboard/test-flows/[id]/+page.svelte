@@ -256,6 +256,7 @@
           <!-- Steps Tab -->
           {#if currentTab === 'steps'}
             <StepsTab
+              testFlowId={testFlowId}
               flowData={$flowJson}
               {endpoints}
               {environment}

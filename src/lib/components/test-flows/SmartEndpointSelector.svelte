@@ -20,6 +20,7 @@
   let showDropdown = false;
   let searchInput: HTMLInputElement;
   let dropdownStyle = '';
+  let isCollapsed = false;
 
   // Get list of all API IDs from apiHosts
   $: apiIds = Object.keys(apiHosts)
@@ -129,6 +130,21 @@
 
   function handleKeydown(event: KeyboardEvent) {
     if (event.key === 'Escape') {
+      searchTerm = '';
+      searchResults = [];
+      showDropdown = false;
+    }
+  }
+
+  function toggleCollapse() {
+    isCollapsed = !isCollapsed;
+    if (!isCollapsed) {
+      // When expanding, focus on the search input
+      setTimeout(() => {
+        searchInput?.focus();
+      }, 50);
+    } else {
+      // When collapsing, clear search state
       searchTerm = '';
       searchResults = [];
       showDropdown = false;

@@ -4,6 +4,7 @@
   import type { TestFlowData, Endpoint } from './types';
   import type { Environment } from '$lib/types/environment';
 
+  export let testFlowId: string | number | undefined = undefined; // Pass through test flow ID
   export let flowData: TestFlowData;
   export let endpoints: Endpoint[] = [];
   export let environment: Environment | null = null;
@@ -47,6 +48,7 @@
 
   <!-- Use the TestFlowEditor component for a cleaner implementation -->
   <TestFlowEditor
+    {testFlowId}
     {flowData}
     {endpoints}
     {environment}

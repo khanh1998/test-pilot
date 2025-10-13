@@ -23,6 +23,7 @@
   import { isDesktop } from '$lib/environment';
 
   // flowData includes settings.api_hosts which contains multiple API host configurations
+  export let testFlowId: string | number | undefined = undefined; // Optional test flow ID for localStorage
   export let flowData: TestFlowData;
   export let endpoints: Endpoint[] = [];
   
@@ -788,6 +789,7 @@
   <!-- Steps Section -->
   {#if templateContext}
     <StepList
+      {testFlowId}
       steps={flowData.steps}
       {endpoints}
       apiHosts={flowData?.settings?.api_hosts || {}}
