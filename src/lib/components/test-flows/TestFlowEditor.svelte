@@ -1,23 +1,25 @@
 <script lang="ts">
-  import StepEditor from './StepEditor.svelte';
-  import SmartEndpointSelector from './SmartEndpointSelector.svelte';
-  import FlowRunner from './FlowRunner.svelte';
+  import StepList from './StepList.svelte';
+  import FlowOutputsPanel from './FlowOutputsPanel.svelte';
+  import ParameterInputModal from './ParameterInputModal.svelte';
   import FlowOutputEditor from './FlowOutputEditor.svelte';
   import FlowLogsViewer from './FlowLogsViewer.svelte';
-  import SimplifiedEnvironmentSelector from '../environments/SimplifiedEnvironmentSelector.svelte';
-  import { fade } from 'svelte/transition';
-  import type { TestFlowData, Endpoint, ExecutionState, EndpointExecutionState, Parameter } from './types';
+  import FlowExecutionControls from './FlowExecutionControls.svelte';
+  import ExecutionOptionsPanel from './ExecutionOptionsPanel.svelte';
+  import FlowParameterEditor from './FlowParameterEditor.svelte';
+  import type { TestFlowData, Endpoint, ExecutionState, EndpointExecutionState, Parameter, FlowParameter, FlowStep } from './types';
   import { getEndpointById, type EndpointDetails } from '$lib/http_client/endpoints';
   import type { Environment } from '$lib/types/environment';
   import { createTemplateContextFromFlowRunner } from '$lib/template/utils';
   import { createTemplateFunctions } from '$lib/template/functions';
   import type { TemplateContext } from '$lib/template/types';
   import { projectStore } from '$lib/store/project';
+  import * as stepManagement from './step-management';
+  import { FlowRunner, type FlowRunnerOptions, type ExecutionPreferences } from '$lib/flow-runner';
 
   import { writable } from 'svelte/store';
   import { onMount, onDestroy } from 'svelte';
   import { createEventDispatcher } from 'svelte';
-  import { generateStepId, generateStepIdBetween } from './step-id-utils.js';
   import { isDesktop } from '$lib/environment';
 
   // flowData includes settings.api_hosts which contains multiple API host configurations
@@ -27,6 +29,11 @@
   // Environment props passed from parent
   export let environment: Environment | null = null;
   export let selectedSubEnvironment: string | null = null;
+
+  // Sync endpoints into flowData so FlowRunner can access them
+  $: if (flowData && endpoints) {
+    flowData.endpoints = endpoints;
+  }
 
   // Initialize outputs if not present
   $: if (flowData && !flowData.outputs) {
@@ -136,6 +143,20 @@
   // Bind to FlowRunner's current parameter values to use in template context
   let currentParameterValues: Record<string, unknown> = {};
 
+  // Parameter input modal state
+  let showParameterInputModal = false;
+  let parametersWithMissingValues: Array<FlowParameter> = [];
+  
+  // Track pending single step execution
+  let pendingSingleStepExecution: { step: FlowStep; stepIndex?: number } | null = null;
+
+  // Local state derived from flow runner
+  let currentStep = 0;
+  let totalSteps = 0;
+  let progress = 0;
+  let error: unknown = null;
+  let previousEnvironmentVariables: Record<string, unknown> = {};
+
   // Loading state for environment operations
   let isLoadingEnvironment = false;
   let selectedProject: import('$lib/store/project').Project | null = null;
@@ -167,7 +188,7 @@
   }> = [];
 
   // Execution preferences - default values
-  let preferences = {
+  let preferences: ExecutionPreferences = {
     parallelExecution: true,
     stopOnError: true,
     serverCookieHandling: !isDesktop,
@@ -175,9 +196,38 @@
     timeout: 30000
   };
 
+  // Computed environment variables for template resolution
+  $: environmentVariables = computeEnvironmentVariables(environment, selectedSubEnvironment);
+
+  function computeEnvironmentVariables(env: Environment | null, subEnv: string | null): Record<string, unknown> {
+    if (!env || !subEnv || !env.config.environments[subEnv]) {
+      return {};
+    }
+
+    const envData: Record<string, unknown> = {};
+    const subEnvironment = env.config.environments[subEnv];
+
+    Object.entries(env.config.variable_definitions).forEach(([varName, varDef]) => {
+      const value = subEnvironment.variables[varName];
+      if (value !== undefined) {
+        envData[varName] = value;
+      } else if (varDef.default_value !== undefined) {
+        envData[varName] = varDef.default_value;
+      }
+    });
+
+    if (subEnvironment.api_hosts) {
+      Object.entries(subEnvironment.api_hosts).forEach(([apiId, hostUrl]) => {
+        envData[`api_host_${apiId}`] = hostUrl;
+      });
+    }
+
+    return envData;
+  }
+
   // Function to handle endpoint selection for a specific step
-  async function handleEndpointSelected(event: CustomEvent<Endpoint>, stepIndex: number) {
-    const selectedEndpoint = event.detail;
+  async function handleEndpointSelected(event: CustomEvent<Endpoint & { stepIndex: number }>) {
+    const { stepIndex, ...selectedEndpoint } = event.detail;
 
     // Set loading state
     isLoadingEndpointDetails = true;
@@ -282,6 +332,89 @@
     selectedProject = state.selectedProject;
   });
 
+  // Initialize when component mounts or when flowData or environment changes
+  $: if (flowData && flowData.steps) {
+    totalSteps = flowData.steps.length;
+    initializeFlowRunner();
+  }
+
+  // Re-initialize when environment variables change (but not on initial load)
+  $: if (flowRunner && environmentVariables) {
+    // Only reinitialize if environment variables actually changed
+    const envVarsChanged = JSON.stringify(previousEnvironmentVariables) !== JSON.stringify(environmentVariables);
+    
+    if (envVarsChanged && Object.keys(environmentVariables).length > 0) {
+      console.log('Environment variables changed, reinitializing FlowRunner');
+      previousEnvironmentVariables = { ...environmentVariables };
+      initializeFlowRunner();
+    }
+  }
+
+  // Ensure endpoints are available
+  $: if (!flowData.endpoints) {
+    flowData.endpoints = [];
+    console.warn('No endpoints provided in flowData. The flow may not execute correctly.');
+  }
+
+  // Ensure parameters array exists
+  $: if (!flowData.parameters) {
+    flowData.parameters = [];
+  }
+
+  // Add a log entry to the execution logs
+  function addLog(level: 'info' | 'debug' | 'error' | 'warning', message: string, details?: string) {
+    dispatch('log', { level, message, details });
+  }
+
+  function initializeFlowRunner() {
+    const options: FlowRunnerOptions = {
+      flowData,
+      preferences,
+      selectedEnvironment: environment,
+      environmentVariables,
+      onLog: addLog,
+      onExecutionStateUpdate: (state) => {
+        executionStore.set(state);
+        currentStep = state.currentStep || 0;
+        progress = state.progress || 0;
+        dispatch('executionStateUpdate', state);
+      },
+      onEndpointStateUpdate: (data) => {
+        dispatch('endpointStateUpdate', data);
+      },
+      onStepExecutionComplete: (data) => {
+        dispatch('stepExecutionComplete', data);
+      },
+      onExecutionStart: () => {
+        dispatch('executionStart');
+      },
+      onExecutionComplete: (data) => {
+        isRunning = false;
+        error = data.error;
+        currentParameterValues = data.parameterValues;
+        
+        // Handle flow outputs from execution
+        if (data.flowOutputs) {
+          outputResults = data.flowOutputs;
+          outputExecutionError = null;
+        } else if (data.error) {
+          outputResults = {};
+          outputExecutionError = data.error;
+        }
+        
+        // Force an update of all components that depend on the execution state
+        executionStore.update((state) => ({ ...state }));
+
+        dispatch('executionComplete', data);
+      }
+    };
+
+    flowRunner = new FlowRunner(options);
+    
+    // Store current environment variables for comparison
+    previousEnvironmentVariables = { ...environmentVariables };
+  }
+
     // Add event listener on mount
   onMount(async () => {
     // Listen for custom events on the component's node
@@ -330,97 +463,58 @@
   // Handle removing a step from the flow
   function handleRemoveStep(event: CustomEvent) {
     const { stepIndex } = event.detail;
-    flowData.steps.splice(stepIndex, 1);
+    flowData = stepManagement.removeStep(flowData, stepIndex);
     handleChange();
   }
 
   // Handle removing an endpoint from a step
   function handleRemoveEndpoint(event: CustomEvent) {
     const { stepIndex, endpointIndex } = event.detail;
-    flowData.steps[stepIndex].endpoints.splice(endpointIndex, 1);
+    flowData = stepManagement.removeEndpoint(flowData, stepIndex, endpointIndex);
     handleChange();
   }
 
   // Handle moving a step up or down
   function handleMoveStep(event: CustomEvent) {
     const { stepIndex, direction } = event.detail;
-
-    if (direction === 'up' && stepIndex > 0) {
-      const temp = flowData.steps[stepIndex - 1];
-      flowData.steps[stepIndex - 1] = flowData.steps[stepIndex];
-      flowData.steps[stepIndex] = temp;
-    } else if (direction === 'down' && stepIndex < flowData.steps.length - 1) {
-      const temp = flowData.steps[stepIndex + 1];
-      flowData.steps[stepIndex + 1] = flowData.steps[stepIndex];
-      flowData.steps[stepIndex] = temp;
-    }
-
+    flowData = stepManagement.moveStep(flowData, stepIndex, direction);
     handleChange();
   }
 
   // Add a new step to the flow
   function addNewStep() {
-    // Use the systematic step ID generation approach
-    const allStepIds = flowData.steps.map(s => s.step_id);
-    const lastStepId = flowData.steps.length > 0 ? flowData.steps[flowData.steps.length - 1].step_id : null;
-    const newStepId = generateStepId(allStepIds, lastStepId, null);
-
-    flowData.steps.push({
-      step_id: newStepId,
-      label: `Step ${newStepId}`,
-      endpoints: [],
-      clearCookiesBeforeExecution: false // Default to false
-    });
-
+    flowData = stepManagement.addNewStep(flowData);
     handleChange();
   }
 
   // Insert a new step after a specific step index
-  function insertStepAfter(afterStepIndex: number) {
-    const newStepId = generateStepIdBetweenLocal(afterStepIndex, afterStepIndex + 1);
-    
-    const newStep = {
-      step_id: newStepId,
-      label: `Step ${newStepId}`,
-      endpoints: [],
-      clearCookiesBeforeExecution: false // Default to false
-    };
-
-    // Insert the new step at the correct position
-    flowData.steps.splice(afterStepIndex + 1, 0, newStep);
-
+  function insertStepAfter(event: CustomEvent) {
+    const { stepIndex } = event.detail;
+    flowData = stepManagement.insertStepAfter(flowData, stepIndex);
     handleChange();
   }
 
   // Insert a new step before the first step
   function insertStepAtBeginning() {
-    const allStepIds = flowData.steps.map(s => s.step_id);
-    const newStepId = generateStepId(allStepIds, null, flowData.steps[0]?.step_id || null);
-    
-    const newStep = {
-      step_id: newStepId,
-      label: `Step ${newStepId}`,
-      endpoints: [],
-      clearCookiesBeforeExecution: false // Default to false
-    };
-
-    // Insert the new step at the beginning
-    flowData.steps.unshift(newStep);
-
+    flowData = stepManagement.insertStepAtBeginning(flowData);
     handleChange();
-  }
-
-  // Generate a step ID that fits between two existing steps
-  function generateStepIdBetweenLocal(afterIndex: number, beforeIndex: number): string {
-    const steps = flowData.steps;
-    return generateStepIdBetween(steps, afterIndex, beforeIndex);
   }
 
   // Handle execution state reset
   function handleReset() {
+    if (flowRunner) {
+      flowRunner.resetExecution();
+      isRunning = false;
+      currentStep = 0;
+      progress = 0;
+      error = null;
+      currentParameterValues = {};
+      showParameterInputModal = false;
+      pendingSingleStepExecution = null;
+    }
+    
     // Reset the execution state store
     executionStore.set({});
-    isRunning = false;
 
     // Reset output results
     outputResults = {};
@@ -433,53 +527,8 @@
     dispatch('reset');
   }
 
-  // Handle execution completion
-  function handleExecutionComplete(event: CustomEvent) {
-    console.log('Execution completed:', event.detail);
-    isRunning = false;
-    
-    // Handle flow outputs from execution
-    if (event.detail.flowOutputs) {
-      outputResults = event.detail.flowOutputs;
-      outputExecutionError = null;
-    } else if (event.detail.error) {
-      outputResults = {};
-      outputExecutionError = event.detail.error;
-    }
-    
-    // Force an update of all components that depend on the execution state
-    // This maintains the updated endpoint ID format (stepId-endpointIndex)
-    executionStore.update((state) => ({ ...state }));
-
-    // Dispatch event to parent
-    dispatch('executionComplete', event.detail);
-  }
-
-  // Handle execution state update from FlowRunner
-  function handleExecutionStateUpdate(event: CustomEvent) {
-    // Update the execution state with the new state from FlowRunner
-    // The execution state now uses stepId-endpointIndex as keys instead of endpoint_id-endpointIndex
-    // Update the store to trigger reactivity across all components
-    executionStore.set(event.detail);
-  }
-
-  function handleLog(event: CustomEvent) {
-    const { level, message, details } = event.detail;
-    
-    // Add log to our local logs array with timestamp
-    executionLogs = [...executionLogs, {
-      level,
-      message,
-      details,
-      timestamp: new Date()
-    }];
-    
-    // Also dispatch to parent for any additional handling
-    dispatch('log', event.detail);
-  }
-
   // Run the entire flow
-  function runFlow() {
+  async function runFlow() {
     // Check for API hosts before running
     if (!hasValidApiHosts()) {
       dispatch('error', { message: 'Please configure at least one API host before running the flow.' });
@@ -492,32 +541,62 @@
       return;
     }
 
-    if (flowRunner) {
-      // Reset the execution state before starting a new run
-      executionStore.set({});
-
-      flowRunner.runFlow().catch((err: unknown) => {
-        console.error('Error running flow:', err);
-        isRunning = false;
-        const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred while running the flow.';
-        dispatch('error', { message: errorMessage });
-      });
+    if (!flowRunner) {
+      console.error('Flow runner not initialized');
+      return;
     }
+
+    // Reset the execution state before starting a new run
+    executionStore.set({});
+
+    isRunning = true;
+    const result = await flowRunner.runFlow();
+    
+    if (result.parametersWithMissingValues) {
+      parametersWithMissingValues = result.parametersWithMissingValues;
+      showParameterInputModal = true;
+      isRunning = false;
+      return;
+    }
+
+    // Update local state from flow runner
+    isRunning = flowRunner.isRunning;
+    currentStep = flowRunner.currentStep;
+    progress = flowRunner.progress;
+    error = flowRunner.error;
+    executionStore.set(flowRunner.executionState);
+    currentParameterValues = flowRunner.parameterValues;
   }
 
   // Execute a single step from the UI
-  function executeStep(event: CustomEvent) {
+  async function executeStep(event: CustomEvent) {
     const { stepIndex } = event.detail;
     const step = flowData.steps[stepIndex];
 
-    if (flowRunner && step) {
+    if (!flowRunner) {
+      console.error('Flow runner not initialized');
+      return;
+    }
+
+    if (step) {
       // We're not resetting the execution state so that previous results remain visible
       isRunning = true;
 
-      flowRunner.executeSingleStep(step, stepIndex).catch((err: unknown) => {
-        console.error(`Error executing step ${step.step_id}:`, err);
+      const result = await flowRunner.executeSingleStep(step, stepIndex);
+      
+      // Check if parameters are missing - same handling as runFlow
+      if (result.parametersWithMissingValues && result.parametersWithMissingValues.length > 0) {
+        parametersWithMissingValues = result.parametersWithMissingValues;
+        pendingSingleStepExecution = { step, stepIndex }; // Store for later continuation
+        showParameterInputModal = true;
         isRunning = false;
-      });
+        return;
+      }
+      
+      isRunning = flowRunner.isRunning;
+      
+      // Update parameter values from flow runner after execution
+      currentParameterValues = flowRunner.parameterValues;
     }
   }
 
@@ -605,6 +684,74 @@
     }, 300);
   }
 
+  // Parameter input modal handlers
+  function handleParameterModalClose() {
+    showParameterInputModal = false;
+    pendingSingleStepExecution = null;
+  }
+
+  async function handleParameterModalSubmit(event: CustomEvent<{ parameters: FlowParameter[] }>) {
+    if (!flowRunner) return;
+
+    flowRunner.updateParameterValues(event.detail.parameters);
+    showParameterInputModal = false;
+
+    // Check if we're continuing a single step execution or full flow
+    if (pendingSingleStepExecution) {
+      // Continue with single step execution
+      const { step, stepIndex } = pendingSingleStepExecution;
+      pendingSingleStepExecution = null; // Clear pending execution
+      
+      isRunning = true;
+      const result = await flowRunner.executeSingleStep(step, stepIndex);
+      
+      // Update local state
+      isRunning = flowRunner.isRunning;
+      currentParameterValues = flowRunner.parameterValues;
+      executionStore.set(flowRunner.executionState);
+    } else {
+      // Continue with full flow execution
+      isRunning = true;
+      await flowRunner.executeFlowAfterParameterCheck();
+      
+      // Update local state
+      isRunning = flowRunner.isRunning;
+      currentStep = flowRunner.currentStep;
+      progress = flowRunner.progress;
+      error = flowRunner.error;
+      executionStore.set(flowRunner.executionState);
+      currentParameterValues = flowRunner.parameterValues;
+    }
+  }
+
+  // Flow parameter editor handlers
+  function handleParameterSave(event: CustomEvent) {
+    const parameter = event.detail;
+    if (!flowData.parameters) flowData.parameters = [];
+    
+    if (parameter.isNew) {
+      delete parameter.isNew;
+      flowData.parameters = [...flowData.parameters, parameter];
+    } else {
+      const index = flowData.parameters.findIndex(p => p.name === parameter.name);
+      if (index !== -1) {
+        flowData.parameters[index] = parameter;
+        flowData.parameters = [...flowData.parameters];
+      }
+    }
+    handleChange();
+  }
+
+  function handleParameterRemove(event: CustomEvent) {
+    flowData.parameters = flowData.parameters.filter(p => p.name !== event.detail.name);
+    handleChange();
+  }
+
+  function handleParametersSaveAll(event: CustomEvent) {
+    flowData.parameters = [...event.detail];
+    handleChange();
+  }
+
   // No longer needed - we use progress and currentStep directly from executionStore
   // This function was previously calculating progress and current step
   // but those values are already available in the executionStore
@@ -614,472 +761,62 @@
 
 <div class="space-y-4">
   <!-- Top Control Bar with Run Button -->
-  <div class="rounded-lg border bg-white p-4 shadow-sm">
-    <div class="flex flex-wrap items-center justify-between gap-4">
-      <div class="flex items-center">
-        <h3 class="text-lg font-medium">Test Flow Execution</h3>
-      </div>
-
-      <!-- Environment Selection -->
-      <div class="flex items-center space-x-4">
-        <div class="min-w-0 flex-1">
-          <div class="w-32">
-            <SimplifiedEnvironmentSelector
-              id="environment-selector"
-              {environment}
-              {selectedSubEnvironment}
-              placeholder={isLoadingEnvironment ? "Loading environment..." : "Select sub-environment..."}
-              disabled={isRunning || isLoadingEnvironment}
-              on:select={handleEnvironmentSelection}
-            />
-          </div>
-        </div>
-
-        <div class="flex items-center space-x-3">
-          <!-- Run Options Button -->
-          <button
-            class="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-            on:click={() => (showExecutionOptions = !showExecutionOptions)}
-            disabled={isRunning}
-          >
-            <svg class="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"
-              />
-            </svg>
-            Options
-          </button>
-
-        <!-- Reset Button -->
-        <button
-          class="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          on:click={() => {
-            if (flowRunner) {
-              flowRunner.handleReset(); // Use handleReset in FlowRunner directly
-            } else {
-              handleReset(); // Fallback to local reset
-            }
-          }}
-          disabled={isRunning || Object.keys($executionStore).length === 0}
-        >
-          <svg class="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-            />
-          </svg>
-          Reset
-        </button>
-
-        <!-- parameters Button -->
-        <button
-          class="mr-2 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
-          on:click={() => {
-            // Toggle parameters panel using the local state
-            showParametersPanel = !showParametersPanel;
-          }}
-          disabled={isRunning}
-        >
-          <svg class="mr-1.5 h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-            <path
-              fill-rule="evenodd"
-              d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"
-              clip-rule="evenodd"
-            />
-          </svg>
-          Parameters
-        </button>
-
-        <!-- View Logs Button (only show when logs are available) -->
-        {#if executionLogs.length > 0}
-          <button
-            class="mr-2 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
-            on:click={openLogsViewer}
-            disabled={isRunning}
-          >
-            <svg class="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-              />
-            </svg>
-            View Logs
-            <span class="ml-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-gray-100 text-xs font-medium text-gray-600">
-              {executionLogs.length}
-            </span>
-          </button>
-        {/if}
-
-        <!-- Run Flow Button -->
-        <button
-          class="inline-flex items-center rounded-md border border-transparent px-4 py-2 text-sm font-medium text-white shadow-sm {isRunning
-            ? 'bg-red-600 hover:bg-red-700'
-            : !hasValidApiHosts() || flowData.steps.length === 0
-            ? 'bg-gray-400 cursor-not-allowed'
-            : 'bg-blue-600 hover:bg-blue-700'}"
-          on:click={isRunning ? handleStop : runFlow}
-          disabled={isRunning || !hasValidApiHosts() || flowData.steps.length === 0}
-        >
-          {#if isRunning}
-            <svg
-              class="mr-2 -ml-1 h-4 w-4 animate-spin text-white"
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-            >
-              <circle
-                class="opacity-25"
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                stroke-width="4"
-              ></circle>
-              <path
-                class="opacity-75"
-                fill="currentColor"
-                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-              ></path>
-            </svg>
-            Stop
-          {:else if !hasValidApiHosts()}
-            <svg class="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z"
-              />
-            </svg>
-            Configure API Hosts
-          {:else if flowData.steps.length === 0}
-            <svg class="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-              />
-            </svg>
-            Add Steps First
-          {:else}
-            <svg class="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
-              />
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-            Run Flow
-          {/if}
-        </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Progress Bar (only visible when running) -->
-    {#if isRunning}
-      <div class="mt-4">
-        <div class="h-2 w-full rounded-full bg-gray-200">
-          <div
-            class="h-2 rounded-full bg-blue-600"
-            style="width: {$executionStore.progress || 0}%"
-          ></div>
-        </div>
-        <div class="mt-1 text-right text-xs text-gray-500">
-          Step {$executionStore.currentStep !== undefined ? $executionStore.currentStep + 1 : 1} of {flowData.steps.length}
-        </div>
-      </div>
-    {/if}
-  </div>
+  <FlowExecutionControls
+    {environment}
+    {selectedSubEnvironment}
+    {isRunning}
+    {isLoadingEnvironment}
+    executionStore={$executionStore}
+    {executionLogs}
+    hasValidApiHosts={hasValidApiHosts()}
+    hasSteps={flowData.steps.length > 0}
+    totalSteps={flowData.steps.length}
+    on:environmentSelect={handleEnvironmentSelection}
+    on:toggleOptions={() => (showExecutionOptions = !showExecutionOptions)}
+    on:reset={() => {
+      handleReset();
+    }}
+    on:toggleParameters={() => (showParametersPanel = !showParametersPanel)}
+    on:openLogs={openLogsViewer}
+    on:runFlow={runFlow}
+    on:stop={handleStop}
+  />
 
   <!-- Execution Options Panel (Sliding) -->
-  {#if showExecutionOptions}
-    <div class="rounded-lg border bg-white p-4 shadow-sm" transition:fade={{ duration: 150 }}>
-      <h4 class="mb-3 text-sm font-medium text-gray-700">Execution Options</h4>
+  <ExecutionOptionsPanel bind:preferences isVisible={showExecutionOptions} />
 
-      <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <div class="space-y-2">
-          <div class="flex items-center">
-            <input
-              type="checkbox"
-              id="parallelExecution"
-              class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-              bind:checked={preferences.parallelExecution}
-            />
-            <label for="parallelExecution" class="ml-2 block text-sm text-gray-700"
-              >Parallel Execution</label
-            >
-          </div>
-
-          <div class="flex items-center">
-            <input
-              type="checkbox"
-              id="stopOnError"
-              class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-              bind:checked={preferences.stopOnError}
-            />
-            <label for="stopOnError" class="ml-2 block text-sm text-gray-700">Stop On Error</label>
-          </div>
-
-          <div class="flex items-center">
-            <input
-              type="checkbox"
-              id="serverCookieHandling"
-              class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-              bind:checked={preferences.serverCookieHandling}
-            />
-            <label for="serverCookieHandling" class="ml-2 block text-sm text-gray-700"
-              >Handle Cookies</label
-            >
-          </div>
-        </div>
-
-        <div class="space-y-4">
-          <div>
-            <label for="retryCount" class="block text-sm font-medium text-gray-700"
-              >Retry Count</label
-            >
-            <input
-              type="number"
-              id="retryCount"
-              class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-              min="0"
-              max="5"
-              bind:value={preferences.retryCount}
-            />
-          </div>
-
-          <div>
-            <label for="timeout" class="block text-sm font-medium text-gray-700">Timeout (ms)</label
-            >
-            <input
-              type="number"
-              id="timeout"
-              class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-              min="1000"
-              max="60000"
-              step="1000"
-              bind:value={preferences.timeout}
-            />
-          </div>
-        </div>
-      </div>
-    </div>
-  {/if}
-
-  <!-- Hidden Flow Runner Component (bind to access its methods) -->
-  <div>
-    <FlowRunner
-      bind:this={flowRunner}
-      {flowData}
-      bind:isRunning
-      bind:parameterValues={currentParameterValues}
-      executionState={$executionStore}
-      bind:preferences
-      bind:showParametersPanel
-      showButtons={false}
-      selectedEnvironment={environment}
-      on:reset={handleReset}
-      on:change={(event: CustomEvent<{ flowData: TestFlowData }>) => {
-        console.log('Change event from FlowRunner:', event.detail);
-        if (event.detail && event.detail.flowData) {
-          // Handle case when parameters are updated
-          if (event.detail.flowData.parameters) {
-            console.log('parameters updated in FlowRunner:', event.detail.flowData.parameters);
-          }
-
-          flowData = { ...event.detail.flowData };
-          handleChange();
-        }
-      }}
-      on:executionComplete={handleExecutionComplete}
-      on:executionStateUpdate={handleExecutionStateUpdate}
-      on:log={handleLog}
-      on:endpointStateUpdate={(
-        event: CustomEvent<{ endpointId: string; state: EndpointExecutionState }>
-      ) => {
-        const { endpointId, state } = event.detail;
-        // Force the store to update for better reactivity
-        // endpointId is now using the format `${stepId}-${endpointIndex}` for better user reference
-        executionStore.update((store) => {
-          return { ...store, [endpointId]: state };
-        });
-      }}
+  <!-- Steps Section -->
+  {#if templateContext}
+    <StepList
+      steps={flowData.steps}
+      {endpoints}
+      apiHosts={flowData?.settings?.api_hosts || {}}
+      {isRunning}
+      {isLoadingEndpointDetails}
+      executionStore={$executionStore}
+      {templateContext}
+      on:removeStep={handleRemoveStep}
+      on:removeEndpoint={handleRemoveEndpoint}
+      on:moveStep={handleMoveStep}
+      on:change={handleChange}
+      on:runStep={executeStep}
+      on:endpointSelected={handleEndpointSelected}
+      on:insertStepAtBeginning={insertStepAtBeginning}
+      on:insertStepAfter={insertStepAfter}
+      on:addNewStep={addNewStep}
     />
-  </div>
-
-  <!-- Existing Steps -->
-  {#if flowData && flowData.steps && flowData.steps.length > 0}
-    <!-- Add Step Button (before first step) -->
-    <div class="mb-4 flex justify-center">
-      <button
-        aria-label="Insert step before"
-        class="group flex h-8 w-8 items-center justify-center rounded-full border border-gray-300 bg-white text-gray-400 shadow-sm hover:bg-gray-50 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-        on:click={insertStepAtBeginning}
-        disabled={isRunning}
-        title="Insert step before {flowData.steps[0].step_id}"
-        class:opacity-50={isRunning}
-        class:cursor-not-allowed={isRunning}
-      >
-        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-          />
-        </svg>
-      </button>
-    </div>
-    
-    {#each flowData.steps as step, stepIndex (step.step_id)}
-      <div class="mb-4">
-        <StepEditor
-          {step}
-          {endpoints}
-          apiHosts={flowData?.settings?.api_hosts || {}}
-          {stepIndex}
-          isFirstStep={stepIndex === 0}
-          isLastStep={stepIndex === flowData.steps.length - 1}
-          {isRunning}
-          executionStore={$executionStore}
-          {templateContext}
-          on:removeStep={handleRemoveStep}
-          on:removeEndpoint={handleRemoveEndpoint}
-          on:moveStep={handleMoveStep}
-          on:change={handleChange}
-          on:runStep={executeStep}
-        >
-          <div slot="endpoint-selector">
-            <SmartEndpointSelector
-              apiHosts={flowData?.settings?.api_hosts || {}}
-              on:select={(e) => handleEndpointSelected(e, stepIndex)}
-              disabled={isRunning || isLoadingEndpointDetails}
-            />
-            {#if isLoadingEndpointDetails}
-              <div class="mt-2 flex items-center text-sm text-blue-600">
-                <svg class="mr-2 h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Loading endpoint details...
-              </div>
-            {/if}
-          </div>
-        </StepEditor>
-      </div>
-      
-      <!-- Add Step Button (between steps) -->
-      {#if stepIndex < flowData.steps.length - 1}
-        <div class="mb-4 flex justify-center">
-          <button
-            aria-label="Insert step after"
-            class="group flex h-8 w-8 items-center justify-center rounded-full border border-gray-300 bg-white text-gray-400 shadow-sm hover:bg-gray-50 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-            on:click={() => insertStepAfter(stepIndex)}
-            disabled={isRunning}
-            title="Insert step after {step.step_id}"
-            class:opacity-50={isRunning}
-            class:cursor-not-allowed={isRunning}
-          >
-            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-              />
-            </svg>
-          </button>
-        </div>
-      {/if}
-    {/each}
   {:else}
-    <div class="mb-4 rounded-lg border border-yellow-100 bg-yellow-50 p-4 text-center">
-      <p class="text-yellow-700">No steps in this flow yet. Add a step to get started.</p>
+    <div class="rounded-lg border border-gray-200 bg-gray-50 p-4 text-center text-sm text-gray-500">
+      Loading template context...
     </div>
   {/if}
-
-  <!-- Add Step Button -->
-  <div class="mt-6">
-    <button
-      class="flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:outline-none"
-      on:click={addNewStep}
-      disabled={isRunning}
-    >
-      <svg class="mr-2 h-5 w-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-        />
-      </svg>
-      Add New Step
-    </button>
-  </div>
 
   <!-- Flow Outputs Section -->
-  <div class="mt-8 rounded-lg border border-gray-200 bg-gray-50 p-6">
-    <div class="flex items-center justify-between">
-      <div class="flex-1">
-        <h3 class="text-lg font-medium text-gray-900">Flow Outputs</h3>
-        <p class="mt-1 text-sm text-gray-500">
-          Define values that will be extracted when the flow completes successfully
-        </p>
-        
-        {#if flowData.outputs && flowData.outputs.length > 0}
-          <div class="mt-3 flex flex-wrap gap-2">
-            {#each flowData.outputs as output}
-              <span class="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800">
-                {output.name}
-                {#if output.isTemplate}
-                  <svg class="ml-1 h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
-                  </svg>
-                {/if}
-              </span>
-            {/each}
-          </div>
-        {/if}
-      </div>
-      
-      <button
-        class="inline-flex items-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-        on:click={openOutputEditor}
-        disabled={isRunning}
-      >
-        <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-        </svg>
-        {flowData.outputs && flowData.outputs.length > 0 ? 'Manage Outputs' : 'Define Outputs'}
-      </button>
-    </div>
-
-    {#if !flowData.outputs || flowData.outputs.length === 0}
-      <div class="mt-4 text-center">
-        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-        </svg>
-        <p class="mt-2 text-sm text-gray-500">No outputs defined</p>
-        <p class="text-xs text-gray-400">Click "Define Outputs" to extract values from your flow execution</p>
-      </div>
-    {/if}
-  </div>
+  <FlowOutputsPanel
+    outputs={flowData.outputs || []}
+    {isRunning}
+    on:openOutputEditor={openOutputEditor}
+  />
 </div>
 
 <!-- Flow Output Editor Slide-out Panel -->
@@ -1105,3 +842,25 @@
     on:close={closeLogsViewer}
   />
 {/if}
+
+<!-- Flow Parameters Editor Slide-out Panel -->
+{#if showParametersPanel}
+  <FlowParameterEditor
+    isOpen={showParametersPanel}
+    parameters={flowData.parameters || []}
+    currentValues={currentParameterValues}
+    on:save={handleParameterSave}
+    on:remove={handleParameterRemove}
+    on:saveAll={handleParametersSaveAll}
+    on:close={() => (showParametersPanel = false)}
+  />
+{/if}
+
+<!-- Parameter Input Modal - Only shown when required parameters are missing -->
+<ParameterInputModal
+  isOpen={showParameterInputModal}
+  parameters={parametersWithMissingValues}
+  isPendingSingleStepExecution={pendingSingleStepExecution !== null}
+  on:close={handleParameterModalClose}
+  on:submit={handleParameterModalSubmit}
+/>

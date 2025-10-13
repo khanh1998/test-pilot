@@ -10,7 +10,18 @@ import type { ProxyRequest, ProxyResponse, Cookie } from '../types';
 export const POST: RequestHandler = async ({ request, fetch, locals }) => {
   // Check if user is authenticated
   if (!locals.user) {
-    return json({ error: 'Unauthorized' }, { status: 401 });
+    const errorResponse: ProxyResponse = {
+      status: 401,
+      statusText: 'Unauthorized',
+      headers: { 'content-type': 'application/json' },
+      body: { 
+        error: 'Authentication required to use the proxy service',
+        errorSource: 'proxy',
+        message: 'You must be logged in to make proxied requests'
+      },
+      cookies: []
+    };
+    return json(errorResponse, { status: 401 });
   }
   try {
     // Parse the request body to get the original request details
@@ -18,7 +29,18 @@ export const POST: RequestHandler = async ({ request, fetch, locals }) => {
     const { url, method, headers, body, cookies: requestCookies } = requestData;
 
     if (!url) {
-      return json({ error: 'URL is required' }, { status: 400 });
+      const errorResponse: ProxyResponse = {
+        status: 400,
+        statusText: 'Bad Request',
+        headers: { 'content-type': 'application/json' },
+        body: { 
+          error: 'Missing required parameter',
+          errorSource: 'proxy',
+          message: 'URL parameter is required in the request body'
+        },
+        cookies: []
+      };
+      return json(errorResponse, { status: 400 });
     }
 
     // Security checks to prevent SSRF attacks
@@ -36,15 +58,51 @@ export const POST: RequestHandler = async ({ request, fetch, locals }) => {
         hostname.endsWith('.local') ||
         hostname.endsWith('.internal')
       ) {
-        return json({ error: 'Requests to internal networks are not allowed' }, { status: 403 });
+        const errorResponse: ProxyResponse = {
+          status: 403,
+          statusText: 'Forbidden',
+          headers: { 'content-type': 'application/json' },
+          body: { 
+            error: 'Request blocked by security policy',
+            errorSource: 'proxy',
+            message: 'Requests to internal/private networks are not allowed for security reasons',
+            blockedHost: hostname
+          },
+          cookies: []
+        };
+        return json(errorResponse, { status: 403 });
       }
 
       // Only allow http and https schemes
       if (!['http:', 'https:'].includes(targetUrl.protocol)) {
-        return json({ error: 'Only HTTP and HTTPS protocols are supported' }, { status: 403 });
+        const errorResponse: ProxyResponse = {
+          status: 403,
+          statusText: 'Forbidden',
+          headers: { 'content-type': 'application/json' },
+          body: { 
+            error: 'Unsupported protocol',
+            errorSource: 'proxy',
+            message: 'Only HTTP and HTTPS protocols are supported',
+            providedProtocol: targetUrl.protocol
+          },
+          cookies: []
+        };
+        return json(errorResponse, { status: 403 });
       }
     } catch (_error: unknown) {
-      return json({ error: 'Invalid URL format' }, { status: 400 });
+      const errorResponse: ProxyResponse = {
+        status: 400,
+        statusText: 'Bad Request',
+        headers: { 'content-type': 'application/json' },
+        body: { 
+          error: 'Invalid URL format',
+          errorSource: 'proxy',
+          message: 'The provided URL could not be parsed. Please check the URL format',
+          details: _error instanceof Error ? _error.message : 'Malformed URL'
+        },
+        cookies: []
+      };
+      return json(errorResponse, { status: 400 });
     }
 
     // Create headers for the forwarded request
@@ -78,13 +136,33 @@ export const POST: RequestHandler = async ({ request, fetch, locals }) => {
       proxyResponse = await fetch(url, reqInit);
     } catch (_error: unknown) {
       console.error('Error proxying request:', _error);
-      return json(
-        { error: _error instanceof Error ? _error.message : 'Failed to send request' },
-        { status: 502 } // Bad Gateway
-      );
+      const errorResponse: ProxyResponse = {
+        status: 502,
+        statusText: 'Bad Gateway',
+        headers: { 'content-type': 'application/json' },
+        body: { 
+          error: 'Failed to reach destination host',
+          errorSource: 'proxy',
+          message: 'The proxy could not establish a connection to the target API',
+          targetUrl: url,
+          details: _error instanceof Error ? _error.message : 'Network error or timeout',
+          possibleCauses: [
+            'Target server is down or unreachable',
+            'Network connectivity issues',
+            'Request timeout (30 seconds)',
+            'DNS resolution failure',
+            'SSL/TLS certificate issues'
+          ]
+        },
+        cookies: []
+      };
+      return json(errorResponse, { status: 502 });
     }
 
     // Extract data from the response
+    // Note: Responses with status 4xx or 5xx from the destination host are NOT errors from our proxy.
+    // They are legitimate responses from the target API and will have errorSource: 'destination' if needed.
+    // Our proxy errors (above) always have errorSource: 'proxy' in the body.
     const responseData: ProxyResponse = {
       status: proxyResponse.status,
       statusText: proxyResponse.statusText,
@@ -220,9 +298,19 @@ export const POST: RequestHandler = async ({ request, fetch, locals }) => {
     return json(responseData);
   } catch (_error: unknown) {
     console.error('Proxy error:', _error);
-    return json(
-      { error: _error instanceof Error ? _error.message : 'Unknown proxy error' },
-      { status: 500 }
-    );
+    const errorResponse: ProxyResponse = {
+      status: 500,
+      statusText: 'Internal Server Error',
+      headers: { 'content-type': 'application/json' },
+      body: { 
+        error: 'Internal proxy error',
+        errorSource: 'proxy',
+        message: 'An unexpected error occurred in the proxy service',
+        details: _error instanceof Error ? _error.message : 'Unknown error',
+        suggestion: 'Please try again. If the problem persists, contact support'
+      },
+      cookies: []
+    };
+    return json(errorResponse, { status: 500 });
   }
 };

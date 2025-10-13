@@ -1102,11 +1102,11 @@
                   bind:checked={executionPreferences.serverCookieHandling}
                 />
                 <label for="serverCookieHandling" class="ml-2 block text-sm text-gray-700">
-                  Handle Cookies
+                  Use Server Proxy (Bypass CORS)
                 </label>
               </div>
               <p class="ml-6 text-xs text-gray-500">
-                Automatically handle cookies between requests within each flow
+                Recommended for browser use to bypass CORS restrictions and handle cookies. Desktop app doesn't need this.
               </p>
             </div>
 

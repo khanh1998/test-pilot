@@ -478,52 +478,53 @@
           </svg>
           Failed
         </span>
-      {:else}
-        <!-- Run step button when not running -->
-        <button
-          class="ml-2 inline-flex items-center rounded-md bg-blue-100 px-2 py-1 text-xs text-blue-700 transition-colors hover:bg-blue-200"
-          on:click={() => dispatch('runStep', { stepIndex })}
-          disabled={stepExecutionState.status === 'running'}
-          title="Run this step"
-        >
-          <svg class="mr-1 h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
-            <path
-              fill-rule="evenodd"
-              d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"
-              clip-rule="evenodd"
-            />
-          </svg>
-          Run Step
-        </button>
+      {/if}
 
-        <!-- Clear Cookies Toggle - only show from step 2 onwards -->
-        {#if stepIndex >= 1}
-          <div class="ml-3 flex items-center">
-            <label class="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                bind:checked={clearCookiesEnabled}
-                class="sr-only peer"
-                disabled={isRunning}
-                on:change={() => {
-                  step.clearCookiesBeforeExecution = clearCookiesEnabled;
-                  dispatch('change');
-                }}
-              />
-              <div
-                class="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-orange-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-orange-500"
-                class:opacity-50={isRunning}
-                class:cursor-not-allowed={isRunning}
-              ></div>
-              <span
-                class="ml-2 text-xs text-gray-600"
-                title="Clear all stored cookies before this step executes. Useful when you need to test different user roles (e.g., Step 1: Login as customer, Step 2: Clear cookies + Login as admin)"
-              >
-                🍪 Clear before this step
-              </span>
-            </label>
-          </div>
-        {/if}
+      <!-- Run step button - always visible, disabled during execution -->
+      <button
+        class="ml-2 inline-flex items-center rounded-md px-2 py-1 text-xs transition-colors
+          {stepExecutionState.status === 'running' ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'}"
+        on:click={() => dispatch('runStep', { stepIndex })}
+        disabled={stepExecutionState.status === 'running'}
+        title={stepExecutionState.status === 'running' ? 'Step is currently running' : 'Run this step'}
+      >
+        <svg class="mr-1 h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+          <path
+            fill-rule="evenodd"
+            d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"
+            clip-rule="evenodd"
+          />
+        </svg>
+        Run Step
+      </button>
+
+      <!-- Clear Cookies Toggle - only show from step 2 onwards -->
+      {#if stepIndex >= 1}
+        <div class="ml-3 flex items-center">
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              bind:checked={clearCookiesEnabled}
+              class="sr-only peer"
+              disabled={isRunning}
+              on:change={() => {
+                step.clearCookiesBeforeExecution = clearCookiesEnabled;
+                dispatch('change');
+              }}
+            />
+            <div
+              class="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-orange-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-orange-500"
+              class:opacity-50={isRunning}
+              class:cursor-not-allowed={isRunning}
+            ></div>
+            <span
+              class="ml-2 text-xs text-gray-600"
+              title="Clear all stored cookies before this step executes. Useful when you need to test different user roles (e.g., Step 1: Login as customer, Step 2: Clear cookies + Login as admin)"
+            >
+              🍪 Clear before this step
+            </span>
+          </label>
+        </div>
       {/if}
     </h3>
     <div class="flex items-center space-x-2">

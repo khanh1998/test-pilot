@@ -203,7 +203,7 @@ export class FlowRunner {
     }
   }
 
-  async executeSingleStep(step: FlowStep, stepIndex?: number): Promise<{ success: boolean; error?: unknown }> {
+  async executeSingleStep(step: FlowStep, stepIndex?: number): Promise<{ success: boolean; error?: unknown; parametersWithMissingValues?: FlowParameter[] }> {
     if (!step || !step.step_id) {
       const error = new Error('Invalid step provided for execution');
       return { success: false, error };
@@ -215,6 +215,26 @@ export class FlowRunner {
       this.options.onLog('error', 'Validation failed', validationError);
       return { success: false, error };
     }
+
+    // Prepare parameters (if not already prepared)
+    if (Object.keys(this.state.parameterValues).length === 0) {
+      this.state.parameterValues = this.parameterManager.prepareParameters();
+      this.options.onLog('debug', 'Parameters prepared for single step execution');
+    }
+    
+    // Update execution engine with parameter values
+    this.executionEngine.updateParameterValues(this.state.parameterValues);
+    
+    // Check for required parameters
+    const parametersWithMissingValues = this.parameterManager.checkRequiredParameters(this.state.parameterValues);
+    if (parametersWithMissingValues.length > 0) {
+      this.options.onLog('info', 'Required parameters need input', 
+        `${parametersWithMissingValues.length} required parameter(s) need values: ${parametersWithMissingValues.map(p => p.name).join(', ')}`);
+      return { success: false, parametersWithMissingValues };
+    }
+
+    // Reset step-specific data before execution
+    this.resetStepData(step);
 
     const localIsRunning = this.state.isRunning;
     this.state.isRunning = true;
@@ -243,6 +263,54 @@ export class FlowRunner {
       return { success: false, error: err };
     } finally {
       this.state.isRunning = localIsRunning;
+    }
+  }
+
+  /**
+   * Reset all data related to a specific step before re-execution
+   * This includes: stored responses, transformations, execution state, and cookies
+   */
+  private resetStepData(step: FlowStep): void {
+    if (!step || !step.endpoints || step.endpoints.length === 0) {
+      return;
+    }
+
+    this.options.onLog('debug', `Resetting data for step ${step.step_id}`, 
+      `Clearing ${step.endpoints.length} endpoint(s) data`);
+
+    // Reset data for each endpoint in the step
+    step.endpoints.forEach((endpoint, index) => {
+      const endpointId = `${step.step_id}-${index}`;
+      
+      // Clear stored response
+      if (this.state.storedResponses[endpointId]) {
+        delete this.state.storedResponses[endpointId];
+        this.options.onLog('debug', `Cleared stored response for ${endpointId}`);
+      }
+      
+      // Clear stored transformations
+      if (this.state.storedTransformations[endpointId]) {
+        delete this.state.storedTransformations[endpointId];
+        this.options.onLog('debug', `Cleared stored transformations for ${endpointId}`);
+      }
+      
+      // Clear execution state
+      if (this.state.executionState[endpointId]) {
+        delete this.state.executionState[endpointId];
+        this.options.onLog('debug', `Cleared execution state for ${endpointId}`);
+      }
+      
+      // Clear cookies for this endpoint
+      if (this.state.cookieStore.has(endpointId)) {
+        this.state.cookieStore.delete(endpointId);
+        this.options.onLog('debug', `Cleared cookies for ${endpointId}`);
+      }
+    });
+
+    // Additionally, if the step has clearCookiesBeforeExecution flag, 
+    // we respect it by clearing all cookies (the execution engine will handle this)
+    if (step.clearCookiesBeforeExecution === true) {
+      this.options.onLog('debug', `Step ${step.step_id} has clearCookiesBeforeExecution flag - all cookies will be cleared during execution`);
     }
   }
 
