@@ -5,6 +5,8 @@
   import type { Environment } from '../../types/environment.js';
   import type { SequenceFlowResult } from '$lib/sequence-runner/types';
   import { createEventDispatcher } from 'svelte';
+  import { flip } from 'svelte/animate';
+  import { quintOut } from 'svelte/easing';
   import FlowCard from './FlowCard.svelte';
   import FlowSearch from './FlowSearch.svelte';
   import FlowResultsPanel from './FlowResultsPanel.svelte';
@@ -53,6 +55,8 @@
   let showResultsPanel = false;
   let selectedFlowResult: SequenceFlowResult | null = null;
   let selectedFlowName = '';
+  let movingIndex = -1;
+  let targetIndex = -1;
 
   function handleNameEdit() {
     if (editingName.trim() && editingName !== sequence.name) {
@@ -153,6 +157,36 @@
     showResultsPanel = true;
   }
 
+  function handleMoveLeft(event: CustomEvent<{ stepOrder: number }>) {
+    const currentIndex = steps.findIndex(s => s.step_order === event.detail.stepOrder);
+    if (currentIndex > 0) {
+      movingIndex = currentIndex;
+      targetIndex = currentIndex - 1;
+      setTimeout(() => {
+        dispatch('reorderFlow', { sequence, fromIndex: currentIndex, toIndex: currentIndex - 1 });
+        setTimeout(() => {
+          movingIndex = -1;
+          targetIndex = -1;
+        }, 800);
+      }, 100);
+    }
+  }
+
+  function handleMoveRight(event: CustomEvent<{ stepOrder: number }>) {
+    const currentIndex = steps.findIndex(s => s.step_order === event.detail.stepOrder);
+    if (currentIndex < steps.length - 1) {
+      movingIndex = currentIndex;
+      targetIndex = currentIndex + 1;
+      setTimeout(() => {
+        dispatch('reorderFlow', { sequence, fromIndex: currentIndex, toIndex: currentIndex + 1 });
+        setTimeout(() => {
+          movingIndex = -1;
+          targetIndex = -1;
+        }, 800);
+      }, 100);
+    }
+  }
+
   function handleCloseResultsPanel() {
     showResultsPanel = false;
     selectedFlowResult = null;
@@ -161,6 +195,26 @@
 
   $: steps = sequence.sequenceConfig?.steps || [];
   $: canRun = sequenceFlows.length > 0 && selectedEnvironment && selectedSubEnvironment;
+  
+  // Pre-compute flow data for animation
+  $: flowsWithData = steps.map((step, index) => {
+    const flow = sequenceFlows.find(f => parseInt(f.id) === step.test_flow_id);
+    return {
+      sequenceStep: step,
+      flow: flow!,
+      stepOrder: step.step_order,
+      index,
+      isFirst: index === 0,
+      isLast: index === steps.length - 1
+    };
+  }).filter(item => item.flow !== undefined) as Array<{
+    sequenceStep: typeof steps[0];
+    flow: TestFlow;
+    stepOrder: number;
+    index: number;
+    isFirst: boolean;
+    isLast: boolean;
+  }>;
 </script>
 
 <div class="sequence-row bg-white border border-gray-200 rounded-lg p-4 mb-4 {isRunning ? 'ring-2 ring-green-500 ring-opacity-50 bg-green-50' : ''}" class:animate-pulse={isRunning}>
@@ -249,38 +303,39 @@
 
   <!-- Flow Cards Container -->
   <div class="flex items-center gap-3 overflow-x-auto py-2" style="min-height: 11rem;">
-      {#each steps as sequenceStep, index (`${sequenceStep.test_flow_id}-${index}`)}
-        {@const flow = sequenceFlows.find(f => parseInt(f.id) === sequenceStep.test_flow_id)}
-        {@const stepOrder = sequenceStep.step_order}
-        {console.log(`🔍 Rendering FlowCard for step ${stepOrder}: flowId=${sequenceStep.test_flow_id}, flow=${flow?.name || 'NOT FOUND'}`)}
-        {#if flow}
-          <div
-            class="drop-zone transition-all duration-200"
-            class:border-2={dropTargetIndex === index}
-            class:border-blue-400={dropTargetIndex === index}
-            class:border-dashed={dropTargetIndex === index}
-            class:bg-blue-50={dropTargetIndex === index}
-            class:rounded-lg={dropTargetIndex === index}
-            class:p-1={dropTargetIndex === index}
-            on:dragover={(e) => handleDragOver(e, index)}
-            on:drop={(e) => handleDrop(e, index)}
-            role="button"
-            tabindex="0"
-          >
-            <FlowCard
-              {flow}
-              {stepOrder}
-              isDragging={draggedIndex === index}
-              isDropTarget={dropTargetIndex === index}
-              {executionResults}
-              on:click={handleFlowClick}
-              on:dragstart={handleDragStart}
-              on:dragend={handleDragEnd}
-              on:remove={handleFlowRemove}
-              on:showResults={handleShowResults}
-            />
-          </div>
-        {/if}
+      {#each flowsWithData as { sequenceStep, flow, stepOrder, index, isFirst, isLast } (sequenceStep.id)}
+        <div
+          class="drop-zone"
+          class:border-2={dropTargetIndex === index}
+          class:border-blue-400={dropTargetIndex === index}
+          class:border-dashed={dropTargetIndex === index}
+          class:bg-blue-50={dropTargetIndex === index}
+          class:rounded-lg={dropTargetIndex === index}
+          class:p-1={dropTargetIndex === index}
+          on:dragover={(e) => handleDragOver(e, index)}
+          on:drop={(e) => handleDrop(e, index)}
+          role="button"
+          tabindex="0"
+          animate:flip={{ duration: 800, easing: quintOut }}
+        >
+          <FlowCard
+            {flow}
+            {stepOrder}
+            isDragging={draggedIndex === index}
+            isDropTarget={dropTargetIndex === index}
+            isMoving={movingIndex === index || targetIndex === index}
+            {isFirst}
+            {isLast}
+            {executionResults}
+            on:click={handleFlowClick}
+            on:dragstart={handleDragStart}
+            on:dragend={handleDragEnd}
+            on:remove={handleFlowRemove}
+            on:showResults={handleShowResults}
+            on:moveLeft={handleMoveLeft}
+            on:moveRight={handleMoveRight}
+          />
+        </div>
       {/each}    <!-- Add Flow Search -->
     <div class="flex-shrink-0">
       <FlowSearch
@@ -338,8 +393,8 @@
   }
 
   .drop-zone {
-    min-height: 10rem; /* Match the fixed height of flow cards (h-40) */
-    min-width: 18rem;  /* Match the fixed width of flow cards (w-72) */
+    min-height: auto; /* Let the card determine its height */
+    min-width: 20rem;  /* Match the new w-80 width of flow cards */
   }
   
   .drop-zone:global(.dragging-over) {

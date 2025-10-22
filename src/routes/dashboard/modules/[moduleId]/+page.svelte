@@ -389,7 +389,7 @@
       const fullFlow = fullFlowResponse.testFlow;
       
       // Add flow to sequence via API
-      await projectClient.addFlowToSequence(projectId, moduleId, sequence.id, {
+      const addResult = await projectClient.addFlowToSequence(projectId, moduleId, sequence.id, {
         test_flow_id: parseInt(fullFlow.id),
         step_order: nextStepOrder
       });
@@ -398,26 +398,12 @@
       sequenceFlowsMap.set(sequence.id, [...currentFlows, fullFlow]);
       sequenceFlowsMap = new Map(sequenceFlowsMap); // Trigger reactivity
       
-      // Update sequence steps
-      const updatedSequences = sequences.map(seq => {
-        if (seq.id === sequence.id) {
-          const newSteps = [...(seq.sequenceConfig?.steps || []), {
-            id: `step-${nextStepOrder}`,
-            test_flow_id: parseInt(fullFlow.id),
-            step_order: nextStepOrder,
-            parameter_mappings: []
-          }];
-          return {
-            ...seq,
-            sequenceConfig: {
-              ...seq.sequenceConfig,
-              steps: newSteps
-            }
-          };
-        }
-        return seq;
-      });
-      sequences = updatedSequences;
+      // Update the sequence with the result from backend
+      if (addResult.result) {
+        sequences = sequences.map(seq => 
+          seq.id === sequence.id ? addResult.result : seq
+        );
+      }
     } catch (err) {
       console.error('Failed to add flow to sequence:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to add flow to sequence';
@@ -490,23 +476,22 @@
       
       if (fromIndex === toIndex) return;
       
-      // Get current flows and reorder them
+      // Get current steps and reorder them by swapping positions
+      const currentSteps = [...(sequence.sequenceConfig?.steps || [])];
+      const [movedStep] = currentSteps.splice(fromIndex, 1);
+      currentSteps.splice(toIndex, 0, movedStep);
+      
+      // Update only the step_order, keeping IDs and other properties intact
+      const newSteps = currentSteps.map((step, index) => ({
+        ...step,
+        step_order: index + 1
+      }));
+      
+      // Also update the flows map for display
       const currentFlows = sequenceFlowsMap.get(sequence.id) || [];
       const reorderedFlows = [...currentFlows];
       const [movedFlow] = reorderedFlows.splice(fromIndex, 1);
       reorderedFlows.splice(toIndex, 0, movedFlow);
-      
-      // Update the sequence steps with new order
-      const newSteps = reorderedFlows.map((flow, index) => {
-        const originalStep = sequence.sequenceConfig?.steps?.find(s => s.test_flow_id === parseInt(flow.id));
-        return {
-          ...originalStep,
-          id: originalStep?.id || `step-${index + 1}`,
-          test_flow_id: parseInt(flow.id),
-          step_order: index + 1,
-          parameter_mappings: originalStep?.parameter_mappings || []
-        };
-      });
       
       // Update the sequence on the server
       await projectClient.updateSequence(projectId, moduleId, sequence.id, {

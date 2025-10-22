@@ -164,7 +164,7 @@ export class FlowSequenceRepository {
       ...originalSequence.sequenceConfig,
       steps: originalSequence.sequenceConfig.steps.map(step => ({
         ...step,
-        id: `step_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        id: `step-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
       }))
     };
 
@@ -197,7 +197,7 @@ export class FlowSequenceRepository {
 
     // Add new step to sequence config
     const newStep = {
-      id: `step_${Date.now()}`,
+      id: `step-${Date.now()}`,
       test_flow_id: testFlowId,
       step_order: stepOrder,
       parameter_mappings: parameterMappings
