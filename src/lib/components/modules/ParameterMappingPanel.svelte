@@ -32,8 +32,8 @@
 
   interface ParameterMapping {
     flow_parameter_name: string;
-    source_type: 'previous_output' | 'static_value' | 'environment_variable';
-    source_value: string; // For previous_output: output field name, for static_value: the actual value, for environment_variable: variable name
+    source_type: 'previous_output' | 'static_value' | 'environment_variable' | 'function';
+    source_value: string; // For previous_output: output field name, for static_value: the actual value, for environment_variable: variable name, for function: function call expression
     data_type?: 'string' | 'number' | 'boolean' | 'array' | 'null'; // Only used for static_value
     source_flow_step?: number; // Only used for previous_output
     source_output_field?: string; // Only used for previous_output
@@ -258,6 +258,7 @@
                   >
                     <option value="static_value">Fixed Value</option>
                     <option value="environment_variable">Environment Variable</option>
+                    <option value="function">Function Call</option>
                     {#if availableFlowOutputs.length > 0}
                       <option value="previous_output">Previous Flow Output</option>
                     {/if}
@@ -364,6 +365,28 @@
                   {:else}
                     <div class="flex-1"></div>
                   {/if}
+                {:else if parameterMappings[index].source_type === 'function'}
+                  <div class="flex-1">
+                    <label for="functionCall-{index}" class="block text-sm font-medium text-gray-700 mb-2">Function Expression</label>
+                    <input
+                      id="functionCall-{index}"
+                      type="text"
+                      bind:value={parameterMappings[index].source_value}
+                      on:input={(e) => handleInputChange(e, index, 'source_value')}
+                      placeholder="e.g., uuid(), dateISO(), randomString(10), dateFormat(1, 'yyyy-MM-dd')"
+                      class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-mono"
+                    />
+                  </div>
+                  <div class="flex-1">
+                    <span class="block text-sm font-medium text-gray-700 mb-2">Available Functions</span>
+                    <div class="w-full px-3 py-2 border border-gray-200 rounded-md bg-gray-50 text-xs text-gray-600 overflow-y-auto max-h-20">
+                      <div class="space-y-1">
+                        <div><strong>Date/Time:</strong> isoDate(), dateISO(), timestamp(), dateFormat(), dateAdd(), dateSubtract()</div>
+                        <div><strong>IDs:</strong> uuid(), randomString(), randomInt()</div>
+                        <div><strong>Encoding:</strong> base64Encode(), urlEncode()</div>
+                      </div>
+                    </div>
+                  </div>
                 {:else if parameterMappings[index].source_type === 'previous_output'}
                   <div class="flex-1">
                     <label for="sourceFlow-{index}" class="block text-sm font-medium text-gray-700 mb-2">Source Flow</label>
@@ -409,7 +432,17 @@
               </div>
 
               <!-- Status/Info Messages -->
-              {#if parameterMappings[index].source_type === 'environment_variable'}
+              {#if parameterMappings[index].source_type === 'function'}
+                {#if parameterMappings[index].source_value}
+                  <p class="text-xs text-gray-500 mb-3">
+                    Function call: <strong class="font-mono">{parameterMappings[index].source_value}</strong>
+                  </p>
+                {:else}
+                  <p class="text-xs text-amber-600 mb-3">
+                    Select a function or enter a custom function expression
+                  </p>
+                {/if}
+              {:else if parameterMappings[index].source_type === 'environment_variable'}
                 {#if environmentVariables.length === 0}
                   <p class="text-xs text-gray-500 mb-3">
                     {#if !selectedEnvironment}

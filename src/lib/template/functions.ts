@@ -3,6 +3,7 @@
  * These are utility functions available in template expressions
  */
 
+import { DateTime } from 'luxon';
 import type { TemplateContext } from './types';
 
 /**
@@ -40,51 +41,48 @@ export const defaultTemplateFunctions: Record<string, (...args: unknown[]) => un
   },
 
   /**
-   * Get current date in ISO format
+   * Get current date in ISO format (local timezone)
    */
   isoDate: (): string => {
-    return new Date().toISOString();
+    return DateTime.now().toISO() || '';
   },
 
   /**
    * Format date with optional day offset and custom format
    * @param dayOffset Optional number of days to add/subtract (default: 0)
-   * @param format Format string (default: 'YYYY-MM-DD')
+   * @param format Format string (default: 'yyyy-MM-dd') - uses Luxon format tokens
    */
   dateFormat: (...args: unknown[]): string => {
     const dayOffset = args.length > 0 && typeof args[0] === 'number' ? args[0] : 0;
-    const format = args.length > 1 && typeof args[1] === 'string' ? args[1] : 'YYYY-MM-DD';
+    const format = args.length > 1 && typeof args[1] === 'string' ? args[1] : 'yyyy-MM-dd';
     
-    const date = new Date();
-    date.setDate(date.getDate() + dayOffset);
-    
-    return formatDate(date, format);
+    return DateTime.now()
+      .plus({ days: dayOffset })
+      .toFormat(format);
   },
 
   /**
-   * Get date in ISO format with optional day offset
+   * Get date in ISO format with optional day offset (local timezone)
    * @param dayOffset Optional number of days to add/subtract (default: 0)
    */
   dateISO: (...args: unknown[]): string => {
     const dayOffset = args.length > 0 && typeof args[0] === 'number' ? args[0] : 0;
     
-    const date = new Date();
-    date.setDate(date.getDate() + dayOffset);
-    
-    return date.toISOString().split('T')[0]; // Return only the date part (YYYY-MM-DD)
+    return DateTime.now()
+      .plus({ days: dayOffset })
+      .toISODate() || '';
   },
 
   /**
-   * Get date in RFC3339 format with optional day offset
+   * Get date in RFC3339 format with optional day offset (local timezone)
    * @param dayOffset Optional number of days to add/subtract (default: 0)
    */
   dateRFC3339: (...args: unknown[]): string => {
     const dayOffset = args.length > 0 && typeof args[0] === 'number' ? args[0] : 0;
     
-    const date = new Date();
-    date.setDate(date.getDate() + dayOffset);
-    
-    return date.toISOString(); // ISO string is RFC3339 compliant
+    return DateTime.now()
+      .plus({ days: dayOffset })
+      .toISO() || '';
   },
 
   /**
@@ -154,6 +152,79 @@ export const defaultTemplateFunctions: Record<string, (...args: unknown[]) => un
       console.error('URL decoding failed:', error);
       return '';
     }
+  },
+
+  /**
+   * Get current date/time in a specific timezone
+   * @param timezone IANA timezone name (e.g., 'America/New_York', 'Europe/London')
+   * @param format Optional format string (default: ISO)
+   */
+  dateInTimezone: (...args: unknown[]): string => {
+    const timezone = args.length > 0 && typeof args[0] === 'string' ? args[0] : 'UTC';
+    const format = args.length > 1 && typeof args[1] === 'string' ? args[1] : '';
+    
+    const dateTime = DateTime.now().setZone(timezone);
+    return format ? dateTime.toFormat(format) : (dateTime.toISO() || '');
+  },
+
+  /**
+   * Add time to current date
+   * @param amount Number of units to add
+   * @param unit Unit type (years, months, days, hours, minutes, seconds)
+   */
+  dateAdd: (...args: unknown[]): string => {
+    const amount = args.length > 0 && typeof args[0] === 'number' ? args[0] : 0;
+    const unit = args.length > 1 && typeof args[1] === 'string' ? args[1] : 'days';
+    
+    const duration: Record<string, number> = {};
+    duration[unit] = amount;
+    
+    return DateTime.now().plus(duration).toISO() || '';
+  },
+
+  /**
+   * Subtract time from current date
+   * @param amount Number of units to subtract
+   * @param unit Unit type (years, months, days, hours, minutes, seconds)
+   */
+  dateSubtract: (...args: unknown[]): string => {
+    const amount = args.length > 0 && typeof args[0] === 'number' ? args[0] : 0;
+    const unit = args.length > 1 && typeof args[1] === 'string' ? args[1] : 'days';
+    
+    const duration: Record<string, number> = {};
+    duration[unit] = amount;
+    
+    return DateTime.now().minus(duration).toISO() || '';
+  },
+
+  /**
+   * Get start of time period (e.g., start of day, month, year)
+   * @param unit Unit to get start of (day, month, year, hour, minute)
+   * @param dayOffset Optional day offset from current date
+   */
+  dateStartOf: (...args: unknown[]): string => {
+    const unit = args.length > 0 && typeof args[0] === 'string' ? args[0] : 'day';
+    const dayOffset = args.length > 1 && typeof args[1] === 'number' ? args[1] : 0;
+    
+    return DateTime.now()
+      .plus({ days: dayOffset })
+      .startOf(unit as any)
+      .toISO() || '';
+  },
+
+  /**
+   * Get end of time period (e.g., end of day, month, year)
+   * @param unit Unit to get end of (day, month, year, hour, minute)
+   * @param dayOffset Optional day offset from current date
+   */
+  dateEndOf: (...args: unknown[]): string => {
+    const unit = args.length > 0 && typeof args[0] === 'string' ? args[0] : 'day';
+    const dayOffset = args.length > 1 && typeof args[1] === 'number' ? args[1] : 0;
+    
+    return DateTime.now()
+      .plus({ days: dayOffset })
+      .endOf(unit as any)
+      .toISO() || '';
   }
 };
 
@@ -221,26 +292,7 @@ function extractJsonPath(data: unknown, path: string): unknown {
   }
 }
 
-/**
- * Format date according to specified format string
- * Supports basic format tokens: YYYY, MM, DD, HH, mm, ss
- */
-function formatDate(date: Date, format: string): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  const seconds = String(date.getSeconds()).padStart(2, '0');
 
-  return format
-    .replace('YYYY', String(year))
-    .replace('MM', month)
-    .replace('DD', day)
-    .replace('HH', hours)
-    .replace('mm', minutes)
-    .replace('ss', seconds);
-}
 
 /**
  * Create template functions with additional context-specific functions

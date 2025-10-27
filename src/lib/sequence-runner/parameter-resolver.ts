@@ -4,6 +4,7 @@ import type { FlowSequenceStep, FlowParameterMapping } from '$lib/types/flow_seq
 import type { Environment } from '$lib/types/environment';
 import type { TestFlow } from '$lib/types/test-flow';
 import type { Project } from '$lib/types/project';
+import { defaultTemplateFunctions } from '$lib/template/functions';
 
 export class SequenceParameterResolver {
   
@@ -155,6 +156,19 @@ export class SequenceParameterResolver {
           
           return mapping.source_value;
 
+        case 'function':
+          // Execute template function
+          try {
+            onLog('debug', `Executing function: ${mapping.source_value}`);
+            const result = this.executeTemplateFunction(mapping.source_value, onLog);
+            onLog('debug', `Function '${mapping.source_value}' returned:`, String(result));
+            return result;
+          } catch (error) {
+            onLog('error', `Failed to execute function '${mapping.source_value}'`,
+              error instanceof Error ? error.message : String(error));
+            return undefined;
+          }
+
         default:
           throw new Error(`Unknown parameter mapping source type: ${mapping.source_type}`);
       }
@@ -238,5 +252,126 @@ export class SequenceParameterResolver {
     }
 
     return 'Unknown error from API response';
+  }
+
+  /**
+   * Execute a template function expression
+   * Supports simple function calls like uuid(), dateISO(), etc.
+   */
+  private static executeTemplateFunction(
+    expression: string,
+    onLog: (level: 'info' | 'debug' | 'error' | 'warning', message: string, details?: string) => void
+  ): unknown {
+    try {
+      // Simple validation - must be a function call pattern
+      const functionPattern = /^([a-zA-Z_][a-zA-Z0-9_]*)\s*\((.*?)\)\s*$/;
+      const match = expression.trim().match(functionPattern);
+      
+      if (!match) {
+        throw new Error(`Invalid function expression: ${expression}. Expected format: functionName(args)`);
+      }
+
+      const [, functionName, argsString] = match;
+      
+      // Check if function exists in our template functions
+      const templateFunction = defaultTemplateFunctions[functionName];
+      if (!templateFunction) {
+        throw new Error(`Unknown function: ${functionName}. Available functions: ${Object.keys(defaultTemplateFunctions).join(', ')}`);
+      }
+
+      // Parse arguments
+      const args = this.parseArgumentsString(argsString);
+      
+      // Execute the function
+      const result = templateFunction(...args);
+      
+      onLog('debug', `Function ${functionName} executed successfully with ${args.length} argument(s)`);
+      
+      return result;
+    } catch (error) {
+      onLog('error', `Failed to execute template function '${expression}'`,
+        error instanceof Error ? error.message : String(error));
+      throw error;
+    }
+  }
+
+  /**
+   * Parse function arguments from string
+   * Supports: strings ('text', "text"), numbers (123, 1.5), booleans (true, false), null
+   */
+  private static parseArgumentsString(argsString: string): unknown[] {
+    if (!argsString.trim()) {
+      return [];
+    }
+
+    const args: unknown[] = [];
+    let current = '';
+    let inString = false;
+    let stringChar = '';
+    let parenDepth = 0;
+    
+    for (let i = 0; i < argsString.length; i++) {
+      const char = argsString[i];
+      
+      if (!inString) {
+        if (char === '"' || char === "'") {
+          inString = true;
+          stringChar = char;
+          current += char;
+        } else if (char === '(') {
+          parenDepth++;
+          current += char;
+        } else if (char === ')') {
+          parenDepth--;
+          current += char;
+        } else if (char === ',' && parenDepth === 0) {
+          // End of argument
+          args.push(this.parseArgument(current.trim()));
+          current = '';
+        } else {
+          current += char;
+        }
+      } else {
+        current += char;
+        if (char === stringChar && (i === 0 || argsString[i - 1] !== '\\')) {
+          inString = false;
+        }
+      }
+    }
+    
+    // Add the last argument
+    if (current.trim()) {
+      args.push(this.parseArgument(current.trim()));
+    }
+    
+    return args;
+  }
+
+  /**
+   * Parse a single argument value
+   */
+  private static parseArgument(arg: string): unknown {
+    arg = arg.trim();
+    
+    // String literals
+    if ((arg.startsWith('"') && arg.endsWith('"')) || (arg.startsWith("'") && arg.endsWith("'"))) {
+      return arg.slice(1, -1); // Remove quotes
+    }
+    
+    // Number literals
+    if (/^-?\d+(\.\d+)?$/.test(arg)) {
+      const num = Number(arg);
+      return isNaN(num) ? arg : num;
+    }
+    
+    // Boolean literals
+    if (arg === 'true') return true;
+    if (arg === 'false') return false;
+    
+    // Null literal
+    if (arg === 'null') return null;
+    
+    // Default to string
+    return arg;
   }
 }
