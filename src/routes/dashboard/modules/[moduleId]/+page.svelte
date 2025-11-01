@@ -572,6 +572,57 @@
     }
   }
 
+  async function handleToggleExpectsError(event: CustomEvent<{ sequence: FlowSequence; stepOrder: number; expectsError: boolean }>) {
+    if (!projectId) {
+      showExecutionResults('error', 'No Project Selected', 'Please select a project first');
+      return;
+    }
+    
+    try {
+      const { sequence, stepOrder, expectsError } = event.detail;
+      const steps = sequence.sequenceConfig?.steps || [];
+      
+      // Find the step to update
+      const stepToUpdate = steps.find(s => s.step_order === stepOrder);
+      if (!stepToUpdate) {
+        throw new Error('Step not found');
+      }
+      
+      // Update the step's expects_error field
+      const updatedSteps = steps.map(step => 
+        step.step_order === stepOrder 
+          ? { ...step, expects_error: expectsError }
+          : step
+      );
+      
+      // Update the sequence configuration
+      const updatedSequenceConfig = {
+        ...sequence.sequenceConfig,
+        steps: updatedSteps
+      };
+      
+      // Call API to update the sequence
+      await projectClient.updateSequence(projectId, moduleId, sequence.id, {
+        sequenceConfig: updatedSequenceConfig
+      });
+      
+      // Update local state
+      sequences = sequences.map(seq => 
+        seq.id === sequence.id 
+          ? {
+              ...seq,
+              sequenceConfig: updatedSequenceConfig
+            }
+          : seq
+      );
+      
+    } catch (err) {
+      console.error('Failed to toggle expects error:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to toggle expects error';
+      showExecutionResults('error', 'Update Failed', 'Failed to update expects error setting', errorMessage);
+    }
+  }
+
   function handleEnvironmentSelect(event: CustomEvent<{ environmentId: number | null; subEnvironment: string | null }>) {
     selectedSubEnvironment = event.detail.subEnvironment;
     // The reactive statement will handle saving to localStorage automatically
@@ -1167,6 +1218,7 @@
                   on:deleteSequence={handleDeleteSequence}
                   on:cloneSequence={handleCloneSequence}
                   on:runSequence={handleRunSequence}
+                  on:toggleExpectsError={handleToggleExpectsError}
                 />
               {/each}
             </div>

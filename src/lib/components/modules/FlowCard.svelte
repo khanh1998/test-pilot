@@ -2,6 +2,7 @@
 <script lang="ts">
   import type { TestFlow } from '../../types/test-flow.js';
   import type { SequenceFlowResult } from '$lib/sequence-runner/types';
+  import type { FlowSequenceStep } from '../../types/flow_sequence.js';
   import { createEventDispatcher } from 'svelte';
 
   export let flow: TestFlow;
@@ -12,6 +13,7 @@
   export let isFirst: boolean = false;
   export let isLast: boolean = false;
   export let isMoving: boolean = false;
+  export let sequenceStep: FlowSequenceStep | undefined = undefined;
 
   // State for toggling between inputs and outputs
   let activeTab: 'outputs' | 'inputs' = 'outputs';
@@ -24,6 +26,7 @@
     showResults: { flow: TestFlow; stepOrder: number; executionResult: SequenceFlowResult };
     moveLeft: { stepOrder: number };
     moveRight: { stepOrder: number };
+    toggleExpectsError: { stepOrder: number; expectsError: boolean };
   }>();
 
   function handleClick() {
@@ -101,6 +104,12 @@
     dispatch('moveRight', { stepOrder });
   }
 
+  function handleToggleExpectsError(event: MouseEvent) {
+    event.stopPropagation();
+    const newExpectsError = !expectsError;
+    dispatch('toggleExpectsError', { stepOrder, expectsError: newExpectsError });
+  }
+
   // Find execution result for this flow and step
   $: executionResult = executionResults.find(result => {
     const flowIdNum = parseInt(flow.id);
@@ -108,8 +117,17 @@
     return match;
   }) || null;
 
+  // Get expects error state from sequence step
+  $: expectsError = sequenceStep?.expects_error ?? false;
+
   // Determine execution status for visual indicators
-  $: executionStatus = executionResult ? (executionResult.success ? 'success' : 'error') : 'none';
+  $: executionStatus = executionResult ? (
+    executionResult.matchedExpectation !== undefined ? (
+      executionResult.matchedExpectation ? 'expected' : 'unexpected'
+    ) : (
+      executionResult.success ? 'success' : 'error'
+    )
+  ) : 'none';
   $: hasResults = executionResult !== null;
   
   // Debug logging
@@ -124,10 +142,14 @@
 </script>
 
 <div
-  class="flow-card group relative bg-white border rounded-lg overflow-hidden hover:shadow-md transition-all duration-200 w-80 h-[240px] flex flex-col {executionStatus === 'success' 
+  class="flow-card group relative bg-white border rounded-lg overflow-hidden hover:shadow-md transition-all duration-200 w-80 h-[240px] flex flex-col {executionStatus === 'expected' 
     ? 'border-green-300 bg-green-50' 
-    : executionStatus === 'error' 
-    ? 'border-red-300 bg-red-50' 
+    : executionStatus === 'unexpected' 
+    ? 'border-red-300 bg-red-50'
+    : executionStatus === 'success'
+    ? 'border-green-300 bg-green-50'
+    : executionStatus === 'error'
+    ? 'border-red-300 bg-red-50'
     : 'border-gray-200'}"
   class:opacity-50={isDragging}
   class:border-blue-400={isDropTarget}
@@ -139,7 +161,12 @@
 >
   <!-- Status Bar at Top -->
   {#if executionStatus !== 'none'}
-    <div class="h-1 w-full flex-shrink-0 {executionStatus === 'success' ? 'bg-green-500' : 'bg-red-500'}"></div>
+    <div class="h-1 w-full flex-shrink-0 {
+      executionStatus === 'expected' ? 'bg-green-500' : 
+      executionStatus === 'unexpected' ? 'bg-red-500' :
+      executionStatus === 'success' ? 'bg-green-500' : 
+      'bg-red-500'
+    }"></div>
   {:else}
     <div class="h-1 w-full flex-shrink-0"></div>
   {/if}
@@ -153,6 +180,14 @@
         <h4 class="text-base font-semibold text-gray-900 truncate flex-1" title={flow.name}>
           {flow.name}
         </h4>
+        {#if expectsError}
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 flex-shrink-0" title="This step is expected to fail">
+            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            Expects Error
+          </span>
+        {/if}
       </div>
       
       <!-- Folder Tabs and Action Buttons -->
@@ -179,6 +214,19 @@
 
         <!-- Action Buttons - Horizontal Row -->
         <div class="flex items-center gap-1 flex-shrink-0 mb-1">
+          <!-- Expects Error Toggle -->
+          <button
+            type="button"
+            class="w-7 h-7 rounded hover:bg-opacity-80 transition-colors flex items-center justify-center shadow-sm {expectsError ? 'bg-orange-500 text-white hover:bg-orange-600' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'}"
+            on:click={handleToggleExpectsError}
+            aria-label="Toggle expects error"
+            title={expectsError ? "Currently expecting this step to fail/return error. Click to expect success." : "Currently expecting this step to succeed. Click to expect failure/error."}
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+          </button>
+
           <button
             type="button"
             class="w-7 h-7 bg-amber-500 text-white rounded hover:bg-amber-600 transition-colors flex items-center justify-center shadow-sm"
@@ -259,14 +307,25 @@
         <div class="mb-3">
           <button
             type="button"
-            class="w-full py-2 px-3 {executionStatus === 'success' ? 'bg-green-500 hover:bg-green-600' : 'bg-red-500 hover:bg-red-600'} text-white rounded-md transition-colors flex items-center justify-center gap-2 font-medium text-sm shadow-sm"
+            class="w-full py-2 px-3 {
+              executionStatus === 'expected' ? 'bg-green-500 hover:bg-green-600' : 
+              executionStatus === 'unexpected' ? 'bg-red-500 hover:bg-red-600' :
+              executionStatus === 'success' ? 'bg-green-500 hover:bg-green-600' : 
+              'bg-red-500 hover:bg-red-600'
+            } text-white rounded-md transition-colors flex items-center justify-center gap-2 font-medium text-sm shadow-sm"
             on:click={handleShowResults}
             aria-label="View execution results"
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
             </svg>
-            View Results
+            {#if executionStatus === 'expected'}
+              Behaved as Expected
+            {:else if executionStatus === 'unexpected'}
+              Unexpected Result
+            {:else}
+              View Results
+            {/if}
           </button>
         </div>
       {/if}

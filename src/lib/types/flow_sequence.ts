@@ -35,6 +35,7 @@ export interface FlowSequenceStep {
   parameter_mappings: FlowParameterMapping[];
   conditions?: ExecutionCondition[]; // Optional: conditional execution
   retry_config?: RetryConfig; // Optional: retry settings
+  expects_error?: boolean; // Whether this step is expected to fail (default: false)
 }
 
 export interface FlowParameterMapping {

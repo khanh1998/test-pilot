@@ -44,6 +44,7 @@
     clickFlow: { sequence: FlowSequence; flow: TestFlow; stepOrder: number };
     runSequence: { sequence: FlowSequence };
     cloneSequence: { sequence: FlowSequence; name: string; description?: string };
+    toggleExpectsError: { sequence: FlowSequence; stepOrder: number; expectsError: boolean };
   }>();
 
   let editingName = sequence.name;
@@ -187,6 +188,14 @@
     }
   }
 
+  function handleToggleExpectsError(event: CustomEvent<{ stepOrder: number; expectsError: boolean }>) {
+    dispatch('toggleExpectsError', { 
+      sequence, 
+      stepOrder: event.detail.stepOrder, 
+      expectsError: event.detail.expectsError 
+    });
+  }
+
   function handleCloseResultsPanel() {
     showResultsPanel = false;
     selectedFlowResult = null;
@@ -321,6 +330,7 @@
           <FlowCard
             {flow}
             {stepOrder}
+            sequenceStep={sequenceStep}
             isDragging={draggedIndex === index}
             isDropTarget={dropTargetIndex === index}
             isMoving={movingIndex === index || targetIndex === index}
@@ -334,6 +344,7 @@
             on:showResults={handleShowResults}
             on:moveLeft={handleMoveLeft}
             on:moveRight={handleMoveRight}
+            on:toggleExpectsError={handleToggleExpectsError}
           />
         </div>
       {/each}    <!-- Add Flow Search -->

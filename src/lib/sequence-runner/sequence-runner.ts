@@ -59,18 +59,39 @@ export class SequenceRunner {
         console.log("Flow result: ", flowResult);
         this.state.flowResults.push(flowResult);
 
-        // Check if flow execution failed
-        if (!flowResult.success) {
+        // Check if flow execution failed and evaluate against expectations
+        const actuallyFailed = !flowResult.success;
+        const expectsError = sequenceStep.expects_error ?? false;
+        
+        // Determine if this constitutes a sequence failure
+        const isSequenceFailure = !flowResult.matchedExpectation;
+        
+        if (isSequenceFailure) {
+          if (expectsError && !actuallyFailed) {
+            this.options.onLog('error', 'Flow succeeded but was expected to fail', 
+              `Flow ${flow.name} was expected to fail but succeeded unexpectedly`);
+          } else if (!expectsError && actuallyFailed) {
+            this.options.onLog('error', 'Flow failed unexpectedly', 
+              `Flow ${flow.name} failed: ${flowResult.error}`);
+          }
+          
           // Use user's stopOnError preference (inverted logic - stopOnError=true means don't continue)
           const shouldStopOnError = this.options.preferences.stopOnError;
           
           if (shouldStopOnError) {
-            this.options.onLog('error', 'Sequence execution stopped due to flow failure', 
-              `Flow ${flow.name} failed: ${flowResult.error}`);
+            this.options.onLog('error', 'Sequence execution stopped due to flow expectation mismatch');
             break;
           } else {
-            this.options.onLog('warning', 'Flow failed but continuing due to execution options',
-              `Flow ${flow.name} failed: ${flowResult.error}`);
+            this.options.onLog('warning', 'Flow expectation mismatch but continuing due to execution options');
+          }
+        } else {
+          // Flow behaved as expected
+          if (expectsError && actuallyFailed) {
+            this.options.onLog('info', 'Flow failed as expected', 
+              `Flow ${flow.name} failed as expected: ${flowResult.error}`);
+          } else if (!expectsError && !actuallyFailed) {
+            this.options.onLog('info', 'Flow succeeded as expected', 
+              `Flow ${flow.name} completed successfully`);
           }
         }
 
@@ -90,9 +111,10 @@ export class SequenceRunner {
 
       this.state.progress = 100;
 
-      // Evaluate overall success
-      const hasErrors = this.state.flowResults.some(result => !result.success);
-      const success = !hasErrors && !this.state.error;
+      // Evaluate overall success - check if each flow behaved as expected
+      const hasUnexpectedResults = this.state.flowResults.some(result => !result.matchedExpectation);
+      
+      const success = !hasUnexpectedResults && !this.state.error;
 
       // Compile sequence outputs (outputs from all flows)
       const sequenceOutputs: Record<string, unknown> = {};
@@ -221,12 +243,18 @@ export class SequenceRunner {
       const finalResult = flowExecutionResult || result;
       const success = finalResult.success && !hasResponseError;
       const error = finalResult.error || (hasResponseError ? new Error(responseErrorMessage) : undefined);
+      
+      // Check if result matches expectation
+      const expectsError = sequenceStep.expects_error ?? false;
+      const matchedExpectation = success !== expectsError; // success=true + expectsError=false = matched, success=false + expectsError=true = matched
 
       const flowResult: SequenceFlowResult = {
         flowId: parseInt(flow.id),
         flowName: flow.name,
         stepOrder: sequenceStep.step_order,
         success,
+        expectsError,
+        matchedExpectation,
         error,
         outputs: flowOutputs, // Now properly captured from onExecutionComplete callback
         responses: storedResponses, // Now properly captured from onExecutionComplete callback
@@ -255,11 +283,16 @@ export class SequenceRunner {
       
       this.options.onLog('error', `Flow ${flow.name} execution failed`, err instanceof Error ? err.message : String(err));
 
+      const expectsError = sequenceStep.expects_error ?? false;
+      const matchedExpectation = expectsError; // If it failed and expects error, it matched; if it failed and doesn't expect error, it didn't match
+
       const flowResult: SequenceFlowResult = {
         flowId: parseInt(flow.id),
         flowName: flow.name,
         stepOrder: sequenceStep.step_order,
         success: false,
+        expectsError,
+        matchedExpectation,
         error: err,
         outputs: {},
         responses: {},

@@ -38,7 +38,9 @@ export interface SequenceFlowResult {
   flowId: number;
   flowName: string;
   stepOrder: number;
-  success: boolean;
+  success: boolean; // Whether the flow executed successfully (technical success)
+  expectsError: boolean; // Whether this flow was expected to fail
+  matchedExpectation: boolean; // Whether the actual result matched the expectation
   error?: unknown;
   outputs: Record<string, unknown>;
   responses: Record<string, unknown>;
