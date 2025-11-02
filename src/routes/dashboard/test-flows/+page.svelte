@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
+  import { page } from '$app/stores';
   import { projectStore, type Project } from '$lib/store/project';
   import * as testFlowClient from '$lib/http_client/test-flow';
   import * as apiClient from '$lib/http_client/apis';
@@ -25,7 +26,7 @@
   let isProjectLoading = false;
   let projectError: string | null = null;
 
-  // Pagination state
+  // Pagination state - synced with URL
   let currentPage = 1;
   let pageSize = 12;
   let totalItems = 0;
@@ -33,9 +34,15 @@
   let hasNext = false;
   let hasPrev = false;
 
-  // Search/filter state
-  let searchTerm = '';
+  // Search/filter state - synced with URL
+  let searchTerm = ''; // This reflects the actual search being performed (from URL)
+  let searchInput = ''; // This is what the user types in the input field
   let searchTimeout: ReturnType<typeof setTimeout> | null = null;
+  
+  // Control flags
+  let isInitialized = false;
+  let isProjectReady = false;
+  let hasLoadedData = false; // Track if we've ever loaded data
 
   // Form data for creating a new test flow
   let newFlowName = '';
@@ -61,19 +68,82 @@
   // Subscribe to project store
   const unsubscribe = projectStore.subscribe((state) => {
     const previousProjectId = selectedProject?.id;
+    
     selectedProject = state.selectedProject;
     isProjectLoading = state.isLoading;
     projectError = state.error;
     
-    // Reload test flows and APIs when project selection changes
-    if (previousProjectId !== selectedProject?.id) {
-      fetchTestFlows();
-      fetchAvailableApis();
+    // Project is ready when it's no longer loading
+    const wasProjectReady = isProjectReady;
+    isProjectReady = !state.isLoading;
+    
+    // Initial load: fetch data when project becomes ready for the first time
+    if (!wasProjectReady && isProjectReady && isInitialized) {
+      loadDataFromURL();
     }
+    // Project change: reload when project selection actually changes (after both are ready)
+    else if (isProjectReady && isInitialized && previousProjectId !== selectedProject?.id && previousProjectId !== undefined) {
+      loadDataFromURL();
+    }
+  });
+
+  // Reactive statement to handle URL changes (browser back/forward)
+  $: if (isInitialized && isProjectReady && $page.url.searchParams) {
+    console.log('Reactive: URL changed, calling syncFromURL');
+    syncFromURL();
+  }
+
+  // Sync current state with URL parameters (without fetching)
+  function syncFromURL() {
+    const urlParams = $page.url.searchParams;
+    const urlPage = parseInt(urlParams.get('page') || '1');
+    const urlSearch = urlParams.get('search') || '';
+    
+    console.log('syncFromURL:', { urlPage, urlSearch, currentPage, searchTerm, searchInput, hasLoadedData });
+    
+    // Force load on first sync, or if something actually changed
+    if (!hasLoadedData || urlPage !== currentPage || urlSearch !== searchTerm) {
+      console.log('State changed or first load, updating and loading data');
+      currentPage = urlPage;
+      searchTerm = urlSearch;
+      // Also sync the input field to match the URL
+      searchInput = urlSearch;
+      loadData();
+      fetchAvailableApis();
+    } else {
+      console.log('No state change, skipping load');
+    }
+  }
+
+
+
+  // Load data from current URL state
+  function loadDataFromURL() {
+    const urlParams = $page.url.searchParams;
+    currentPage = parseInt(urlParams.get('page') || '1');
+    searchTerm = urlParams.get('search') || '';
+    // Also sync the input field to match the URL
+    searchInput = searchTerm;
+    loadData();
+  }
+
+  // Load data with current state
+  function loadData() {
+    console.log('loadData called with:', { currentPage, searchTerm, selectedProject: selectedProject?.id });
+    hasLoadedData = true; // Mark that we've loaded data at least once
+    fetchTestFlows();
+  }
+
+  onMount(() => {
+    isInitialized = true;
+    // The project store subscriber will trigger the initial fetch when ready
   });
 
   onDestroy(() => {
     unsubscribe();
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+    }
   });
 
   async function fetchTestFlows() {
@@ -115,30 +185,47 @@
     }
     
     searchTimeout = setTimeout(() => {
-      currentPage = 1; // Reset to first page when searching
-      fetchTestFlows();
+      // Use searchInput (what the user typed) to build the URL
+      const params = new URLSearchParams();
+      
+      // Reset to page 1 when searching
+      // Only add page param if > 1, so page 1 won't have ?page=1
+      
+      if (searchInput.trim()) {
+        params.set('search', searchInput.trim());
+      }
+
+      const newUrl = params.toString() ? `?${params.toString()}` : '/dashboard/test-flows';
+      console.log('handleSearchInput: going to', newUrl, 'with searchInput:', searchInput);
+      goto(newUrl, { replaceState: true });
     }, 300);
   }
 
   // Pagination functions
   function goToPage(page: number) {
-    if (page >= 1 && page <= totalPages) {
-      currentPage = page;
-      fetchTestFlows();
+    console.log('goToPage called:', { page, totalPages, loading, currentPage });
+    if (page >= 1 && page <= totalPages && !loading) {
+      console.log('Going to page:', page);
+      // Don't update currentPage here - let syncFromURL handle it
+      // Just update the URL and the reactive statement will do the rest
+      const params = new URLSearchParams();
+      
+      if (page > 1) {
+        params.set('page', page.toString());
+      }
+      
+      // Use searchTerm (current URL search state) when changing pages
+      if (searchTerm.trim()) {
+        params.set('search', searchTerm.trim());
+      }
+
+      const newUrl = params.toString() ? `?${params.toString()}` : '/dashboard/test-flows';
+      console.log('goToPage: going to', newUrl);
+      goto(newUrl, { replaceState: true });
     }
   }
 
-  function nextPage() {
-    if (hasNext) {
-      goToPage(currentPage + 1);
-    }
-  }
 
-  function prevPage() {
-    if (hasPrev) {
-      goToPage(currentPage - 1);
-    }
-  }
 
   async function fetchAvailableApis() {
     try {
@@ -245,7 +332,7 @@
         throw new Error('Failed to delete test flow');
       }
 
-      // Refresh the list
+      // Refresh the list (URL state is preserved)
       await fetchTestFlows();
     } catch (err: unknown) {
       console.error('Error deleting test flow:', err);
@@ -288,7 +375,7 @@
         throw new Error('Failed to clone test flow');
       }
 
-      // Refresh the list
+      // Refresh the list (URL state is preserved)
       await fetchTestFlows();
 
       // Navigate to the new test flow editor if successful
@@ -356,17 +443,38 @@
     <div class="flex-1 max-w-md">
       <div class="relative">
         <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-          <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-          </svg>
+          {#if loading && searchInput.trim()}
+            <div class="h-5 w-5 animate-spin rounded-full border-2 border-blue-500 border-t-transparent"></div>
+          {:else}
+            <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+            </svg>
+          {/if}
         </div>
         <input
           type="text"
           placeholder="Search test flows by name or description..."
-          class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-          bind:value={searchTerm}
+          class="block w-full pl-10 pr-10 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 {loading ? 'opacity-75' : ''}"
+          bind:value={searchInput}
           on:input={handleSearchInput}
+          disabled={loading}
         />
+        {#if searchInput.trim()}
+          <button
+            aria-label="trim"
+            type="button"
+            class="absolute inset-y-0 right-0 pr-3 flex items-center hover:text-gray-600"
+            on:click={() => {
+              searchInput = '';
+              handleSearchInput();
+            }}
+            disabled={loading}
+          >
+            <svg class="h-5 w-5 text-gray-400 hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </button>
+        {/if}
       </div>
     </div>
     
@@ -431,29 +539,55 @@
     </div>
   {:else}
     <!-- Test Flow Cards Grid -->
-    <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-      {#each testFlows as flow (flow.id)}
-        <TestFlowCard 
-          {flow} 
-          onDelete={deleteTestFlow}
-          onClone={handleCloneFlow}
-        />
-      {/each}
+    <div class="relative">
+      <!-- Loading overlay for existing content -->
+      {#if loading && testFlows.length > 0}
+        <div class="absolute inset-0 bg-white bg-opacity-60 flex items-center justify-center z-10 rounded-md">
+          <div class="flex items-center space-x-2 bg-white px-4 py-2 rounded-md shadow-md">
+            <div class="h-5 w-5 animate-spin rounded-full border-2 border-blue-500 border-t-transparent"></div>
+            <span class="text-sm text-gray-600">Loading...</span>
+          </div>
+        </div>
+      {/if}
+      
+      <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 {loading && testFlows.length > 0 ? 'pointer-events-none' : ''}">
+        {#each testFlows as flow (flow.id)}
+          <TestFlowCard 
+            {flow} 
+            onDelete={deleteTestFlow}
+            onClone={handleCloneFlow}
+          />
+        {/each}
+      </div>
     </div>
 
     <!-- Pagination -->
     {#if totalPages > 1}
-      <div class="mt-8 flex items-center justify-between">
+      <div class="mt-8 flex items-center justify-between relative">
+        <!-- Loading overlay for pagination -->
+        {#if loading}
+          <div class="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center rounded-md">
+            <div class="flex items-center space-x-2">
+              <div class="h-4 w-4 animate-spin rounded-full border-2 border-blue-500 border-t-transparent"></div>
+              <span class="text-sm text-gray-600">Loading...</span>
+            </div>
+          </div>
+        {/if}
+        
         <div class="flex items-center space-x-2">
           <button
             class="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={!hasPrev || loading}
-            on:click={prevPage}
+            disabled={currentPage === 1 || loading}
+            on:click={() => goToPage(1)}
           >
-            <svg class="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
-            </svg>
-            Previous
+            {#if loading && currentPage !== 1}
+              <div class="mr-1 h-4 w-4 animate-spin rounded-full border-2 border-gray-400 border-t-transparent"></div>
+            {:else}
+              <svg class="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"></path>
+              </svg>
+            {/if}
+            First
           </button>
           
           <div class="flex items-center space-x-1">
@@ -465,24 +599,32 @@
               <button
                 class="px-3 py-2 text-sm font-medium rounded-md {currentPage === page
                   ? 'bg-blue-600 text-white'
-                  : 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50'}"
+                  : 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50'} disabled:opacity-50 disabled:cursor-not-allowed"
                 on:click={() => goToPage(page)}
                 disabled={loading}
               >
-                {page}
+                {#if loading && currentPage === page}
+                  <div class="h-4 w-4 animate-spin rounded-full border-2 {currentPage === page ? 'border-white border-t-transparent' : 'border-gray-400 border-t-transparent'}"></div>
+                {:else}
+                  {page}
+                {/if}
               </button>
             {/each}
           </div>
           
           <button
             class="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={!hasNext || loading}
-            on:click={nextPage}
+            disabled={currentPage === totalPages || loading}
+            on:click={() => goToPage(totalPages)}
           >
-            Next
-            <svg class="ml-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
-            </svg>
+            Last
+            {#if loading && currentPage !== totalPages}
+              <div class="ml-1 h-4 w-4 animate-spin rounded-full border-2 border-gray-400 border-t-transparent"></div>
+            {:else}
+              <svg class="ml-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7m-8-14l7 7-7 7"></path>
+              </svg>
+            {/if}
           </button>
         </div>
         
