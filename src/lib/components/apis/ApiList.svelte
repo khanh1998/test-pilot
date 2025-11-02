@@ -53,7 +53,7 @@
   }
 
   function viewApi(apiId: number) {
-    goto(`/dashboard/apis/${apiId}`);
+    goto(`/projects/apis/${apiId}`);
   }
 
   async function deleteApi(event: Event, apiId: number) {
@@ -108,7 +108,7 @@
       {/if}
     </div>
     <a
-      href="/dashboard/apis/upload"
+      href="/projects/apis/upload"
       class="rounded bg-blue-500 px-4 py-2 text-white hover:bg-blue-600"
     >
       Upload Swagger Spec
@@ -143,19 +143,19 @@
         {/if}
       </p>
       {#if selectedProject}
-        <a href="/dashboard/apis/upload" class="text-blue-500 hover:text-blue-600">
+        <a href="/projects/apis/upload" class="text-blue-500 hover:text-blue-600">
           Upload Swagger Spec for {selectedProject.name}
         </a>
       {:else}
         <div class="space-y-2">
           <div>
-            <a href="/dashboard/projects" class="text-blue-500 hover:text-blue-600">
+            <a href="/projects" class="text-blue-500 hover:text-blue-600">
               Create or select a project
             </a>
           </div>
           <div class="text-gray-400">or</div>
           <div>
-            <a href="/dashboard/apis/upload" class="text-blue-500 hover:text-blue-600">
+            <a href="/projects/apis/upload" class="text-blue-500 hover:text-blue-600">
               Upload Swagger Spec
             </a>
           </div>

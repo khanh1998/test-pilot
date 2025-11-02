@@ -84,7 +84,7 @@
 
   function handleViewDetails(event: MouseEvent) {
     event.stopPropagation();
-    window.location.href = `/dashboard/test-flows/${flow.id}`;
+    window.location.href = `/projects/test-flows/${flow.id}`;
   }
 
   function handleShowResults(event: MouseEvent) {

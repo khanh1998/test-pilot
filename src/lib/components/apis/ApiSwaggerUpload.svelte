@@ -102,9 +102,9 @@
 
       // Redirect based on the operation
       if (isUpdateMode) {
-        goto(`/dashboard/apis/${apiId}`);
+        goto(`/projects/apis/${apiId}`);
       } else {
-        goto('/dashboard/apis');
+        goto('/projects/apis');
       }
     } catch (err) {
       error = err instanceof Error ? err.message : 'An error occurred during upload';
@@ -289,7 +289,7 @@
 
     <div class="flex justify-end">
       <a
-        href={isUpdateMode ? `/dashboard/apis/${apiId}` : '/dashboard/apis'}
+        href={isUpdateMode ? `/projects/apis/${apiId}` : '/projects/apis'}
         class="mr-2 rounded bg-gray-200 px-4 py-2 text-gray-800 hover:bg-gray-300"
       >
         Cancel

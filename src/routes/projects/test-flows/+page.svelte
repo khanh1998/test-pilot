@@ -195,7 +195,7 @@
         params.set('search', searchInput.trim());
       }
 
-      const newUrl = params.toString() ? `?${params.toString()}` : '/dashboard/test-flows';
+      const newUrl = params.toString() ? `?${params.toString()}` : '/projects/test-flows';
       console.log('handleSearchInput: going to', newUrl, 'with searchInput:', searchInput);
       goto(newUrl, { replaceState: true });
     }, 300);
@@ -219,7 +219,7 @@
         params.set('search', searchTerm.trim());
       }
 
-      const newUrl = params.toString() ? `?${params.toString()}` : '/dashboard/test-flows';
+      const newUrl = params.toString() ? `?${params.toString()}` : '/projects/test-flows';
       console.log('goToPage: going to', newUrl);
       goto(newUrl, { replaceState: true });
     }
@@ -303,7 +303,7 @@
 
       if (result.testFlow) {
         // Navigate to the new test flow editor
-        goto(`/dashboard/test-flows/${result.testFlow.id}`);
+        goto(`/projects/test-flows/${result.testFlow.id}`);
       }
     } catch (err: unknown) {
       console.error('Error creating test flow:', err);
@@ -380,7 +380,7 @@
 
       // Navigate to the new test flow editor if successful
       if (result.testFlow) {
-        goto(`/dashboard/test-flows/${result.testFlow.id}`);
+        goto(`/projects/test-flows/${result.testFlow.id}`);
       }
     } catch (err: unknown) {
       console.error('Error cloning test flow:', err);
@@ -420,7 +420,7 @@
     <div class="flex gap-3">
       <button
         class="rounded-md bg-emerald-600 px-4 py-2 text-white transition hover:bg-emerald-700"
-        on:click={() => goto('/dashboard/test-flows/generate')}
+        on:click={() => goto('/projects/test-flows/generate')}
       >
         <div class="flex items-center">
           <svg xmlns="http://www.w3.org/2000/svg" class="mr-1.5 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -520,7 +520,7 @@
         {:else}
           <div class="space-y-2">
             <div>
-              <a href="/dashboard/projects" class="text-blue-500 hover:text-blue-600">
+              <a                 href="/projects" class="text-blue-500 hover:text-blue-600">
                 Create or select a project
               </a>
             </div>

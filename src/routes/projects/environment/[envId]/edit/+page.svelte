@@ -55,7 +55,7 @@
       await updateEnvironment(environment.id, environmentData);
       
       // Navigate back to environment detail page
-      goto(`/dashboard/environments/${environment.id}`);
+      goto(`/projects/environment/${environment.id}`);
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to update environment';
       console.error('Error updating environment:', err);
@@ -66,11 +66,11 @@
 
   function handleCancel() {
     if (!environment) {
-      goto('/dashboard/environments');
+      goto('/projects/environment');
       return;
     }
     // Navigate back to environment detail page
-    goto(`/dashboard/environments/${environment.id}`);
+    goto(`/projects/environment/${environment.id}`);
   }
 </script>
 
@@ -88,13 +88,13 @@
     <div class="flex flex-col items-center justify-center py-16 text-center">
       <h1 class="text-2xl font-semibold text-gray-700 mb-2">Error Loading Environment</h1>
       <p class="text-gray-600 mb-6">{error}</p>
-      <a href="/dashboard/environments" class="text-blue-600 hover:underline font-medium">← Back to Environments</a>
+      <a href="/projects/environment" class="text-blue-600 hover:underline font-medium">← Back to Environments</a>
     </div>
   {:else if !environment}
     <div class="flex flex-col items-center justify-center py-16 text-center">
       <h1 class="text-2xl font-semibold text-gray-700 mb-2">Environment Not Found</h1>
       <p class="text-gray-600 mb-6">The requested environment could not be found.</p>
-      <a href="/dashboard/environments" class="text-blue-600 hover:underline font-medium">← Back to Environments</a>
+      <a href="/projects/environment" class="text-blue-600 hover:underline font-medium">← Back to Environments</a>
     </div>
   {:else}
     {#if error}

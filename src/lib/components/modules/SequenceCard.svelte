@@ -4,7 +4,7 @@
   import { formatDate } from '../../utils/date.js';
 
   export let sequence: FlowSequence;
-  export let href: string = `/dashboard/projects/${sequence.moduleId}/sequences/${sequence.id}`;
+  export let href: string = `/projects/sequences/${sequence.id}`;
   export let showActions: boolean = true;
   export let showFlows: boolean = false; // New prop to show detailed flows
   export let onEdit: ((sequence: FlowSequence) => void) | null = null;

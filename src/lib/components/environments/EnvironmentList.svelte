@@ -43,12 +43,12 @@
 
   function handleEnvironmentView(event: CustomEvent<{ environment: Environment }>) {
     const { environment } = event.detail;
-    goto(`/dashboard/environments/${environment.id}`);
+    goto(`/projects/environment/${environment.id}`);
   }
 
   function handleEnvironmentEdit(event: CustomEvent<{ environment: Environment }>) {
     const { environment } = event.detail;
-    goto(`/dashboard/environments/${environment.id}/edit`);
+    goto(`/projects/environment/${environment.id}/edit`);
   }
 
   async function handleEnvironmentDelete(event: CustomEvent<{ environment: Environment }>) {

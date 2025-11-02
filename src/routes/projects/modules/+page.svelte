@@ -92,7 +92,7 @@
 
   function handleEditModule(module: ProjectModule) {
     if (!selectedProject) return;
-    goto(`/dashboard/modules/${module.id}`);
+    goto(`/projects/modules/${module.id}`);
   }
 
   function handleDeleteModule(module: ProjectModule) {
@@ -191,7 +191,7 @@
         <p class="mt-1 text-sm text-gray-500">Please select a project from the sidebar to view its modules.</p>
         <div class="mt-6">
           <a
-            href="/dashboard/projects"
+            href="/projects"
             class="inline-flex items-center rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
           >
             <svg class="-ml-0.5 mr-1.5 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -245,7 +245,7 @@
         {#each modules as module (module.id)}
           <ModuleCard
             {module}
-            href="/dashboard/modules/{module.id}"
+            href="/projects/modules/{module.id}"
             onEdit={handleEditModule}
             onDelete={handleDeleteModule}
           />

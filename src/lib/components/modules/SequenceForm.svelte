@@ -200,7 +200,7 @@
           <h3 class="text-sm font-medium text-yellow-800">No Test Flows Available</h3>
           <p class="text-sm text-yellow-700 mt-1">
             You need to create test flows before adding them to a sequence.
-            <a href="/dashboard/test-flows" class="font-medium underline hover:text-yellow-900">
+            <a href="/projects/test-flows" class="font-medium underline hover:text-yellow-900">
               Create test flows now
             </a>
           </p>

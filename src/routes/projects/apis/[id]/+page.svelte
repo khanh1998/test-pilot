@@ -45,7 +45,7 @@
         }
       } else {
         // If API not found, redirect to APIs list
-        goto('/dashboard/apis');
+        goto('/projects/apis');
       }
     } catch (err: unknown) {
       console.error('Failed to load API details:', err);
@@ -64,7 +64,7 @@
   }
 
   function goToUpdatePage() {
-    goto(`/dashboard/apis/${apiId}/update`);
+    goto(`/projects/apis/${apiId}/update`);
   }
   
   async function deleteApi() {
@@ -80,7 +80,7 @@
       await deleteApiCall(apiId);
       
       // Navigate back to the APIs list
-      goto('/dashboard/apis');
+      goto('/projects/apis');
     } catch (err: unknown) {
       error = err instanceof Error ? err.message : 'Failed to delete API';
     } finally {

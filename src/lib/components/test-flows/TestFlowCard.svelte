@@ -49,7 +49,7 @@
         </button>
       </div>
       <a
-        href="/dashboard/test-flows/{flow.id}"
+        href="/projects/test-flows/{flow.id}"
         class="inline-flex items-center rounded bg-blue-50 px-2 py-1 text-xs text-blue-700 transition hover:bg-blue-100"
       >
         <svg class="mr-1 h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">

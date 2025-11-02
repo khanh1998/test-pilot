@@ -4,7 +4,7 @@
   import { formatDate } from '../../utils/date.js';
 
   export let module: ProjectModule;
-  export let href: string = `/dashboard/projects/${module.projectId}/modules/${module.id}`;
+  export let href: string = `/projects/modules/${module.id}`;
   export let showActions: boolean = true;
   export let onEdit: ((module: ProjectModule) => void) | null = null;
   export let onDelete: ((module: ProjectModule) => void) | null = null;

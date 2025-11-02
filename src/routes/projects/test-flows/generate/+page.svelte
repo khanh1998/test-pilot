@@ -3,11 +3,11 @@
   import FlowGeneratorPage from '$lib/components/test-flows/FlowGeneratorPage.svelte';
   
   function handleBack() {
-    goto('/dashboard/test-flows');
+    goto('/projects/test-flows');
   }
   
   function handleSuccess() {
-    goto('/dashboard/test-flows');
+    goto('/projects/test-flows');
   }
 </script>
 

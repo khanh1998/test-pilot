@@ -52,7 +52,7 @@
     <div class="flex flex-col items-center justify-center py-16 text-center">
       <h1 class="text-2xl font-semibold text-gray-700 mb-2">Error Loading Environment</h1>
       <p class="text-gray-600 mb-6">{error}</p>
-      <a href="/dashboard/projects" class="text-blue-600 hover:underline font-medium">← Back to Projects</a>
+      <a href="/projects" class="text-blue-600 hover:underline font-medium">← Back to Projects</a>
     </div>
   {:else if !selectedProject}
     <div class="flex flex-col items-center justify-center py-16 text-center">
@@ -61,7 +61,7 @@
       </svg>
       <h1 class="text-2xl font-semibold text-gray-700 mb-2">No Project Selected</h1>
       <p class="text-gray-600 mb-6">Please select a project from the sidebar to view its environment.</p>
-      <a href="/dashboard/projects" class="text-blue-600 hover:underline font-medium">← Back to Projects</a>
+      <a href="/projects" class="text-blue-600 hover:underline font-medium">← Back to Projects</a>
     </div>
   {:else if !environment}
     <div class="flex flex-col items-center justify-center py-16 text-center">
@@ -70,7 +70,7 @@
       </svg>
       <h1 class="text-2xl font-semibold text-gray-700 mb-2">No Environment Configured</h1>
       <p class="text-gray-600 mb-6">This project doesn't have an environment configured yet.</p>
-      <a href="/dashboard/environments" class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
+      <a href="/projects/environment" class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
         <svg class="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
         </svg>
@@ -102,7 +102,7 @@
       </div>
       
       <div class="flex gap-4">
-        <a href="/dashboard/environment/{environment.environment?.id}/edit" class="inline-flex items-center gap-2 px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-md font-medium text-sm hover:bg-gray-50 transition-colors">
+        <a href="/projects/environment/{environment.environment?.id}/edit" class="inline-flex items-center gap-2 px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-md font-medium text-sm hover:bg-gray-50 transition-colors">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
             <path d="m18.5 2.5 a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>

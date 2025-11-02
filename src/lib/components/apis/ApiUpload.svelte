@@ -42,7 +42,7 @@
 
       await uploadSwaggerFile(file, nameInput.trim(), descriptionInput.trim(), hostInput.trim());
 
-      goto('/dashboard/apis');
+      goto('/projects/apis');
     } catch (err) {
       error = err instanceof Error ? err.message : 'An error occurred during upload';
     } finally {
@@ -174,7 +174,7 @@
         {uploading ? 'Uploading...' : 'Upload Specification'}
       </button>
 
-      <a href="/dashboard/apis" class="text-gray-600 hover:text-gray-800"> Cancel </a>
+      <a href="/projects/apis" class="text-gray-600 hover:text-gray-800"> Cancel </a>
     </div>
   </form>
 </div>
