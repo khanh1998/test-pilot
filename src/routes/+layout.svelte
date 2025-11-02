@@ -7,8 +7,8 @@
   let { children } = $props();
   let isLoading = $state(true);
 
-  // Check if current route is a dashboard route
-  let isDashboardRoute = $derived($page.url.pathname.startsWith('/dashboard'));
+  // Check if current route is a projects route (which includes the project management page)
+  let isProjectsRoute = $derived($page.url.pathname.startsWith('/projects'));
 
   onMount(() => {
     // Check initial session
@@ -25,11 +25,11 @@
         class="h-10 w-10 animate-spin rounded-full border-t-2 border-b-2 border-blue-500"
       ></div>
     </div>
-  {:else if isDashboardRoute}
-    <!-- Dashboard routes don't need extra padding since they have their own layout -->
+    {:else if isProjectsRoute}
+    <!-- Projects routes handle their own layout (full-width for management, sidebar for features) -->
     {@render children()}
   {:else}
-    <!-- Non-dashboard routes get the container padding -->
+    <!-- Non-projects routes get the container padding -->
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
       {@render children()}
     </div>

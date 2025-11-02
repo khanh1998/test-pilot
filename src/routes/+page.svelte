@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { authStore } from '$lib/store/auth';
+  import { projectStore } from '$lib/store/project';
 
   // Form state
   let email = '';
@@ -24,7 +25,15 @@
     const result = await authStore.signIn(email, password);
 
     if (result.success) {
-      goto('/dashboard/modules');
+      // Load projects and redirect based on selection
+      await projectStore.loadProjects();
+      const selectedProjectId = projectStore.getSelectedProjectId();
+      
+      if (selectedProjectId) {
+        goto('/projects/apis');
+      } else {
+        goto('/projects');
+      }
     } else {
       error = result.error || 'Sign in failed';
     }
@@ -59,7 +68,15 @@
   // Check for existing session on mount
   onMount(async () => {
     if (await authStore.checkAuth()) {
-      goto('/dashboard/modules');
+      // Load projects and redirect based on selection
+      await projectStore.loadProjects();
+      const selectedProjectId = projectStore.getSelectedProjectId();
+      
+      if (selectedProjectId) {
+        goto('/projects/apis');
+      } else {
+        goto('/projects');
+      }
     }
   });
 </script>

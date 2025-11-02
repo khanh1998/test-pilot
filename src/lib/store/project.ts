@@ -129,6 +129,15 @@ function createProjectStore() {
       }));
     },
 
+    // Clear project selection
+    clearSelection() {
+      setStoredProjectId(null);
+      update(state => ({
+        ...state,
+        selectedProject: null
+      }));
+    },
+
     // Get selected project ID (helper)
     getSelectedProjectId(): number | null {
       let selectedId: number | null = null;

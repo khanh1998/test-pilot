@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
+  import { page } from '$app/stores';
   import { projectStore, type Project } from '$lib/store/project';
   
   interface Props {
@@ -13,6 +14,8 @@
   let selectedProject: Project | null = $state(null);
   let isLoading = $state(false);
   let error: string | null = $state(null);
+  
+
   
   // Subscribe to project store
   const unsubscribe = projectStore.subscribe((state) => {
@@ -42,6 +45,24 @@
   function selectProject(project: Project) {
     projectStore.selectProject(project);
     isOpen = false;
+    
+    // Determine the current feature page and stay on the same feature for the new project
+    const currentPath = $page.url.pathname;
+    
+    if (currentPath.startsWith('/projects/')) {
+      const pathParts = currentPath.split('/');
+      if (pathParts.length > 2) {
+        // User is on a feature page (apis, test-flows, environment, modules)
+        const feature = pathParts[2];
+        window.location.href = `/projects/${feature}`;
+      } else {
+        // User is on main projects page, go to APIs by default
+        window.location.href = `/projects/apis`;
+      }
+    } else {
+      // Fallback to APIs if not on projects route
+      window.location.href = `/projects/apis`;
+    }
   }
   
   function handleClickOutside(event: MouseEvent) {
@@ -49,6 +70,8 @@
       isOpen = false;
     }
   }
+  
+
 </script>
 
 <svelte:document on:click={handleClickOutside} />
@@ -123,13 +146,16 @@
           No projects found
         </div>
         <div class="border-t border-gray-100">
-          <a
-            href="/dashboard/projects"
-            class="block px-4 py-2 text-sm text-blue-600 hover:bg-gray-50"
-            onclick={() => (isOpen = false)}
+          <button
+            type="button"
+            onclick={() => { 
+              projectStore.clearSelection();
+              window.location.href = '/projects'; 
+            }}
+            class="block w-full px-4 py-2 text-left text-sm text-blue-600 hover:bg-gray-50"
           >
             + Create your first project
-          </a>
+          </button>
         </div>
       {:else}
         <div class="max-h-60 overflow-y-auto">
@@ -160,23 +186,31 @@
         </div>
         
         <div class="border-t border-gray-100">
-          <a
-            href="/dashboard/projects"
-            class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-            onclick={() => (isOpen = false)}
+          <button
+            type="button"
+            onclick={() => { 
+              projectStore.clearSelection();
+              window.location.href = '/projects'; 
+            }}
+            class="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
           >
             <div class="flex items-center">
               <svg class="mr-2 h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
               Manage projects
             </div>
-          </a>
+          </button>
+
         </div>
       {/if}
     </div>
   {/if}
 </div>
+
+
+
 
 <style>
   /* Ensure dropdown appears above other elements */

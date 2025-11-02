@@ -19,13 +19,13 @@ export const load = async ({ url }: { url: URL }) => {
   // Check if user is authenticated
   const isAuthenticated = !!token;
 
-  // If on root page and authenticated, redirect to dashboard
+  // If on root page and authenticated, redirect to projects
   if (url.pathname === '/' && isAuthenticated) {
-    throw redirect(302, '/dashboard');
+    throw redirect(302, '/projects');
   }
 
-  // If on dashboard and not authenticated, redirect to sign in
-  if (url.pathname.startsWith('/dashboard') && !isAuthenticated) {
+  // If on projects and not authenticated, redirect to sign in
+  if (url.pathname.startsWith('/projects') && !isAuthenticated) {
     throw redirect(302, '/');
   }
 
