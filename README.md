@@ -2,7 +2,9 @@
 
 **Automate your REST API testing workflows with intelligent test flow orchestration.**
 
-Test-Pilot is a full-stack web application that helps software engineers rapidly validate API changes by automating multi-step API test sequences. Instead of manually clicking "Send" 20+ times in traditional tools, Test-Pilot executes entire workflows with one click while automatically passing data between sequential requests.
+Test-Pilot is a cross-platform application (web + Tauri desktop) that helps software engineers rapidly validate API changes by automating multi-step API test sequences. Instead of manually clicking "Send" 20+ times in traditional tools, Test-Pilot executes entire workflows with one click while automatically passing data between sequential requests.
+
+> **💡 Desktop app recommended:** While the web version works for public APIs, the Tauri desktop app is **required for testing localhost APIs** and provides CORS-free execution with native HTTP capabilities.
 
 ## ✨ Key Features
 
@@ -29,14 +31,25 @@ While tools like Postman excel at testing individual endpoints, Test-Pilot is de
 
 ## 🚀 Quick Start for Users
 
-### Using the Hosted Version
+### Using the Hosted Version (Web)
 
 1. Visit **[https://test-pilot-five.vercel.app](https://test-pilot-five.vercel.app)**
 2. Sign up for an account
 3. Import your OpenAPI specification
 4. Create test flows and start testing!
 
-### Running Locally
+> **Note:** The web version has CORS limitations when testing APIs. For full functionality and local API testing, use the desktop app.
+
+### Using the Desktop App (Recommended for Local Testing)
+
+The desktop app is built with Tauri and is **required for testing APIs on localhost** or APIs with strict CORS policies.
+
+**Download:**
+- [Download for macOS](#) (Coming soon)
+- [Download for Windows](#) (Coming soon)
+- [Download for Linux](#) (Coming soon)
+
+**Or build from source:**
 
 ```bash
 # Clone the repository
@@ -50,14 +63,20 @@ npm install
 cp .env.example .env
 # Edit .env with your configuration
 
-# Set up the database
+# Set up the database (for local development)
 npm run setup
 
-# Start the development server
-npm run dev
+# Run the desktop app
+npm run tauri:dev
+
+# Or build a production version
+npm run tauri:build
 ```
 
-Visit `http://localhost:5173` to access the application.
+**Why use the desktop app?**
+- ✅ Test local APIs (localhost, 127.0.0.1)
+- ✅ Bypass CORS restrictions
+- ✅ Native HTTP client for better cookie/session handling
 
 ## 📖 User Guide
 
