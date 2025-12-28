@@ -1,180 +1,293 @@
-# Svelte + Supabase Project
+# Test-Pilot
 
-Everything you need to build a Svelte project with Supabase integration, powered by [`sv`](https://github.com/sveltejs/cli) and [`supabase-js`](https://github.com/supabase/supabase-js).
+**Automate your REST API testing workflows with intelligent test flow orchestration.**
 
-## Creating a project
+Test-Pilot is a full-stack web application that helps software engineers rapidly validate API changes by automating multi-step API test sequences. Instead of manually clicking "Send" 20+ times in traditional tools, Test-Pilot executes entire workflows with one click while automatically passing data between sequential requests.
 
-If you're seeing this, you've probably already done this step. Congrats!
+## ✨ Key Features
+
+- 🚀 **One-Click Test Execution** - Run complete multi-step API flows automatically
+- 🔗 **Smart Data Flow** - Extract data from responses and inject into subsequent requests using template expressions
+- 📝 **Visual Flow Editor** - Design test sequences with a clean, intuitive interface
+- ✅ **Response Assertions** - Validate status codes, headers, JSON paths, and response times
+- 🔄 **Response Transformations** - Transform API responses with JavaScript-like pipelines
+- 🌍 **Environment Management** - Switch between dev/sit/uat/prod with environment-aware variables
+- 🍪 **Session Management** - Maintain cookies and authentication state across entire test flows
+- 📦 **OpenAPI Import** - Import and manage API specifications directly
+
+## 🎯 Why Test-Pilot?
+
+While tools like Postman excel at testing individual endpoints, Test-Pilot is designed for **workflow automation**:
+
+| Feature | Postman Collection Runner | Test-Pilot |
+|---------|---------------------------|------------|
+| Sequential execution | ✅ Requires JavaScript scripting | ✅ Visual editor with templates |
+| Data extraction | ✅ Via code in Tests tab | ✅ Template expressions `{{res:step1-0.$.id}}` |
+| Visual assertions | ❌ Must write code | ✅ Visual assertion builder |
+| Visual transformations | ❌ Must write code | ✅ Pipeline-based transformations |
+| Learning curve | Higher (requires JavaScript) | Lower (low-code approach) |
+
+## 🚀 Quick Start for Users
+
+### Using the Hosted Version
+
+1. Visit **[https://test-pilot-five.vercel.app](https://test-pilot-five.vercel.app)**
+2. Sign up for an account
+3. Import your OpenAPI specification
+4. Create test flows and start testing!
+
+### Running Locally
 
 ```bash
-# create a new project in the current directory
-npx sv create
+# Clone the repository
+git clone https://github.com/khanh1998/test-pilot.git
+cd test-pilot
 
-# create a new project in my-app
-npx sv create my-app
-```
+# Install dependencies
+npm install
 
-## Backend Authentication Setup
-
-This project uses Supabase for authentication while maintaining a local user database with Drizzle ORM. Here's how it works:
-
-1. Users sign up/sign in through our frontend component
-2. The requests are sent to our backend API endpoints
-3. The backend handles Supabase authentication and synchronizes with our local user database
-
-### Environment Variables
-
-Copy the `.env.example` file to `.env` and fill in your values:
-
-```bash
+# Set up environment variables
 cp .env.example .env
-```
+# Edit .env with your configuration
 
-You'll need:
+# Set up the database
+npm run setup
 
-- Supabase URL and anon key (for client-side)
-- Supabase service key (for server-side, keep this secret!)
-- Your database connection string
-
-### Database Migration
-
-Run the migration to add the Supabase auth ID column:
-
-```bash
-psql -U your_username -d your_database -f drizzle/migration_supabase_auth_id.sql
-```
-
-Or use Drizzle's migration system if set up:
-
-```bash
-npm run drizzle:generate
-npm run drizzle:migrate
-```
-
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```bash
+# Start the development server
 npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
 ```
 
-## Supabase Setup
+Visit `http://localhost:5173` to access the application.
 
-This project includes Supabase integration for authentication, database, and storage features.
+## 📖 User Guide
 
-### 1. Create a Supabase Project
+### 1. Import Your API
 
-1. Go to [supabase.com](https://supabase.com/) and sign up or log in
-2. Create a new project
-3. Wait for your database to start
+- Navigate to **Projects** → **APIs**
+- Click **Import OpenAPI Specification**
+- Upload your YAML or JSON file
+- Test-Pilot will parse and store all endpoints
 
-### 2. Configure Environment Variables
+### 2. Create a Test Flow
 
-1. Copy the `.env` file to `.env.local`:
+- Go to **Test Flows** → **Create New**
+- Add steps to your flow
+- For each step, select endpoints to call
+- Configure parameters using:
+  - Static values
+  - Template expressions: `{{res:step1-0.$.data.userId}}`
+  - Flow parameters: `{{param:username}}`
+  - Environment variables: `{{env:API_KEY}}`
 
+### 3. Add Assertions
+
+- Click the **Assertion** button for any endpoint
+- Choose assertion type (status code, header, JSON path, response time)
+- Set expected values
+- Assertions execute sequentially and stop on first failure
+
+### 4. Add Transformations
+
+- Click the **Transform** button for any endpoint
+- Write transformation expressions using pipeline syntax
+- Access transformed data in later steps: `{{proc:step1-0.users}}`
+
+### 5. Execute Your Flow
+
+- Click **Run Flow** 
+- Watch real-time execution progress
+- Review results, assertions, and timing
+- Debug failures with detailed logs
+
+### 6. Environment Management
+
+- Create environment sets (e.g., "Hero Project")
+- Define sub-environments (dev, sit, uat, prod)
+- Set environment-specific API hosts and variables
+- Switch environments before execution
+
+## 👨‍💻 Contributing
+
+We welcome contributions! This section is for developers who want to contribute code.
+
+### Tech Stack
+
+- **Frontend:** SvelteKit, Svelte 5, TailwindCSS
+- **Backend:** SvelteKit API routes
+- **Database:** PostgreSQL with Drizzle ORM
+- **Authentication:** Supabase Auth
+- **Testing:** Vitest
+- **Desktop:** Tauri (optional)
+
+### Development Setup
+
+1. **Prerequisites**
+   - Node.js 18+ and npm
+   - PostgreSQL database
+   - Supabase account (for authentication)
+
+2. **Clone and Install**
    ```bash
-   cp .env .env.local
+   git clone https://github.com/khanh1998/test-pilot.git
+   cd test-pilot
+   npm install
    ```
 
-2. Update the `.env.local` file with your Supabase credentials:
-
-   ```
-   VITE_SUPABASE_URL=your_supabase_url
-   VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
-   ```
-
-   You can find these values in your Supabase project dashboard under Settings > API.
-
-### 3. Set Up Database Types (Optional)
-
-For better TypeScript support, you can generate types from your Supabase database:
-
-1. Install Supabase CLI
-2. Run:
+3. **Configure Environment**
    ```bash
-   supabase gen types typescript --project-id your-project-id > src/lib/supabase/types.ts
+   cp .env.example .env
+   ```
+   
+   Edit `.env` with your values:
+   ```env
+   # Supabase
+   PUBLIC_SUPABASE_URL=your_supabase_url
+   PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+   SUPABASE_SERVICE_KEY=your_service_key
+   
+   # Database
+   DATABASE_URL=postgresql://user:password@localhost:5432/testpilot
+   
+   # Optional: OpenAI for future LLM features
+   OPENAI_API_KEY=your_openai_key
    ```
 
-## Building
+4. **Database Setup**
+   ```bash
+   # Run migrations and seed data
+   npm run setup
+   
+   # Or manually:
+   npm run drizzle:push
+   npm run db:seed
+   ```
 
-To create a production version of your app:
+5. **Start Development**
+   ```bash
+   # Web only
+   npm run dev
+   
+   # Web + local database
+   npm run dev:with-db
+   
+   # Desktop (Tauri)
+   npm run tauri dev
+   ```
 
-```bash
-npm run build
+### Project Structure
+
+```
+src/
+├── routes/              # SvelteKit file-based routing
+│   ├── api/            # API endpoints (controllers)
+│   └── +page.svelte    # UI pages
+├── lib/
+│   ├── components/     # Svelte components
+│   ├── server/         # Server-side code
+│   │   ├── service/   # Business logic
+│   │   ├── repository/ # Data access layer
+│   │   └── db/        # Database schema & connection
+│   ├── flow-runner/   # Test flow execution engine
+│   ├── template/      # Template expression system
+│   ├── assertions/    # Assertion engine
+│   └── transform/     # Transformation engine
 ```
 
-You can preview the production build with `npm run preview`.
+### Architecture
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+- **Controllers** (`/routes/api/**/+server.ts`) - Handle HTTP, validation, marshaling
+- **Services** (`/lib/server/service/`) - Business logic implementation
+- **Repositories** (`/lib/server/repository/`) - Data access abstraction
+- **Flow Runner** (`/lib/flow-runner/`) - Orchestrates test execution
 
-## Supabase Features Used
+See [.github/copilot-instructions.md](.github/copilot-instructions.md) for detailed architecture documentation.
 
-This project demonstrates:
-
-1. **Authentication** - Email/password login and signup
-2. **Database Operations** - Fetching data from Supabase tables
-3. **Type Safety** - TypeScript integration with Supabase
-4. **Drizzle ORM** - SQL query builder and schema management with Supabase PostgreSQL
-
-For more information, check out the [Supabase documentation](https://supabase.com/docs).
-
-## Drizzle ORM Integration
-
-This project includes [Drizzle ORM](https://orm.drizzle.team/) for database schema management, migrations, and SQL query building.
-
-### 1. Configuration
-
-The database connection is configured in two places:
-
-- Server-side: `/src/lib/server/drizzle.ts`
-- Client-side (use with caution): `/src/db/index.ts`
-
-### 2. Schema Definition
-
-The database schema is defined in `/src/db/schema.ts` using Drizzle's schema definition language.
-
-### 3. Running Migrations
-
-Generate migrations based on schema changes:
+### Running Tests
 
 ```bash
+# Run all tests
+npm run test
+
+# Run tests in watch mode
+npm run test:watch
+
+# Run tests with coverage
+npm run test:coverage
+```
+
+### Database Operations
+
+```bash
+# Generate migration from schema changes
 npm run drizzle:generate
-```
 
-Push migrations to the database:
-
-```bash
+# Apply migrations
 npm run drizzle:push
+
+# Open Drizzle Studio (database GUI)
+npm run drizzle:studio
+
+# Seed database with sample data
+npm run db:seed
 ```
 
-View your database with Drizzle Studio:
+### Code Style
 
 ```bash
-npm run drizzle:studio
+# Format code
+npm run format
+
+# Lint code
+npm run lint
+
+# Type check
+npm run check
 ```
 
-### 4. Environment Setup
+### Contribution Guidelines
 
-Ensure your `.env` file includes:
+1. **Fork the repository** and create a feature branch
+2. **Follow the existing code style** - run `npm run format` before committing
+3. **Write tests** for new features
+4. **Update documentation** if needed
+5. **Submit a Pull Request** with a clear description
 
-```
-DATABASE_URL=postgres://[user]:[password]@[host]:[port]/[db_name]
-```
+### Key Development Principles
 
-For Supabase, this usually looks like:
+- Keep controllers thin - business logic goes in services
+- Database queries only in repositories
+- Write tests for complex business logic
+- Use TypeScript strictly - avoid `any`
+- Follow Svelte 5 best practices (runes, snippets)
 
-```
-DATABASE_URL=postgres://postgres:[password]@[project-ref].supabase.co:5432/postgres
-```
+## 📚 Documentation
 
-### 5. Best Practices
+- [Test Flow Blueprint](docs/testflow.md) - Flow structure and design
+- [Template Expressions](docs/json_template_expressions.md) - Dynamic data references
+- [Assertions Guide](docs/assertion.md) - Response validation
+- [Transformations](docs/data_transformation_expression.md) - Data manipulation
+- [Environment Management](docs/environment_feature_proposal.md) - Multi-environment support
+- [Testing Guide](TESTING_GUIDE.md) - Writing and running tests
 
-- Always perform database operations server-side (in API routes or server load functions)
-- Use Drizzle relations for complex joins
-- Use prepared statements for user-provided data
+## 🗺️ Roadmap
 
-For more information, see the [Drizzle ORM documentation](https://orm.drizzle.team/docs/overview).
+See [docs/ROADMAP.md](docs/ROADMAP.md) for planned features and development phases.
+
+## 📄 License
+
+This project is open source. See LICENSE file for details.
+
+## 🤝 Support
+
+- 🐛 Report bugs via [GitHub Issues](https://github.com/khanh1998/test-pilot/issues)
+- 💡 Request features via [GitHub Issues](https://github.com/khanh1998/test-pilot/issues)
+- 📧 Contact: [your-email@example.com]
+
+## 🙏 Acknowledgments
+
+Built with:
+- [SvelteKit](https://kit.svelte.dev/)
+- [Supabase](https://supabase.com/)
+- [Drizzle ORM](https://orm.drizzle.team/)
+- [TailwindCSS](https://tailwindcss.com/)
+- [Tauri](https://tauri.app/)
