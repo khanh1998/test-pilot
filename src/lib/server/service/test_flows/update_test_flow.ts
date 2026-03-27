@@ -7,6 +7,8 @@ export interface UpdateTestFlowInput {
   name: string;
   description?: string;
   apiIds?: number[];
+  projectId?: number;
+  environmentId?: number;
   flowJson?: any;
 }
 
@@ -38,7 +40,7 @@ export async function updateTestFlow(
   userId: number,
   input: UpdateTestFlowInput
 ): Promise<UpdateTestFlowOutput | null> {
-  const { name, description, apiIds, flowJson } = input;
+  const { name, description, apiIds, projectId, environmentId, flowJson } = input;
 
   // Check if the test flow exists and belongs to the user
   const existingTestFlow = await getTestFlowById(testFlowId, userId);
@@ -52,6 +54,8 @@ export async function updateTestFlow(
     .set({
       name,
       description,
+      projectId,
+      environmentId,
       flowJson: flowJson || existingTestFlow.flowJson,
       updatedAt: new Date()
     })

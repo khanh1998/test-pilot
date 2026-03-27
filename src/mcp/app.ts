@@ -1,20 +1,29 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as z from 'zod/v4';
 import { isValidOperator } from '$lib/assertions';
+import type { Assertion, AssertionOperator } from '$lib/assertions/types';
+import type { StepEndpoint } from '$lib/components/test-flows/types';
 import {
   addAssertionToFlow,
   addFlowParameter,
   addStepToFlow,
+  createExpectationAssertion,
   createFlowDraft,
   explainFlowDocument,
   linkEnvironmentToFlow,
   linkStepOutput,
+  setHeader,
+  setPathParam,
   setBodyField,
   setQueryParam,
+  updateStepInFlow,
   type FlowDocument,
   validateFlowDocument
 } from '$lib/mcp/flow';
-import { createDraft, deleteDraft, getDraft, updateDraft } from '$lib/mcp/drafts';
+import { createDraft, deleteDraft, getDraft, getDraftTtlMs, updateDraft } from '$lib/mcp/drafts';
+import { createFlowRun, getFlowRun, updateFlowRun } from '$lib/mcp/runs';
+import { getFlowRunTtlMs } from '$lib/mcp/runs';
+import { createFlowSession, getFlowSession, getFlowSessionTtlMs, updateFlowSession } from '$lib/mcp/sessions';
 import {
   explainAssertion,
   explainTemplateExpression,
@@ -37,6 +46,22 @@ function asTextResult(structuredContent: Record<string, unknown>) {
       }
     ],
     structuredContent
+  };
+}
+
+function ttlInfo(kind: 'draft' | 'session' | 'run', expiresAt?: number) {
+  const ttlMs =
+    kind === 'draft'
+      ? getDraftTtlMs()
+      : kind === 'session'
+        ? getFlowSessionTtlMs()
+        : getFlowRunTtlMs();
+  return {
+    kind,
+    ttlMs,
+    ttlSeconds: Math.floor(ttlMs / 1000),
+    expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
+    note: `${kind[0].toUpperCase()}${kind.slice(1)} data is stored in memory only and will expire unless refreshed.`
   };
 }
 
@@ -63,7 +88,7 @@ function resolveDraftOrDocument(
     const user = requireAuthContext(authContext);
     const draft = getDraft(args.draftId, user.userId);
     if (!draft) {
-      throw new Error(`Draft ${args.draftId} was not found.`);
+      throw new Error(`Draft ${args.draftId} was not found. It may have expired from in-memory MCP storage.`);
     }
     return { draftId: draft.id, flowDocument: draft.document };
   }
@@ -73,6 +98,18 @@ function resolveDraftOrDocument(
   }
 
   return { flowDocument: args.flowDocument as FlowDocument };
+}
+
+function resolveDraftIdFromSession(sessionId: string, authContext?: McpAuthContext): string {
+  const user = requireAuthContext(authContext);
+  const session = getFlowSession(sessionId, user.userId);
+  if (!session) {
+    throw new Error(`Flow session ${sessionId} was not found. It may have expired from in-memory MCP storage.`);
+  }
+  if (!session.draftId) {
+    throw new Error(`Flow session ${sessionId} does not have a draft yet.`);
+  }
+  return session.draftId;
 }
 
 function extractApiIds(document: FlowDocument): number[] {
@@ -121,7 +158,7 @@ async function getProjectDetailForUser(projectId: number, authContext?: McpAuthC
 }
 
 async function resolveApiScope(
-  input: { apiId?: number; apiIds?: number[]; draftId?: string; projectId?: number },
+  input: { apiId?: number; apiIds?: number[]; draftId?: string; projectId?: number; sessionId?: string },
   authContext?: McpAuthContext
 ): Promise<{ apiId?: number; apiIds?: number[] }> {
   if (input.apiId || (input.apiIds && input.apiIds.length > 0)) {
@@ -142,6 +179,18 @@ async function resolveApiScope(
     }
   }
 
+  if (input.sessionId) {
+    const user = requireAuthContext(authContext);
+    const session = getFlowSession(input.sessionId, user.userId);
+    if (!session) {
+      throw new Error(`Flow session ${input.sessionId} was not found.`);
+    }
+    if (session.apiIds.length > 0) {
+      return { apiIds: session.apiIds };
+    }
+    return resolveApiScope({ projectId: session.projectId }, authContext);
+  }
+
   if (input.projectId) {
     const detail = await getProjectDetailForUser(input.projectId, authContext);
     if (detail.apis.length === 1) {
@@ -157,6 +206,183 @@ async function resolveApiScope(
   throw new Error(
     'Endpoint discovery requires API scope. Select a project, choose one or more API ids from that project, and pass apiIds (or apiId) before searching endpoints.'
   );
+}
+
+async function buildProjectContext(
+  projectId: number,
+  authContext?: McpAuthContext,
+  includeEnvironmentValues = true
+) {
+  const user = requireAuthContext(authContext);
+  const { ProjectService } = await import('$lib/server/service/projects/project_service');
+  const { ProjectEnvironmentService } = await import('$lib/server/service/projects/environment_service');
+  const { ProjectEnvironmentMappingService } = await import('$lib/server/service/projects/project_environment_mapping_service');
+  const { getTestFlowsForUser } = await import('$lib/server/service/test_flows/list_test_flows');
+
+  const projectService = new ProjectService();
+  const environmentService = new ProjectEnvironmentService();
+  const environmentMappingService = new ProjectEnvironmentMappingService();
+
+  const detail = await projectService.getProjectDetail(projectId, user.userId);
+  const linkedEnvironments = await environmentService.listProjectEnvironments(projectId, user.userId);
+  const environmentMappings = await environmentMappingService.getEnvironmentMappings(projectId, user.userId);
+  const existingFlows = await getTestFlowsForUser(user.userId, { projectId, limit: 20, page: 1 });
+
+  const environments = linkedEnvironments.environmentLinks.map((link) => {
+    const mapping = environmentMappings.find((item) => item.environment_id === link.environmentId);
+    const environmentConfig = link.environment?.config;
+    return {
+      id: link.environmentId,
+      name: link.environment?.name ?? '',
+      description: link.environment?.description,
+      subEnvironments: Object.keys(environmentConfig?.environments ?? {}),
+      variableDefinitions: environmentConfig?.variable_definitions ?? {},
+      subEnvironmentValues: includeEnvironmentValues
+        ? Object.fromEntries(
+            Object.entries(environmentConfig?.environments ?? {}).map(([subEnvName, subEnvConfig]) => {
+              const subEnvironmentConfig = subEnvConfig as { variables?: Record<string, unknown>; api_hosts?: Record<string, string> };
+              return [
+              subEnvName,
+              {
+                variables: subEnvironmentConfig.variables ?? {},
+                apiHosts: subEnvironmentConfig.api_hosts ?? {}
+              }
+            ];
+            })
+          )
+        : undefined,
+      linkedApiIds: environmentConfig?.linked_apis ?? [],
+      parameterMappings: mapping?.variable_mappings ?? {}
+    };
+  });
+
+  const guidanceNotes = [
+    'If you are working in the backend codebase, use that context first. Read routes, controllers, services, DTOs, and recent code changes to infer the business sequence and likely endpoints before relying on endpoint search alone.',
+    detail.apis.length > 1
+      ? 'This project has multiple APIs. Ask the human which APIs should be in scope before building or searching.'
+      : 'This project has a single linked API, so API scope can be inferred if needed.',
+    environments.length > 1
+      ? 'This project has multiple environments. Ask the human which environment should be linked before building.'
+      : environments.length === 1
+        ? 'This project has a single linked environment, so the MCP can infer it if needed.'
+        : 'This project has no linked environments. The flow may need direct API Hosts configuration.'
+  ];
+
+  return {
+    project: {
+      id: detail.project.id,
+      name: detail.project.name,
+      description: detail.project.description ?? null
+    },
+    apis: detail.apis.map((apiLink) => ({
+      id: apiLink.apiId,
+      name: apiLink.api?.name ?? '',
+      description: apiLink.api?.description ?? null,
+      defaultHost: apiLink.defaultHost ?? apiLink.api?.host ?? null
+    })),
+    environments,
+    existingFlows: existingFlows.testFlows,
+    counts: {
+      apis: detail.apis.length,
+      environments: environments.length,
+      modules: detail.modules.length,
+      existingFlows: existingFlows.testFlows.length
+    },
+    guidance: {
+      needsClarification: detail.apis.length > 1 || environments.length > 1,
+      reasons: [
+        ...(detail.apis.length > 1 ? ['multiple_apis'] : []),
+        ...(environments.length > 1 ? ['multiple_environments'] : [])
+      ],
+      notes: guidanceNotes,
+      codebaseFirstRecommendation: {
+        recommended: true,
+        summary: 'If the agent can inspect the backend codebase, it should use routes, controllers, services, DTOs, and recent code changes to understand the business sequence and likely APIs before relying on endpoint discovery alone.',
+        signalsToUse: [
+          'routes and path definitions',
+          'controllers and handlers',
+          'service and repository calls',
+          'request and response DTOs',
+          'recent changed files and feature-specific modules'
+        ]
+      }
+    }
+  };
+}
+
+async function hydrateFlowDocumentEndpoints(document: FlowDocument): Promise<FlowDocument> {
+  const existingEndpoints = document.flowData.endpoints ?? [];
+  const existingIds = new Set(existingEndpoints.map((endpoint) => endpoint.id));
+  const usedEndpointIds = new Set<number>();
+
+  for (const step of document.flowData.steps) {
+    for (const endpoint of step.endpoints) {
+      const endpointId =
+        typeof endpoint.endpoint_id === 'string' ? Number(endpoint.endpoint_id) : endpoint.endpoint_id;
+      if (typeof endpointId === 'number' && !Number.isNaN(endpointId) && !existingIds.has(endpointId)) {
+        usedEndpointIds.add(endpointId);
+      }
+    }
+  }
+
+  if (usedEndpointIds.size === 0) {
+    return document;
+  }
+
+  const { getEndpointsByIds } = await import('$lib/server/repository/db/test-flows');
+  const fetchedEndpoints = await getEndpointsByIds([...usedEndpointIds]);
+  return {
+    ...document,
+    flowData: {
+      ...document.flowData,
+      endpoints: [...existingEndpoints, ...fetchedEndpoints]
+    }
+  };
+}
+
+async function loadSelectedEnvironmentForDocument(
+  document: FlowDocument,
+  overrides?: {
+    environmentId?: number;
+    subEnvironment?: string;
+  },
+  authContext?: McpAuthContext
+) {
+  const environmentId =
+    overrides?.environmentId ??
+    document.environmentId ??
+    document.flowData.settings.environment?.environmentId ??
+    document.flowData.settings.linkedEnvironment?.environmentId;
+
+  if (!environmentId) {
+    return null;
+  }
+
+  const user = requireAuthContext(authContext);
+  const { getEnvironmentByIdAndUserId } = await import('$lib/server/repository/db/environment');
+  const { resolveEnvironmentVariables } = await import('$lib/server/service/environments/resolve_environment_variables');
+
+  const environment = await getEnvironmentByIdAndUserId(environmentId, user.userId);
+  if (!environment) {
+    throw new Error(`Environment ${environmentId} was not found for this user.`);
+  }
+
+  const subEnvironment =
+    overrides?.subEnvironment ??
+    document.flowData.settings.environment?.subEnvironment ??
+    document.flowData.settings.linkedEnvironment?.selectedSubEnvironment ??
+    Object.keys(environment.config.environments ?? {})[0] ??
+    null;
+
+  if (!subEnvironment) {
+    return { environment, resolvedVariables: {} };
+  }
+
+  const resolved = resolveEnvironmentVariables(environment.id, environment.name, subEnvironment, environment.config);
+  return {
+    environment,
+    resolvedVariables: resolved.variables
+  };
 }
 
 async function resolveDraftSelections(
@@ -222,12 +448,15 @@ function normalizeAssertionInput(assertion: {
   expected_value: unknown;
   enabled: boolean;
   is_template_expression?: boolean;
-}) {
+}): Assertion {
   if (isValidOperator(assertion.operator)) {
-    return assertion;
+    return {
+      ...assertion,
+      operator: assertion.operator as AssertionOperator
+    };
   }
 
-  const operatorAliasMap: Record<string, { operator: string; expected_value?: unknown }> = {
+  const operatorAliasMap: Record<string, { operator: AssertionOperator; expected_value?: unknown }> = {
     is_number: { operator: 'is_type', expected_value: 'number' },
     is_string: { operator: 'is_type', expected_value: 'string' },
     is_boolean: { operator: 'is_type', expected_value: 'boolean' },
@@ -245,6 +474,19 @@ function normalizeAssertionInput(assertion: {
     operator: alias.operator,
     expected_value: alias.expected_value ?? assertion.expected_value
   };
+}
+
+function normalizeStepEndpoints(endpoints?: Array<Record<string, unknown>>): StepEndpoint[] | undefined {
+  if (!endpoints) {
+    return undefined;
+  }
+
+  return endpoints.map((endpoint) => ({
+    ...(endpoint as unknown as StepEndpoint),
+    assertions: Array.isArray(endpoint.assertions)
+      ? endpoint.assertions.map((assertion) => normalizeAssertionInput(assertion as Parameters<typeof normalizeAssertionInput>[0]))
+      : undefined
+  }));
 }
 
 async function ensureFlowHasApiHosts(
@@ -266,18 +508,20 @@ async function ensureFlowHasApiHosts(
     const { ProjectService } = await import('$lib/server/service/projects/project_service');
     const projectService = new ProjectService();
     const detail = await projectService.getProjectDetail(document.projectId, user.userId);
-    const apiHosts = Object.fromEntries(
-      detail.apis
-        .filter((apiLink) => apiIds.includes(apiLink.apiId))
-        .map((apiLink) => [
-          String(apiLink.apiId),
-          {
-            url: apiLink.defaultHost ?? apiLink.api?.host ?? '',
-            name: apiLink.api?.name ?? `API ${apiLink.apiId}`
-          }
-        ])
-        .filter(([, host]) => host.url)
-    );
+    const hostEntries = detail.apis
+      .filter((apiLink) => apiIds.includes(apiLink.apiId))
+      .map((apiLink) => ({
+        key: String(apiLink.apiId),
+        host: {
+          url: apiLink.defaultHost ?? apiLink.api?.host ?? '',
+          name: apiLink.api?.name ?? `API ${apiLink.apiId}`
+        }
+      }))
+      .filter((entry) => entry.host.url);
+    const apiHosts = Object.fromEntries(hostEntries.map((entry) => [entry.key, entry.host])) as Record<
+      string,
+      { url: string; name: string }
+    >;
 
     if (Object.keys(apiHosts).length > 0) {
       return {
@@ -327,7 +571,7 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
     async ({ kind, expression, assertion }) => {
       if (kind === 'assertion') {
         if (!assertion) throw new Error('assertion is required when kind=assertion');
-        return asTextResult({ explanation: explainAssertion(assertion) });
+        return asTextResult({ explanation: explainAssertion(normalizeAssertionInput(assertion)) });
       }
 
       if (!expression) {
@@ -362,15 +606,227 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
         functionArgs: z.array(z.union([z.string(), z.number(), z.boolean(), z.null()])).optional()
       }
     },
-    async (input) => asTextResult(suggestTemplateExpression(input))
+    async (input) => asTextResult(suggestTemplateExpression(input) as unknown as Record<string, unknown>)
+  );
+
+  server.registerTool(
+    'prepare_flow_context',
+    {
+      title: 'Prepare Flow Context',
+      description: 'Gather the project APIs, environments, environment values, and existing flows before starting a V2 flow session. If you can inspect the backend codebase, use that context to understand the business flow, endpoint sequence, and likely APIs before relying on search alone. If guidance.needsClarification is true, the agent should ask the human to choose APIs and/or environment first.',
+      inputSchema: {
+        projectId: z.number(),
+        includeEnvironmentValues: z.boolean().optional()
+      }
+    },
+    async ({ projectId, includeEnvironmentValues = true }) =>
+      asTextResult(await buildProjectContext(projectId, authContext, includeEnvironmentValues))
+  );
+
+  server.registerTool(
+    'start_flow_session',
+    {
+      title: 'Start Flow Session',
+      description: 'Start a stateful V2 flow-building session for a project. If you are working in the backend codebase, inspect routes, controllers, services, DTOs, and recent code changes to infer the likely journey before selecting APIs and building steps. Scope selection happens next.',
+      inputSchema: {
+        projectId: z.number()
+      }
+    },
+    async ({ projectId }) => {
+      await getProjectDetailForUser(projectId, authContext);
+      const user = requireAuthContext(authContext);
+      const session = createFlowSession(user.userId, projectId);
+      const context = await buildProjectContext(projectId, authContext, false);
+      return asTextResult({
+        sessionId: session.id,
+        projectId: session.projectId,
+        status: session.status,
+        guidance: context.guidance,
+        sessionTtl: ttlInfo('session', session.expiresAt)
+      });
+    }
+  );
+
+  server.registerTool(
+    'start_edit_flow_session',
+    {
+      title: 'Start Edit Flow Session',
+      description: 'Load an existing saved flow into a stateful session draft so the agent can edit it in place instead of creating a new flow every time. If you are working in the codebase, compare the saved flow against current routes, handlers, request/response shapes, and business logic before editing.',
+      inputSchema: {
+        flowId: z.number()
+      }
+    },
+    async ({ flowId }) => {
+      const user = requireAuthContext(authContext);
+      const result = await (await import('$lib/server/service/test_flows/get_test_flow')).getTestFlow(flowId, user.userId);
+      if (!result) {
+        throw new Error(`Test flow ${flowId} was not found.`);
+      }
+
+      const apiIds = (result.testFlow.apis ?? []).map((api) => api.id);
+      const flowDocument: FlowDocument = {
+        sourceFlowId: result.testFlow.id,
+        name: result.testFlow.name,
+        description: result.testFlow.description ?? undefined,
+        projectId: result.testFlow.projectId ?? undefined,
+        apiIds,
+        environmentId: result.testFlow.environmentId ?? undefined,
+        flowData: {
+          ...result.testFlow.flowJson,
+          endpoints: result.testFlow.endpoints ?? result.testFlow.flowJson.endpoints ?? []
+        }
+      };
+
+      const session = createFlowSession(user.userId, result.testFlow.projectId ?? 0, {
+        sourceFlowId: result.testFlow.id
+      });
+      const draft = createDraft(user.userId, flowDocument);
+      updateFlowSession(session.id, user.userId, {
+        apiIds,
+        environmentId: result.testFlow.environmentId ?? undefined,
+        draftId: draft.id,
+        status: 'draft_created'
+      });
+
+      return asTextResult({
+        sessionId: session.id,
+        draftId: draft.id,
+        flowId: result.testFlow.id,
+        mode: 'edit',
+        flowDocument,
+        sessionTtl: ttlInfo('session', session.expiresAt),
+        draftTtl: ttlInfo('draft', draft.expiresAt)
+      });
+    }
+  );
+
+  server.registerTool(
+    'select_flow_scope',
+    {
+      title: 'Select Flow Scope',
+      description: 'Choose the APIs and environment for a V2 flow session. If the project has multiple APIs or environments, the human should clarify those choices before this tool is called.',
+      inputSchema: {
+        sessionId: z.string(),
+        apiIds: z.array(z.number()).optional(),
+        environmentId: z.number().optional(),
+        subEnvironment: z.string().optional()
+      }
+    },
+    async ({ sessionId, apiIds, environmentId, subEnvironment }) => {
+      const user = requireAuthContext(authContext);
+      const session = getFlowSession(sessionId, user.userId);
+      if (!session) {
+        throw new Error(`Flow session ${sessionId} was not found. It may have expired from in-memory MCP storage.`);
+      }
+
+      const resolvedSelections = await resolveDraftSelections(
+        { projectId: session.projectId, apiIds, environmentId },
+        authContext
+      );
+      const updated = updateFlowSession(sessionId, user.userId, {
+        apiIds: resolvedSelections.apiIds ?? [],
+        environmentId: resolvedSelections.environmentId,
+        subEnvironment,
+        status: 'ready_for_draft'
+      });
+
+      return asTextResult({
+        sessionId: updated.id,
+        status: updated.status,
+        scope: {
+          projectId: updated.projectId,
+          apiIds: updated.apiIds,
+          environmentId: updated.environmentId ?? null,
+          subEnvironment: updated.subEnvironment ?? null
+        },
+        sessionTtl: ttlInfo('session', updated.expiresAt)
+      });
+    }
+  );
+
+  server.registerTool(
+    'get_flow_session',
+    {
+      title: 'Get Flow Session',
+      description: 'Recover the current V2 flow session, including selected scope and any linked draft.',
+      inputSchema: {
+        sessionId: z.string()
+      }
+    },
+    async ({ sessionId }) => {
+      const user = requireAuthContext(authContext);
+      const session = getFlowSession(sessionId, user.userId);
+      if (!session) {
+        throw new Error(`Flow session ${sessionId} was not found. It may have expired from in-memory MCP storage.`);
+      }
+
+      const draft = session.draftId ? getDraft(session.draftId, user.userId) : null;
+      return asTextResult({
+        sessionId: session.id,
+        status: session.status,
+        sourceFlowId: session.sourceFlowId ?? null,
+        scope: {
+          projectId: session.projectId,
+          apiIds: session.apiIds,
+          environmentId: session.environmentId ?? null,
+          subEnvironment: session.subEnvironment ?? null
+        },
+        draftId: session.draftId ?? null,
+        flowDocument: draft?.document ?? null,
+        sessionTtl: ttlInfo('session', session.expiresAt),
+        draftTtl: draft ? ttlInfo('draft', draft.expiresAt) : null
+      });
+    }
+  );
+
+  server.registerTool(
+    'suggest_flow_reuse',
+    {
+      title: 'Suggest Flow Reuse',
+      description: 'Suggest whether to reuse an existing flow, clone one, or create a new flow for the current session. If you can inspect the codebase, use that context to judge whether the existing flow still matches the current implementation and business sequence.',
+      inputSchema: {
+        sessionId: z.string(),
+        intent: z.string().optional()
+      }
+    },
+    async ({ sessionId, intent = '' }) => {
+      const user = requireAuthContext(authContext);
+      const session = getFlowSession(sessionId, user.userId);
+      if (!session) {
+        throw new Error(`Flow session ${sessionId} was not found.`);
+      }
+
+      const { getTestFlowsForUser } = await import('$lib/server/service/test_flows/list_test_flows');
+      const flows = await getTestFlowsForUser(user.userId, {
+        projectId: session.projectId,
+        search: intent.trim() || undefined,
+        limit: 10,
+        page: 1
+      });
+
+      const candidates = flows.testFlows.slice(0, 5);
+      const decision = candidates.length > 0 ? 'review_existing' : 'create_new';
+      const reason =
+        decision === 'review_existing'
+          ? 'Found existing flows in the same project that may cover part of this journey.'
+          : 'No close existing flows were found in the selected project, so creating a new flow is the safer default.';
+
+      return asTextResult({
+        sessionId,
+        decision,
+        reason,
+        candidates
+      });
+    }
   );
 
   server.registerTool(
     'create_flow_draft',
     {
       title: 'Create Flow Draft',
-      description: 'Create a new stateful Test-Pilot flow draft. If the selected project has multiple APIs or environments and the human did not specify which ones to use, stop and ask for clarification before calling this tool.',
+      description: 'Create a new stateful Test-Pilot flow draft. Before building steps, prefer using backend codebase context such as routes, controllers, services, DTOs, and changed files to infer the correct API sequence. If the selected project has multiple APIs or environments and the human did not specify which ones to use, stop and ask for clarification before calling this tool.',
       inputSchema: {
+      sessionId: z.string().optional(),
       name: z.string(),
       description: z.string().optional(),
       projectId: z.number().optional(),
@@ -387,20 +843,39 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
       })).optional()
     }
   },
-  async ({ name, description, projectId, apiIds, environmentId, apiHosts, parameters }) => {
-    const resolvedSelections = await resolveDraftSelections({ projectId, apiIds, environmentId }, authContext);
+  async ({ sessionId, name, description, projectId, apiIds, environmentId, apiHosts, parameters }) => {
+    const user = requireAuthContext(authContext);
+    const session = sessionId ? getFlowSession(sessionId, user.userId) : null;
+    if (sessionId && !session) {
+      throw new Error(`Flow session ${sessionId} was not found. It may have expired from in-memory MCP storage.`);
+    }
+
+    const baseProjectId = projectId ?? session?.projectId;
+    const baseApiIds = apiIds ?? (session?.apiIds.length ? session.apiIds : undefined);
+    const baseEnvironmentId = environmentId ?? session?.environmentId;
+    const resolvedSelections = await resolveDraftSelections(
+      { projectId: baseProjectId, apiIds: baseApiIds, environmentId: baseEnvironmentId },
+      authContext
+    );
     const flowDocument = createFlowDraft({
       name,
       description,
-      projectId,
+      projectId: baseProjectId,
       apiIds: resolvedSelections.apiIds,
       environmentId: resolvedSelections.environmentId,
+      subEnvironment: session?.subEnvironment,
       apiHosts,
       parameters
     });
-    const user = requireAuthContext(authContext);
     const draft = createDraft(user.userId, flowDocument);
+    if (session) {
+      updateFlowSession(session.id, user.userId, {
+        draftId: draft.id,
+        status: 'draft_created'
+      });
+    }
     return asTextResult({
+      sessionId: session?.id ?? null,
       draftId: draft.id,
       flowDocument,
       selectionSummary: {
@@ -412,7 +887,9 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
         parameters: 'Use {{param:name}} to reference a flow parameter. Bare {{name}} is not valid.',
         responses: 'Use {{res:stepId-0.$.path}} for a response reference.',
         transformations: 'Use {{proc:stepId-0.$.alias}} for a transformation alias.'
-      }
+      },
+      draftTtl: ttlInfo('draft', draft.expiresAt),
+      sessionTtl: session ? ttlInfo('session', session.expiresAt) : null
     });
   }
 );
@@ -430,7 +907,7 @@ server.registerTool(
     const user = requireAuthContext(authContext);
     const draft = getDraft(draftId, user.userId);
     if (!draft) {
-      throw new Error(`Draft ${draftId} was not found.`);
+      throw new Error(`Draft ${draftId} was not found. It may have expired from in-memory MCP storage.`);
     }
 
     return asTextResult({
@@ -440,7 +917,8 @@ server.registerTool(
         projectId: draft.document.projectId ?? null,
         apiIds: draft.document.apiIds ?? [],
         environmentId: draft.document.environmentId ?? null
-      }
+      },
+      draftTtl: ttlInfo('draft', draft.expiresAt)
     });
   }
 );
@@ -489,7 +967,10 @@ server.registerTool(
   },
   async ({ draftId, flowDocument, ...stepInput }) => {
     const resolved = resolveDraftOrDocument({ draftId, flowDocument }, authContext);
-    const updated = addStepToFlow(resolved.flowDocument, stepInput);
+    const updated = addStepToFlow(resolved.flowDocument, {
+      ...stepInput,
+      endpoints: normalizeStepEndpoints(stepInput.endpoints as unknown as Array<Record<string, unknown>> | undefined)
+    });
     if (resolved.draftId) {
       const user = requireAuthContext(authContext);
       updateDraft(resolved.draftId, user.userId, updated);
@@ -497,6 +978,64 @@ server.registerTool(
     return asTextResult({ draftId: resolved.draftId, flowDocument: updated });
   }
   );
+
+server.registerTool(
+  'update_step',
+  {
+    title: 'Update Step',
+    description: 'Update an existing step without rebuilding the full draft.',
+    inputSchema: {
+      draftId: z.string().optional(),
+      sessionId: z.string().optional(),
+      flowDocument: z.unknown().optional(),
+      stepId: z.string(),
+      label: z.string().optional(),
+      endpoints: z.array(z.object({
+        endpoint_id: z.union([z.string(), z.number()]),
+        api_id: z.union([z.string(), z.number()]),
+        order: z.number().optional(),
+        pathParams: z.record(z.string(), z.string()).optional(),
+        queryParams: z.record(z.string(), z.union([z.string(), z.array(z.string())])).optional(),
+        body: z.unknown().optional(),
+        headers: z.array(z.object({
+          name: z.string(),
+          value: z.string(),
+          enabled: z.boolean()
+        })).optional(),
+        transformations: z.array(z.object({
+          alias: z.string(),
+          expression: z.string()
+        })).optional(),
+        assertions: z.array(z.object({
+          id: z.string(),
+          data_source: z.enum(['response', 'transformed_data']),
+          assertion_type: z.enum(['status_code', 'response_time', 'header', 'json_body']),
+          data_id: z.string(),
+          operator: z.string(),
+          expected_value: z.unknown(),
+          enabled: z.boolean(),
+          is_template_expression: z.boolean().optional()
+        })).optional(),
+        skipDefaultStatusCheck: z.boolean().optional()
+      })).optional(),
+      timeout: z.number().optional(),
+      clearCookiesBeforeExecution: z.boolean().optional()
+    }
+  },
+  async ({ draftId, sessionId, flowDocument, ...stepInput }) => {
+    const resolvedDraftId = draftId ?? (sessionId ? resolveDraftIdFromSession(sessionId, authContext) : undefined);
+    const resolved = resolveDraftOrDocument({ draftId: resolvedDraftId, flowDocument }, authContext);
+    const updated = updateStepInFlow(resolved.flowDocument, {
+      ...stepInput,
+      endpoints: normalizeStepEndpoints(stepInput.endpoints as unknown as Array<Record<string, unknown>> | undefined)
+    });
+    if (resolved.draftId) {
+      const user = requireAuthContext(authContext);
+      updateDraft(resolved.draftId, user.userId, updated);
+    }
+    return asTextResult({ sessionId: sessionId ?? null, draftId: resolved.draftId, flowDocument: updated });
+  }
+);
 
 server.registerTool(
   'add_flow_parameter',
@@ -524,6 +1063,73 @@ server.registerTool(
       updateDraft(resolved.draftId, user.userId, updated);
     }
     return asTextResult({ draftId: resolved.draftId, flowDocument: updated });
+  }
+);
+
+server.registerTool(
+  'bind_parameter_to_environment',
+  {
+    title: 'Bind Parameter To Environment',
+    description: 'Map a flow parameter to an environment variable on the draft linked environment. If the flow does not yet have an environment linked, the current session environment will be used.',
+    inputSchema: {
+      draftId: z.string().optional(),
+      sessionId: z.string().optional(),
+      flowDocument: z.unknown().optional(),
+      parameterName: z.string(),
+      environmentVariable: z.string()
+    }
+  },
+  async ({ draftId, sessionId, flowDocument, parameterName, environmentVariable }) => {
+    const resolvedDraftId = draftId ?? (sessionId ? resolveDraftIdFromSession(sessionId, authContext) : undefined);
+    const resolved = resolveDraftOrDocument({ draftId: resolvedDraftId, flowDocument }, authContext);
+    const user = requireAuthContext(authContext);
+    const session = sessionId ? getFlowSession(sessionId, user.userId) : null;
+
+    let environmentId =
+      resolved.flowDocument.environmentId ??
+      resolved.flowDocument.flowData.settings.environment?.environmentId ??
+      resolved.flowDocument.flowData.settings.linkedEnvironment?.environmentId ??
+      session?.environmentId;
+
+    if (!environmentId) {
+      throw new Error('No environment is linked to this draft yet. Select a session environment or link an environment first.');
+    }
+
+    const existingName = resolved.flowDocument.flowData.settings.linkedEnvironment?.environmentName;
+    let environmentName = existingName;
+    if (!environmentName) {
+      const { getEnvironmentByIdAndUserId } = await import('$lib/server/repository/db/environment');
+      const environment = await getEnvironmentByIdAndUserId(environmentId, user.userId);
+      if (!environment) {
+        throw new Error(`Environment ${environmentId} was not found for this user.`);
+      }
+      environmentName = environment.name;
+    }
+
+    const parameterMappings = {
+      ...(resolved.flowDocument.flowData.settings.linkedEnvironment?.parameterMappings ?? {}),
+      [parameterName]: environmentVariable
+    };
+    const updated = linkEnvironmentToFlow(resolved.flowDocument, {
+      environmentId,
+      environmentName,
+      selectedSubEnvironment:
+        resolved.flowDocument.flowData.settings.linkedEnvironment?.selectedSubEnvironment ??
+        session?.subEnvironment,
+      parameterMappings
+    });
+
+    if (resolved.draftId) {
+      updateDraft(resolved.draftId, user.userId, updated);
+    }
+
+    return asTextResult({
+      sessionId: sessionId ?? null,
+      draftId: resolved.draftId,
+      parameterName,
+      environmentVariable,
+      flowDocument: updated
+    });
   }
 );
 
@@ -582,6 +1188,61 @@ server.registerTool(
     }
   );
 
+server.registerTool(
+  'set_path_param',
+  {
+    title: 'Set Path Param',
+    description: 'Patch a single path parameter on an existing draft step endpoint.',
+    inputSchema: {
+      draftId: z.string().optional(),
+      sessionId: z.string().optional(),
+      flowDocument: z.unknown().optional(),
+      stepId: z.string(),
+      endpointIndex: z.number().optional(),
+      name: z.string(),
+      value: z.string()
+    }
+  },
+  async ({ draftId, sessionId, flowDocument, stepId, endpointIndex, name, value }) => {
+    const resolvedDraftId = draftId ?? (sessionId ? resolveDraftIdFromSession(sessionId, authContext) : undefined);
+    const resolved = resolveDraftOrDocument({ draftId: resolvedDraftId, flowDocument }, authContext);
+    const updated = setPathParam(resolved.flowDocument, { stepId, endpointIndex, name, value });
+    if (resolved.draftId) {
+      const user = requireAuthContext(authContext);
+      updateDraft(resolved.draftId, user.userId, updated);
+    }
+    return asTextResult({ sessionId: sessionId ?? null, draftId: resolved.draftId, flowDocument: updated });
+  }
+);
+
+server.registerTool(
+  'set_header',
+  {
+    title: 'Set Header',
+    description: 'Patch a single header on an existing draft step endpoint.',
+    inputSchema: {
+      draftId: z.string().optional(),
+      sessionId: z.string().optional(),
+      flowDocument: z.unknown().optional(),
+      stepId: z.string(),
+      endpointIndex: z.number().optional(),
+      name: z.string(),
+      value: z.string(),
+      enabled: z.boolean().optional()
+    }
+  },
+  async ({ draftId, sessionId, flowDocument, stepId, endpointIndex, name, value, enabled }) => {
+    const resolvedDraftId = draftId ?? (sessionId ? resolveDraftIdFromSession(sessionId, authContext) : undefined);
+    const resolved = resolveDraftOrDocument({ draftId: resolvedDraftId, flowDocument }, authContext);
+    const updated = setHeader(resolved.flowDocument, { stepId, endpointIndex, name, value, enabled });
+    if (resolved.draftId) {
+      const user = requireAuthContext(authContext);
+      updateDraft(resolved.draftId, user.userId, updated);
+    }
+    return asTextResult({ sessionId: sessionId ?? null, draftId: resolved.draftId, flowDocument: updated });
+  }
+);
+
   server.registerTool(
     'set_query_param',
     {
@@ -604,6 +1265,80 @@ server.registerTool(
         updateDraft(resolved.draftId, user.userId, updated);
       }
       return asTextResult({ draftId: resolved.draftId, flowDocument: updated });
+    }
+  );
+
+  server.registerTool(
+    'bind_request_field_to_parameter',
+    {
+      title: 'Bind Request Field To Parameter',
+      description: 'Bind a request field to a flow parameter using canonical Test-Pilot template syntax.',
+      inputSchema: {
+        draftId: z.string().optional(),
+        sessionId: z.string().optional(),
+        flowDocument: z.unknown().optional(),
+        stepId: z.string(),
+        endpointIndex: z.number().optional(),
+        targetFieldType: z.enum(['body', 'queryParams', 'pathParams', 'headers']),
+        fieldName: z.string(),
+        nestedFieldPath: z.string().optional(),
+        parameterName: z.string(),
+        preserveType: z.boolean().optional(),
+        headerEnabled: z.boolean().optional()
+      }
+    },
+    async ({ draftId, sessionId, flowDocument, stepId, endpointIndex, targetFieldType, fieldName, nestedFieldPath, parameterName, preserveType, headerEnabled }) => {
+      const resolvedDraftId = draftId ?? (sessionId ? resolveDraftIdFromSession(sessionId, authContext) : undefined);
+      const resolved = resolveDraftOrDocument({ draftId: resolvedDraftId, flowDocument }, authContext);
+      const { expression } = suggestTemplateExpression({
+        source: 'param',
+        parameterName,
+        preserveType
+      });
+
+      let updated = resolved.flowDocument;
+      if (targetFieldType === 'body') {
+        updated = setBodyField(updated, {
+          stepId,
+          endpointIndex,
+          fieldPath: nestedFieldPath ?? fieldName,
+          value: expression
+        });
+      } else if (targetFieldType === 'queryParams') {
+        updated = setQueryParam(updated, {
+          stepId,
+          endpointIndex,
+          name: fieldName,
+          value: expression
+        });
+      } else if (targetFieldType === 'pathParams') {
+        updated = setPathParam(updated, {
+          stepId,
+          endpointIndex,
+          name: fieldName,
+          value: expression
+        });
+      } else {
+        updated = setHeader(updated, {
+          stepId,
+          endpointIndex,
+          name: fieldName,
+          value: expression,
+          enabled: headerEnabled
+        });
+      }
+
+      if (resolved.draftId) {
+        const user = requireAuthContext(authContext);
+        updateDraft(resolved.draftId, user.userId, updated);
+      }
+
+      return asTextResult({
+        sessionId: sessionId ?? null,
+        draftId: resolved.draftId,
+        expression,
+        flowDocument: updated
+      });
     }
   );
 
@@ -646,6 +1381,50 @@ server.registerTool(
   );
 
   server.registerTool(
+    'add_expectation',
+    {
+      title: 'Add Expectation',
+      description: 'Create a safe canonical assertion from structured intent and append it to a step endpoint. Prefer this over add_assertion so the MCP can choose the correct operator and assertion shape.',
+      inputSchema: {
+        draftId: z.string().optional(),
+        flowDocument: z.unknown().optional(),
+        stepId: z.string(),
+        endpointIndex: z.number().optional(),
+        expectation: z.object({
+          kind: z.enum(['status_success', 'field_exists', 'field_type', 'equals', 'response_time_under']),
+          source: z.enum(['response', 'transformed_data']).optional(),
+          jsonPath: z.string().optional(),
+          headerName: z.string().optional(),
+          expectedType: z.enum(['string', 'number', 'boolean', 'array', 'object', 'null']).optional(),
+          expectedValue: z.unknown().optional(),
+          maxMs: z.number().optional(),
+          id: z.string().optional(),
+          enabled: z.boolean().optional()
+        })
+      }
+    },
+    async ({ draftId, flowDocument, stepId, endpointIndex, expectation }) => {
+      const resolved = resolveDraftOrDocument({ draftId, flowDocument }, authContext);
+      const assertion = createExpectationAssertion(expectation);
+      const updated = addAssertionToFlow(resolved.flowDocument, {
+        stepId,
+        endpointIndex,
+        assertion
+      });
+      if (resolved.draftId) {
+        const user = requireAuthContext(authContext);
+        updateDraft(resolved.draftId, user.userId, updated);
+      }
+      return asTextResult({
+        draftId: resolved.draftId,
+        assertion,
+        explanation: explainAssertion(assertion),
+        flowDocument: updated
+      });
+    }
+  );
+
+  server.registerTool(
     'add_assertion',
     {
       title: 'Add Assertion',
@@ -682,7 +1461,7 @@ server.registerTool(
     }
   );
 
-  server.registerTool(
+server.registerTool(
   'validate_flow',
     {
       title: 'Validate Flow',
@@ -698,6 +1477,57 @@ server.registerTool(
     return asTextResult({ draftId: resolved.draftId, ...result });
   }
 );
+
+server.registerTool(
+    'review_flow_session',
+    {
+      title: 'Review Flow Session',
+      description: 'Generate a human-readable review of the current flow session before save or run.',
+      inputSchema: {
+        sessionId: z.string()
+      }
+    },
+    async ({ sessionId }) => {
+      const user = requireAuthContext(authContext);
+      const session = getFlowSession(sessionId, user.userId);
+      if (!session) {
+        throw new Error(`Flow session ${sessionId} was not found.`);
+      }
+      if (!session.draftId) {
+        throw new Error(`Flow session ${sessionId} does not have a draft yet.`);
+      }
+
+      const draft = getDraft(session.draftId, user.userId);
+      if (!draft) {
+        throw new Error(`Draft ${session.draftId} was not found.`);
+      }
+
+      const validation = validateFlowDocument(draft.document);
+      const explanation = explainFlowDocument(draft.document);
+      const linkedEnvironment = draft.document.flowData.settings.linkedEnvironment;
+
+      return asTextResult({
+        sessionId,
+        status: session.status,
+        sourceFlowId: session.sourceFlowId ?? draft.document.sourceFlowId ?? null,
+        scope: {
+          projectId: session.projectId,
+          apiIds: session.apiIds,
+          environmentId: session.environmentId ?? null,
+          subEnvironment: session.subEnvironment ?? null
+        },
+        review: {
+          summary: explanation.summary,
+          parameters: draft.document.flowData.parameters,
+          linkedEnvironment,
+          validation,
+          steps: explanation.steps,
+          dependencies: explanation.dependencies,
+          warnings: explanation.warnings
+        }
+      });
+    }
+  );
 
 server.registerTool(
     'explain_flow',
@@ -716,19 +1546,315 @@ server.registerTool(
   }
 );
 
-server.registerTool(
-  'save_flow',
+  server.registerTool(
+    'run_flow',
+    {
+      title: 'Run Flow',
+      description: 'Run a saved test flow or the current session draft using the existing FlowRunner engine and return a run id for reporting.',
+      inputSchema: {
+        sessionId: z.string().optional(),
+        draftId: z.string().optional(),
+        flowId: z.number().optional(),
+        parameterOverrides: z.record(z.string(), z.unknown()).optional(),
+        environmentOverrides: z
+          .object({
+            environmentId: z.number().optional(),
+            subEnvironment: z.string().optional()
+          })
+          .optional(),
+        preferences: z.object({
+          parallelExecution: z.boolean().optional(),
+          stopOnError: z.boolean().optional(),
+          serverCookieHandling: z.boolean().optional(),
+          retryCount: z.number().optional(),
+          timeout: z.number().optional()
+        }).optional()
+      }
+    },
+    async ({ sessionId, draftId, flowId, parameterOverrides, environmentOverrides, preferences }) => {
+      const user = requireAuthContext(authContext);
+      let sourceDocument: FlowDocument | null = null;
+      let sourceDraftId = draftId;
+
+      if (flowId !== undefined) {
+        const result = await (await import('$lib/server/service/test_flows/get_test_flow')).getTestFlow(flowId, user.userId);
+        if (!result) {
+          throw new Error(`Test flow ${flowId} was not found.`);
+        }
+        sourceDocument = {
+          name: result.testFlow.name,
+          description: result.testFlow.description ?? undefined,
+          projectId: result.testFlow.projectId ?? undefined,
+          flowData: {
+            ...result.testFlow.flowJson,
+            endpoints: result.testFlow.endpoints ?? result.testFlow.flowJson.endpoints ?? []
+          }
+        };
+      } else {
+        if (!sourceDraftId && sessionId) {
+          sourceDraftId = resolveDraftIdFromSession(sessionId, authContext);
+        }
+        const resolved = resolveDraftOrDocument({ draftId: sourceDraftId }, authContext);
+        sourceDocument = resolved.flowDocument;
+        sourceDraftId = resolved.draftId;
+      }
+
+      let runnableDocument = await hydrateFlowDocumentEndpoints(await ensureFlowHasApiHosts(sourceDocument, authContext));
+      if (parameterOverrides && Object.keys(parameterOverrides).length > 0) {
+        runnableDocument = {
+          ...runnableDocument,
+          flowData: {
+            ...runnableDocument.flowData,
+            parameters: runnableDocument.flowData.parameters.map((parameter) =>
+              Object.prototype.hasOwnProperty.call(parameterOverrides, parameter.name)
+                ? {
+                    ...parameter,
+                    defaultValue: parameterOverrides[parameter.name]
+                  }
+                : parameter
+            )
+          }
+        };
+      }
+      const validation = validateFlowDocument(runnableDocument);
+      if (!validation.valid) {
+        throw new Error(`Flow is not valid and cannot run: ${validation.errors.join('; ')}`);
+      }
+
+      const effectiveDocument =
+        environmentOverrides?.environmentId !== undefined || environmentOverrides?.subEnvironment !== undefined
+          ? {
+              ...runnableDocument,
+              environmentId: environmentOverrides?.environmentId ?? runnableDocument.environmentId,
+              flowData: {
+                ...runnableDocument.flowData,
+                settings: {
+                  ...runnableDocument.flowData.settings,
+                  environment: {
+                    environmentId:
+                      environmentOverrides?.environmentId ??
+                      runnableDocument.flowData.settings.environment?.environmentId ??
+                      runnableDocument.flowData.settings.linkedEnvironment?.environmentId ??
+                      null,
+                    subEnvironment:
+                      environmentOverrides?.subEnvironment ??
+                      runnableDocument.flowData.settings.environment?.subEnvironment ??
+                      runnableDocument.flowData.settings.linkedEnvironment?.selectedSubEnvironment ??
+                      null
+                  },
+                  linkedEnvironment: runnableDocument.flowData.settings.linkedEnvironment
+                    ? {
+                        ...runnableDocument.flowData.settings.linkedEnvironment,
+                        environmentId:
+                          environmentOverrides?.environmentId ??
+                          runnableDocument.flowData.settings.linkedEnvironment.environmentId,
+                        selectedSubEnvironment:
+                          environmentOverrides?.subEnvironment ??
+                          runnableDocument.flowData.settings.linkedEnvironment.selectedSubEnvironment
+                      }
+                    : runnableDocument.flowData.settings.linkedEnvironment
+                }
+              }
+            }
+          : runnableDocument;
+
+      const environmentState = await loadSelectedEnvironmentForDocument(
+        effectiveDocument,
+        environmentOverrides,
+        authContext
+      );
+      const { FlowRunner } = await import('$lib/flow-runner/flow-runner');
+
+      const run = createFlowRun(user.userId, {
+        flowId,
+        sessionId,
+        draftId: sourceDraftId
+      });
+
+      const logs: Array<{ level: 'info' | 'debug' | 'error' | 'warning'; message: string; details?: string }> = [];
+      let executionState: Record<string, unknown> = {};
+      let completionData: {
+        success: boolean;
+        error?: unknown;
+        storedResponses: Record<string, unknown>;
+        parameterValues: Record<string, unknown>;
+        flowOutputs: Record<string, unknown>;
+      } | null = null;
+
+      const runner = new FlowRunner({
+        flowData: effectiveDocument.flowData,
+        preferences: {
+          parallelExecution: preferences?.parallelExecution ?? false,
+          stopOnError: preferences?.stopOnError ?? true,
+          serverCookieHandling: false,
+          retryCount: preferences?.retryCount ?? 0,
+          timeout: preferences?.timeout ?? 30000
+        },
+        selectedEnvironment: environmentState?.environment ?? null,
+        environmentVariables: environmentState?.resolvedVariables ?? {},
+        onLog: (level, message, details) => {
+          logs.push({ level, message, details });
+        },
+        onExecutionStateUpdate: (state) => {
+          executionState = structuredClone(state);
+        },
+        onEndpointStateUpdate: ({ endpointId, state }) => {
+          executionState = {
+            ...executionState,
+            [endpointId]: state
+          };
+        },
+        onExecutionComplete: (data) => {
+          completionData = data;
+        }
+      });
+
+      const result = await runner.runFlow();
+      const finalCompletion = completionData ?? {
+        success: result.success,
+        error: result.error,
+        storedResponses: {},
+        parameterValues: {},
+        flowOutputs: {}
+      };
+
+      const failedEndpoint = Object.entries(executionState).find(
+        ([, state]) => typeof state === 'object' && state !== null && (state as { status?: string }).status === 'failed'
+      )?.[0];
+      const summary = result.success
+        ? `Flow executed successfully with ${effectiveDocument.flowData.steps.length} steps.`
+        : 'parametersWithMissingValues' in result && result.parametersWithMissingValues?.length
+          ? `Flow requires parameter values for: ${result.parametersWithMissingValues.map((parameter) => parameter.name).join(', ')}.`
+        : failedEndpoint
+          ? `Flow failed at ${failedEndpoint}.`
+          : `Flow execution failed${result.error ? `: ${String(result.error)}` : '.'}`;
+
+      updateFlowRun(run.id, user.userId, {
+        status: result.success ? 'completed' : 'failed',
+        success: result.success,
+        summary,
+        error: result.error ? String(result.error) : undefined,
+        completedAt: Date.now(),
+        executionState,
+        logs,
+        storedResponses: finalCompletion.storedResponses,
+        parameterValues: finalCompletion.parameterValues,
+        flowOutputs: finalCompletion.flowOutputs
+      });
+
+      return asTextResult({
+        runId: run.id,
+        status: result.success ? 'completed' : 'failed',
+        summary,
+        validation,
+        executionMode: {
+          serverCookieHandling: false,
+          note: 'MCP server-side execution uses direct HTTP requests with the shared cookie store instead of the browser proxy path.'
+        },
+        resolvedEnvironment: {
+          environmentId:
+            effectiveDocument.environmentId ??
+            effectiveDocument.flowData.settings.environment?.environmentId ??
+            null,
+          subEnvironment: effectiveDocument.flowData.settings.environment?.subEnvironment ?? null
+        },
+        runTtl: ttlInfo('run', run.expiresAt),
+        missingParameters:
+          'parametersWithMissingValues' in result
+            ? result.parametersWithMissingValues?.map((parameter) => parameter.name) ?? []
+            : []
+      });
+    }
+  );
+
+  server.registerTool(
+    'get_run_report',
+    {
+      title: 'Get Run Report',
+      description: 'Get a concise engineering report for a previously started MCP flow run.',
+      inputSchema: {
+        runId: z.string()
+      }
+    },
+    async ({ runId }) => {
+      const user = requireAuthContext(authContext);
+      const run = getFlowRun(runId, user.userId);
+      if (!run) {
+        throw new Error(`Flow run ${runId} was not found.`);
+      }
+
+      const failedEndpoints = Object.entries(run.executionState)
+        .filter(([, state]) => typeof state === 'object' && state !== null && (state as { status?: string }).status === 'failed')
+        .map(([endpointId, state]) => ({
+          endpointId,
+          error: (state as { error?: string }).error ?? null
+        }));
+
+      return asTextResult({
+        runId: run.id,
+        status: run.status,
+        success: run.success,
+        summary: run.summary,
+        failedEndpoints,
+        parameterValues: run.parameterValues,
+        flowOutputs: run.flowOutputs,
+        logTail: run.logs.slice(-20),
+        runTtl: ttlInfo('run', run.expiresAt)
+      });
+    }
+  );
+
+  server.registerTool(
+    'explain_run_failure',
+    {
+      title: 'Explain Run Failure',
+      description: 'Explain the most likely failing endpoint and error from a previous MCP flow run in plain English.',
+      inputSchema: {
+        runId: z.string()
+      }
+    },
+    async ({ runId }) => {
+      const user = requireAuthContext(authContext);
+      const run = getFlowRun(runId, user.userId);
+      if (!run) {
+        throw new Error(`Flow run ${runId} was not found.`);
+      }
+
+      const failedEntry = Object.entries(run.executionState).find(
+        ([, state]) => typeof state === 'object' && state !== null && (state as { status?: string }).status === 'failed'
+      );
+
+      const explanation = failedEntry
+        ? `The run failed at ${failedEntry[0]}${(failedEntry[1] as { error?: string }).error ? ` with error: ${(failedEntry[1] as { error?: string }).error}` : '.'}`
+        : run.error
+          ? `The run failed before a specific endpoint failure was captured. Error: ${run.error}`
+          : 'The run failed, but no endpoint-specific failure detail was captured.';
+
+      return asTextResult({
+        runId: run.id,
+        status: run.status,
+        explanation,
+        runTtl: ttlInfo('run', run.expiresAt)
+      });
+    }
+  );
+
+  server.registerTool(
+    'save_flow',
   {
     title: 'Save Flow',
     description: 'Persist a validated flow draft to the database and return the created test flow.',
     inputSchema: {
+      sessionId: z.string().optional(),
       draftId: z.string().optional(),
       flowDocument: z.unknown().optional(),
+      flowId: z.number().optional(),
       projectId: z.number().optional(),
+      saveMode: z.enum(['auto', 'update', 'create_new']).optional(),
       deleteDraftAfterSave: z.boolean().optional()
     }
   },
-  async ({ draftId, flowDocument, projectId, deleteDraftAfterSave = true }) => {
+  async ({ sessionId, draftId, flowDocument, flowId, projectId, saveMode = 'auto', deleteDraftAfterSave = true }) => {
     const resolved = resolveDraftOrDocument({ draftId, flowDocument }, authContext);
     const runnableDocument = await ensureFlowHasApiHosts(resolved.flowDocument, authContext);
     const validation = validateFlowDocument(runnableDocument);
@@ -742,29 +1868,63 @@ server.registerTool(
     }
 
     const { createBasicTestFlow } = await import('$lib/server/service/test_flows/create_test_flow');
+    const { updateTestFlow } = await import('$lib/server/service/test_flows/update_test_flow');
     const user = requireAuthContext(authContext);
+    const session = sessionId ? getFlowSession(sessionId, user.userId) : null;
+    if (sessionId && !session) {
+      throw new Error(`Flow session ${sessionId} was not found.`);
+    }
     const resolvedProjectId = projectId ?? runnableDocument.projectId;
     const resolvedEnvironmentId =
       runnableDocument.environmentId ??
       runnableDocument.flowData.settings.environment?.environmentId ??
       runnableDocument.flowData.settings.linkedEnvironment?.environmentId;
-    const result = await createBasicTestFlow(user.userId, {
-      name: runnableDocument.name,
-      description: runnableDocument.description,
-      apiIds,
-      projectId: resolvedProjectId,
-      environmentId: resolvedEnvironmentId ?? undefined,
-      flowJson: runnableDocument.flowData
-    });
+    const targetFlowId = flowId ?? runnableDocument.sourceFlowId ?? session?.sourceFlowId;
+    const shouldUpdate = saveMode === 'update' || (saveMode === 'auto' && targetFlowId !== undefined);
+    const result = shouldUpdate
+      ? await updateTestFlow(targetFlowId!, user.userId, {
+          name: runnableDocument.name,
+          description: runnableDocument.description,
+          apiIds,
+          projectId: resolvedProjectId,
+          environmentId: resolvedEnvironmentId ?? undefined,
+          flowJson: runnableDocument.flowData
+        })
+      : await createBasicTestFlow(user.userId, {
+          name: runnableDocument.name,
+          description: runnableDocument.description,
+          apiIds,
+          projectId: resolvedProjectId,
+          environmentId: resolvedEnvironmentId ?? undefined,
+          flowJson: runnableDocument.flowData
+        });
+
+    if (!result) {
+      throw new Error(
+        shouldUpdate
+          ? `Test flow ${targetFlowId} could not be updated.`
+          : 'The test flow could not be saved.'
+      );
+    }
 
     if (resolved.draftId && deleteDraftAfterSave) {
       deleteDraft(resolved.draftId, user.userId);
     }
 
+    if (sessionId) {
+      updateFlowSession(sessionId, user.userId, {
+        sourceFlowId: result.testFlow.id,
+        status: 'saved'
+      });
+    }
+
     const explanation = explainFlowDocument(runnableDocument);
 
     return asTextResult({
+      sessionId: sessionId ?? null,
       draftId: resolved.draftId,
+      saveMode: shouldUpdate ? 'updated_existing' : 'created_new',
+      flowId: result.testFlow.id,
       validation,
       explanation,
       projectId: resolvedProjectId ?? null,
@@ -808,74 +1968,19 @@ server.registerTool(
       }
     },
     async ({ projectId, includeEnvironmentValues = true }) => {
-      const user = requireAuthContext(authContext);
-      const { ProjectService } = await import('$lib/server/service/projects/project_service');
-      const { ProjectEnvironmentService } = await import('$lib/server/service/projects/environment_service');
-      const { ProjectEnvironmentMappingService } = await import('$lib/server/service/projects/project_environment_mapping_service');
-
-      const projectService = new ProjectService();
-      const environmentService = new ProjectEnvironmentService();
-      const environmentMappingService = new ProjectEnvironmentMappingService();
-
-      const detail = await projectService.getProjectDetail(projectId, user.userId);
-      const linkedEnvironments = await environmentService.listProjectEnvironments(projectId, user.userId);
-      const environmentMappings = await environmentMappingService.getEnvironmentMappings(projectId, user.userId);
-
-      const environments = linkedEnvironments.environmentLinks.map((link) => {
-        const mapping = environmentMappings.find((item) => item.environment_id === link.environmentId);
-        const environmentConfig = link.environment?.config;
-        return {
-          id: link.environmentId,
-          name: link.environment?.name ?? '',
-          description: link.environment?.description,
-          subEnvironments: Object.keys(environmentConfig?.environments ?? {}),
-          variableDefinitions: environmentConfig?.variable_definitions ?? {},
-          subEnvironmentValues: includeEnvironmentValues
-            ? Object.fromEntries(
-                Object.entries(environmentConfig?.environments ?? {}).map(([subEnvName, subEnvConfig]) => [
-                  subEnvName,
-                  {
-                    variables: subEnvConfig.variables ?? {},
-                    apiHosts: subEnvConfig.api_hosts ?? {}
-                  }
-                ])
-              )
-            : undefined,
-          linkedApiIds: environmentConfig?.linked_apis ?? [],
-          parameterMappings: mapping?.variable_mappings ?? {}
-        };
-      });
-
+      const context = await buildProjectContext(projectId, authContext, includeEnvironmentValues);
       return asTextResult({
-        project: {
-          id: detail.project.id,
-          name: detail.project.name,
-          description: detail.project.description ?? null
-        },
-        apis: detail.apis.map((apiLink) => ({
-          id: apiLink.apiId,
-          name: apiLink.api?.name ?? '',
-          description: apiLink.api?.description ?? null,
-          defaultHost: apiLink.defaultHost ?? apiLink.api?.host ?? null
-        })),
-        environments,
+        project: context.project,
+        apis: context.apis,
+        environments: context.environments,
         counts: {
-          apis: detail.apis.length,
-          environments: environments.length,
-          modules: detail.modules.length
+          apis: context.counts.apis,
+          environments: context.counts.environments,
+          modules: context.counts.modules
         },
         agentGuidance: {
-          clarificationRequired: detail.apis.length > 1 || environments.length > 1,
-          notes: [
-            detail.apis.length > 1
-              ? 'This project has multiple APIs. Ask the human which APIs should be in scope before creating the flow draft or searching endpoints.'
-              : 'This project has a single linked API, so the MCP can infer API scope if needed.',
-            environments.length > 1
-              ? 'This project has multiple environments. Ask the human which environment to link to the flow before creating the draft.'
-              : environments.length === 1
-                ? 'This project has a single linked environment, so the MCP can infer the environment if the human does not specify one.'
-                : 'This project has no linked environments. The flow may need API Hosts configured directly.'
-          ]
+          clarificationRequired: context.guidance.needsClarification,
+          notes: context.guidance.notes
         }
       });
     }
@@ -885,19 +1990,20 @@ server.registerTool(
     'search_endpoints',
     {
       title: 'Search Endpoints',
-      description: 'Search imported API endpoints within the selected project API scope. Pass apiIds directly, or pass draftId to inherit the draft API scope. If a project has multiple APIs and none are selected yet, ask the human to clarify first.',
+      description: 'Search imported API endpoints within the selected project API scope. Pass apiIds directly, or pass draftId/sessionId to inherit selected scope. If you are working in the backend codebase, use that context first to choose likely APIs, tags, paths, and endpoint names. If a project has multiple APIs and none are selected yet, ask the human to clarify first.',
       inputSchema: {
         userId: z.number().optional(),
         query: z.string(),
         draftId: z.string().optional(),
+        sessionId: z.string().optional(),
         projectId: z.number().optional(),
         apiId: z.number().optional(),
         apiIds: z.array(z.number()).optional(),
         limit: z.number().min(1).max(50).default(10)
     }
   },
-  async ({ userId, query, draftId, projectId, apiId, apiIds, limit }) => {
-      const scopedApis = await resolveApiScope({ draftId, projectId, apiId, apiIds }, authContext);
+  async ({ userId, query, draftId, sessionId, projectId, apiId, apiIds, limit }) => {
+      const scopedApis = await resolveApiScope({ draftId, sessionId, projectId, apiId, apiIds }, authContext);
       const { searchEndpointsByDescription } = await import('$lib/server/service/api_endpoints/search_endpoints');
       const endpoints = await searchEndpointsByDescription({
         query,
@@ -926,6 +2032,7 @@ server.registerTool(
         endpoints: endpoints.length > 0 ? endpoints : fallbackEndpoints,
         searchMode: endpoints.length > 0 ? 'full_text' : fallbackEndpoints.length > 0 ? 'metadata_fallback' : 'none',
         draftId: draftId ?? null,
+        sessionId: sessionId ?? null,
         projectId: projectId ?? null,
         apiScope: scopedApis.apiId ? [scopedApis.apiId] : scopedApis.apiIds ?? [],
         note
@@ -937,10 +2044,11 @@ server.registerTool(
     'browse_endpoints',
     {
       title: 'Browse Endpoints',
-      description: 'Browse endpoints by API, tag, or path prefix within the selected project API scope. Pass apiIds directly, or pass draftId to inherit the draft API scope. If a project has multiple APIs and none are selected yet, ask the human to clarify first.',
+      description: 'Browse endpoints by API, tag, or path prefix within the selected project API scope. Pass apiIds directly, or pass draftId/sessionId to inherit selected scope. If you are working in the backend codebase, use code-level context to pick the right API, tags, and path prefixes before browsing. If a project has multiple APIs and none are selected yet, ask the human to clarify first.',
       inputSchema: {
         userId: z.number().optional(),
         draftId: z.string().optional(),
+        sessionId: z.string().optional(),
         projectId: z.number().optional(),
         apiId: z.number().optional(),
         apiIds: z.array(z.number()).optional(),
@@ -949,8 +2057,8 @@ server.registerTool(
         limit: z.number().min(1).max(100).optional()
     }
   },
-  async ({ userId, draftId, projectId, apiId, apiIds, tag, pathPrefix, limit = 50 }) => {
-      const scopedApis = await resolveApiScope({ draftId, projectId, apiId, apiIds }, authContext);
+  async ({ userId, draftId, sessionId, projectId, apiId, apiIds, tag, pathPrefix, limit = 50 }) => {
+      const scopedApis = await resolveApiScope({ draftId, sessionId, projectId, apiId, apiIds }, authContext);
       const { browseEndpoints } = await import('$lib/server/repository/db/api-endpoints');
       const endpoints = await browseEndpoints({
         userId: getUserId(userId, authContext),
@@ -963,6 +2071,7 @@ server.registerTool(
       return asTextResult({
         endpoints,
         draftId: draftId ?? null,
+        sessionId: sessionId ?? null,
         projectId: projectId ?? null,
         apiScope: scopedApis.apiId ? [scopedApis.apiId] : scopedApis.apiIds ?? []
       });

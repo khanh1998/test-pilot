@@ -14,11 +14,17 @@ interface AuthState {
   loading: boolean;
 }
 
+function getStorage(): Storage | null {
+  return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
+    ? window.localStorage
+    : null;
+}
+
 function createAuthStore() {
   // Initialize with stored token if available
-  const storedToken =
-    typeof localStorage !== 'undefined' ? localStorage.getItem('authToken') : null;
-  const storedUser = typeof localStorage !== 'undefined' ? localStorage.getItem('authUser') : null;
+  const storage = getStorage();
+  const storedToken = storage?.getItem('authToken') ?? null;
+  const storedUser = storage?.getItem('authUser') ?? null;
 
   const initialState: AuthState = {
     isAuthenticated: !!storedToken,
@@ -48,8 +54,9 @@ function createAuthStore() {
         const user = result.user!;
 
         // Store token in localStorage for persistence
-        localStorage.setItem('authToken', token);
-        localStorage.setItem('authUser', JSON.stringify(user));
+        const activeStorage = getStorage();
+        activeStorage?.setItem('authToken', token);
+        activeStorage?.setItem('authUser', JSON.stringify(user));
 
         // Update store
         set({
@@ -84,8 +91,9 @@ function createAuthStore() {
           const user = result.user;
 
           // Store token in localStorage for persistence
-          localStorage.setItem('authToken', token);
-          localStorage.setItem('authUser', JSON.stringify(user));
+          const activeStorage = getStorage();
+          activeStorage?.setItem('authToken', token);
+          activeStorage?.setItem('authUser', JSON.stringify(user));
 
           // Update store
           set({
@@ -109,8 +117,9 @@ function createAuthStore() {
     // Sign out user
     signOut: async () => {
       // Clear local storage
-      localStorage.removeItem('authToken');
-      localStorage.removeItem('authUser');
+      const activeStorage = getStorage();
+      activeStorage?.removeItem('authToken');
+      activeStorage?.removeItem('authUser');
 
       // Reset store
       set({
@@ -123,8 +132,9 @@ function createAuthStore() {
 
     // Check authentication status
     checkAuth: async () => {
-      const token = localStorage.getItem('authToken');
-      const user = localStorage.getItem('authUser');
+      const activeStorage = getStorage();
+      const token = activeStorage?.getItem('authToken') ?? null;
+      const user = activeStorage?.getItem('authUser') ?? null;
 
       if (!token) {
         set({
@@ -148,7 +158,7 @@ function createAuthStore() {
 
     // Get auth headers for API requests
     getAuthHeaders: () => {
-      const token = localStorage.getItem('authToken');
+      const token = getStorage()?.getItem('authToken') ?? null;
       return token ? { Authorization: `Bearer ${token}` } : {};
     }
   };

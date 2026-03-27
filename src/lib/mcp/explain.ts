@@ -118,14 +118,15 @@ export function explainTemplateExpression(expression: string): ExplanationResult
     const match = parsed.path.match(/^([A-Za-z0-9_-]+-\d+)(\.(.+))?$/);
     const stepEndpointRef = match?.[1];
     const jsonPath = match?.[3];
-    const possibleMissingEndpointIndex = !stepEndpointRef && parsed.path.match(/^([A-Za-z0-9_-]+)(\.(.+))?$/);
+    const possibleMissingEndpointIndex = !stepEndpointRef ? parsed.path.match(/^([A-Za-z0-9_-]+)(\.(.+))?$/) : null;
 
     if (stepEndpointRef) {
       dependencies.push({ kind: 'response', reference: stepEndpointRef });
     } else {
-      const candidate = possibleMissingEndpointIndex?.[1];
+      const candidate = possibleMissingEndpointIndex ? possibleMissingEndpointIndex[1] : undefined;
+      const candidateJsonPath = possibleMissingEndpointIndex ? possibleMissingEndpointIndex[3] : undefined;
       if (candidate) {
-        warnings.push(`Response reference is missing an endpoint index. Did you mean ${formatTemplate('res', `${candidate}-0${possibleMissingEndpointIndex?.[3] ? `.${possibleMissingEndpointIndex[3]}` : ''}`, parsed.preserveType)}?`);
+        warnings.push(`Response reference is missing an endpoint index. Did you mean ${formatTemplate('res', `${candidate}-0${candidateJsonPath ? `.${candidateJsonPath}` : ''}`, parsed.preserveType)}?`);
       } else {
         warnings.push('Response reference does not include a valid step-endpoint reference like step1-0.');
       }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addAssertionToFlow, addFlowParameter, addStepToFlow, createFlowDraft, linkEnvironmentToFlow, linkStepOutput, setBodyField, setQueryParam, validateFlowDocument } from './flow';
+import { addAssertionToFlow, addFlowParameter, addStepToFlow, createExpectationAssertion, createFlowDraft, linkEnvironmentToFlow, linkStepOutput, setBodyField, setHeader, setPathParam, setQueryParam, updateStepInFlow, validateFlowDocument } from './flow';
 
 describe('mcp flow helpers', () => {
   it('creates a draft and appends steps', () => {
@@ -189,5 +189,56 @@ describe('mcp flow helpers', () => {
         endpoints: [{ api_id: 2, endpoint_id: 10, pathParams: {}, queryParams: {}, headers: [], body: null }]
       })
     ).toThrow(/outside this draft's selected API scope/);
+  });
+
+  it('creates safe assertions from expectation input', () => {
+    const fieldType = createExpectationAssertion({
+      kind: 'field_type',
+      jsonPath: '$.token_balance',
+      expectedType: 'number'
+    });
+
+    const status = createExpectationAssertion({
+      kind: 'status_success'
+    });
+
+    expect(fieldType.operator).toBe('is_type');
+    expect(fieldType.expected_value).toBe('number');
+    expect(status.operator).toBe('between');
+    expect(status.expected_value).toEqual([200, 299]);
+  });
+
+  it('supports updating a step and request field helpers', () => {
+    const flow = createFlowDraft({
+      name: 'Update flow',
+      apiIds: [1]
+    });
+
+    const withStep = addStepToFlow(flow, {
+      step_id: 'step_lookup',
+      label: 'Lookup',
+      endpoints: [{ api_id: 1, endpoint_id: 10, pathParams: {}, queryParams: {}, headers: [], body: null }]
+    });
+
+    const updatedStep = updateStepInFlow(withStep, {
+      stepId: 'step_lookup',
+      label: 'Lookup terminal'
+    });
+
+    const withPath = setPathParam(updatedStep, {
+      stepId: 'step_lookup',
+      name: 'terminalId',
+      value: '123'
+    });
+
+    const withHeader = setHeader(withPath, {
+      stepId: 'step_lookup',
+      name: 'Authorization',
+      value: 'Bearer token'
+    });
+
+    expect(withHeader.flowData.steps[0].label).toBe('Lookup terminal');
+    expect(withHeader.flowData.steps[0].endpoints[0].pathParams?.terminalId).toBe('123');
+    expect(withHeader.flowData.steps[0].endpoints[0].headers?.[0].name).toBe('Authorization');
   });
 });

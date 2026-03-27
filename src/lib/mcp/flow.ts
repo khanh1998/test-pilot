@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { FlowValidator } from '$lib/flow-runner/validator';
 import type { TestFlowData, FlowStep, StepEndpoint, FlowParameter, EnvironmentMapping } from '$lib/components/test-flows/types';
 import type { Assertion } from '$lib/assertions/types';
@@ -5,6 +6,7 @@ import { explainAssertion, explainTemplateExpression, explainTransformationExpre
 import { suggestTemplateExpression } from './explain';
 
 export interface FlowDocument {
+  sourceFlowId?: number;
   name: string;
   description?: string;
   projectId?: number;
@@ -19,9 +21,29 @@ export interface FlowValidationResult {
   warnings: string[];
 }
 
+export interface ExpectationInput {
+  kind: 'status_success' | 'field_exists' | 'field_type' | 'equals' | 'response_time_under';
+  source?: 'response' | 'transformed_data';
+  jsonPath?: string;
+  headerName?: string;
+  expectedType?: 'string' | 'number' | 'boolean' | 'array' | 'object' | 'null';
+  expectedValue?: unknown;
+  maxMs?: number;
+  id?: string;
+  enabled?: boolean;
+}
+
 export interface AddStepInput {
   step_id?: string;
   label: string;
+  endpoints?: StepEndpoint[];
+  timeout?: number;
+  clearCookiesBeforeExecution?: boolean;
+}
+
+export interface UpdateStepInput {
+  stepId: string;
+  label?: string;
   endpoints?: StepEndpoint[];
   timeout?: number;
   clearCookiesBeforeExecution?: boolean;
@@ -33,6 +55,7 @@ export function createFlowDraft(input: {
   projectId?: number;
   apiIds?: number[];
   environmentId?: number;
+  subEnvironment?: string;
   apiHosts?: TestFlowData['settings']['api_hosts'];
   parameters?: TestFlowData['parameters'];
   outputs?: TestFlowData['outputs'];
@@ -50,8 +73,8 @@ export function createFlowDraft(input: {
         environment:
           input.environmentId !== undefined
             ? {
-                environmentId: input.environmentId,
-                subEnvironment: null
+        environmentId: input.environmentId,
+                subEnvironment: input.subEnvironment ?? null
               }
             : undefined
       },
@@ -91,6 +114,36 @@ export function addStepToFlow(document: FlowDocument, input: AddStepInput): Flow
       steps: [...document.flowData.steps, nextStep]
     }
   };
+}
+
+export function updateStepInFlow(document: FlowDocument, input: UpdateStepInput): FlowDocument {
+  const next = cloneDocument(document);
+  const stepIndex = next.flowData.steps.findIndex((step) => step.step_id === input.stepId);
+  if (stepIndex < 0) {
+    throw new Error(`Step ${input.stepId} was not found.`);
+  }
+
+  if (document.apiIds?.length && input.endpoints?.length) {
+    for (const endpoint of input.endpoints) {
+      const apiId = typeof endpoint.api_id === 'string' ? Number(endpoint.api_id) : endpoint.api_id;
+      if (typeof apiId === 'number' && !Number.isNaN(apiId) && !document.apiIds.includes(apiId)) {
+        throw new Error(
+          `Endpoint ${endpoint.endpoint_id} uses api_id ${apiId}, which is outside this draft's selected API scope (${document.apiIds.join(', ')}).`
+        );
+      }
+    }
+  }
+
+  const current = next.flowData.steps[stepIndex];
+  next.flowData.steps[stepIndex] = {
+    ...current,
+    label: input.label ?? current.label,
+    endpoints: input.endpoints ?? current.endpoints,
+    timeout: input.timeout ?? current.timeout,
+    clearCookiesBeforeExecution: input.clearCookiesBeforeExecution ?? current.clearCookiesBeforeExecution
+  };
+
+  return next;
 }
 
 function cloneDocument(document: FlowDocument): FlowDocument {
@@ -171,6 +224,45 @@ export function setQueryParam(
   return next;
 }
 
+export function setPathParam(
+  document: FlowDocument,
+  input: {
+    stepId: string;
+    endpointIndex?: number;
+    name: string;
+    value: string;
+  }
+): FlowDocument {
+  const next = cloneDocument(document);
+  const endpoint = getEndpoint(next, input.stepId, input.endpointIndex ?? 0);
+  endpoint.pathParams = endpoint.pathParams ?? {};
+  endpoint.pathParams[input.name] = input.value;
+  return next;
+}
+
+export function setHeader(
+  document: FlowDocument,
+  input: {
+    stepId: string;
+    endpointIndex?: number;
+    name: string;
+    value: string;
+    enabled?: boolean;
+  }
+): FlowDocument {
+  const next = cloneDocument(document);
+  const endpoint = getEndpoint(next, input.stepId, input.endpointIndex ?? 0);
+  const headers = endpoint.headers ?? [];
+  const filtered = headers.filter((header) => header.name.toLowerCase() !== input.name.toLowerCase());
+  filtered.push({
+    name: input.name,
+    value: input.value,
+    enabled: input.enabled ?? true
+  });
+  endpoint.headers = filtered;
+  return next;
+}
+
 export function addAssertionToFlow(
   document: FlowDocument,
   input: {
@@ -183,6 +275,100 @@ export function addAssertionToFlow(
   const endpoint = getEndpoint(next, input.stepId, input.endpointIndex ?? 0);
   endpoint.assertions = [...(endpoint.assertions ?? []), input.assertion];
   return next;
+}
+
+function slugifyExpectationId(input: string): string {
+  return input
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 50);
+}
+
+export function createExpectationAssertion(input: ExpectationInput): Assertion {
+  const enabled = input.enabled ?? true;
+
+  if (input.kind === 'status_success') {
+    return {
+      id: input.id ?? 'assert_status_success',
+      enabled,
+      data_source: 'response',
+      assertion_type: 'status_code',
+      data_id: 'status_code',
+      operator: 'between',
+      expected_value: [200, 299]
+    };
+  }
+
+  if (input.kind === 'response_time_under') {
+    if (typeof input.maxMs !== 'number' || Number.isNaN(input.maxMs)) {
+      throw new Error('response_time_under expectations require maxMs.');
+    }
+
+    return {
+      id: input.id ?? `assert_response_time_under_${input.maxMs}`,
+      enabled,
+      data_source: 'response',
+      assertion_type: 'response_time',
+      data_id: 'response_time',
+      operator: 'less_than_or_equal',
+      expected_value: input.maxMs
+    };
+  }
+
+  const dataSource = input.source ?? 'response';
+  const dataId =
+    input.kind === 'equals' && input.headerName
+      ? input.headerName
+      : input.jsonPath ?? input.headerName;
+
+  if (!dataId) {
+    throw new Error(`${input.kind} expectations require jsonPath or headerName.`);
+  }
+
+  const assertionType = input.headerName ? 'header' : 'json_body';
+
+  if (input.kind === 'field_exists') {
+    return {
+      id: input.id ?? `assert_${slugifyExpectationId(dataId)}_exists`,
+      enabled,
+      data_source: dataSource,
+      assertion_type: assertionType,
+      data_id: dataId,
+      operator: 'exists',
+      expected_value: true
+    };
+  }
+
+  if (input.kind === 'field_type') {
+    if (!input.expectedType) {
+      throw new Error('field_type expectations require expectedType.');
+    }
+
+    return {
+      id: input.id ?? `assert_${slugifyExpectationId(dataId)}_type`,
+      enabled,
+      data_source: dataSource,
+      assertion_type: assertionType,
+      data_id: dataId,
+      operator: 'is_type',
+      expected_value: input.expectedType
+    };
+  }
+
+  if (input.kind === 'equals') {
+    return {
+      id: input.id ?? `assert_${slugifyExpectationId(dataId)}_equals_${slugifyExpectationId(String(input.expectedValue ?? 'value')) || randomUUID()}`,
+      enabled,
+      data_source: dataSource,
+      assertion_type: assertionType,
+      data_id: dataId,
+      operator: 'equals',
+      expected_value: input.expectedValue
+    };
+  }
+
+  throw new Error(`Unsupported expectation kind: ${input.kind}`);
 }
 
 export function addFlowParameter(document: FlowDocument, parameter: FlowParameter): FlowDocument {

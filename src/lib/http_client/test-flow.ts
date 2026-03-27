@@ -208,6 +208,10 @@ export async function executeDirectEndpoint(
                 mode: 'cors',
                 credentials: 'include'
             });
+
+            if (cookieStore) {
+                processResponseCookies(response, cookieStore, requestDomain, endpointId);
+            }
         }
         
         return response;
@@ -259,7 +263,7 @@ async function executeTauriRequest(
         
         // Process cookies if cookie store is provided
         if (cookieStore) {
-            processTauriResponseCookies(response, cookieStore, requestDomain, endpointId);
+            processResponseCookies(response, cookieStore, requestDomain, endpointId);
         }
         
         return response;
@@ -279,7 +283,7 @@ async function executeTauriRequest(
 /**
  * Process and store cookies from a Tauri response
  */
-function processTauriResponseCookies(
+function processResponseCookies(
     response: Response, 
     cookieStore: Map<string, Array<RequestCookie>>, 
     domain: string,
@@ -287,7 +291,7 @@ function processTauriResponseCookies(
 ): void {
     const debugMode = true; // Set to false to disable verbose logging
     
-    const extractedCookies = extractCookiesFromTauriResponse(response, domain);
+    const extractedCookies = extractCookiesFromResponse(response, domain);
     if (extractedCookies.length === 0) return;
     
     // Use endpoint ID as storage key if provided, otherwise use the domain
@@ -352,50 +356,54 @@ function parseCookieNameValue(cookieStr: string): { name: string, value: string 
  * @param domain The domain to associate with the cookie
  * @returns Array of RequestCookie objects
  */
-function extractCookiesFromTauriResponse(response: Response, domain: string): RequestCookie[] {
+function extractCookiesFromResponse(response: Response, domain: string): RequestCookie[] {
     const cookies: RequestCookie[] = [];
     const debugMode = true; // Set to false to disable verbose logging
     
     debugMode && console.log(`Extracting cookies for domain: ${domain}`);
 
     // Process Set-Cookie headers
-    if (response.headers.has('set-cookie')) {
-        const setCookieHeader = response.headers.get('set-cookie');
-        if (setCookieHeader) {
-            debugMode && console.log(`Raw Set-Cookie header: ${setCookieHeader}`);
+    const getSetCookie = (response.headers as Headers & { getSetCookie?: () => string[] }).getSetCookie;
+    const rawSetCookieHeaders = typeof getSetCookie === 'function'
+        ? getSetCookie.call(response.headers)
+        : response.headers.has('set-cookie')
+            ? [response.headers.get('set-cookie')].filter((value): value is string => Boolean(value))
+            : [];
+
+    for (const setCookieHeader of rawSetCookieHeaders) {
+        debugMode && console.log(`Raw Set-Cookie header: ${setCookieHeader}`);
+        
+        // Split by comma followed by space and a word with an equals sign
+        const rawCookies = setCookieHeader.split(/,(?=\s*[A-Za-z0-9_-]+=)/);
+        debugMode && console.log(`Parsed ${rawCookies.length} cookies from header`);
+        
+        for (const rawCookie of rawCookies) {
+            const parts = rawCookie.split(';');
+            const cookieNameValue = parseCookieNameValue(parts[0].trim());
+            if (!cookieNameValue) continue;
             
-            // Split by comma followed by space and a word with an equals sign
-            const rawCookies = setCookieHeader.split(/,(?=\s*[A-Za-z0-9_-]+=)/);
-            debugMode && console.log(`Parsed ${rawCookies.length} cookies from header`);
+            // Create cookie with defaults
+            const cookie: RequestCookie = {
+                name: cookieNameValue.name,
+                value: cookieNameValue.value,
+                domain: domain
+            };
             
-            for (const rawCookie of rawCookies) {
-                const parts = rawCookie.split(';');
-                const cookieNameValue = parseCookieNameValue(parts[0].trim());
-                if (!cookieNameValue) continue;
-                
-                // Create cookie with defaults
-                const cookie: RequestCookie = {
-                    name: cookieNameValue.name,
-                    value: cookieNameValue.value,
-                    domain: domain
-                };
-                
-                // Process attributes
-                for (const part of parts.slice(1)) {
-                    const partTrimmed = part.trim().toLowerCase();
-                    if (partTrimmed.startsWith('domain=')) {
-                        let cookieDomain = part.split('=')[1].trim();
-                        // Remove leading dot
-                        if (cookieDomain.startsWith('.')) cookieDomain = cookieDomain.slice(1);
-                        cookie.domain = cookieDomain;
-                    } else if (partTrimmed.startsWith('path=')) {
-                        cookie.path = part.split('=')[1].trim();
-                    }
+            // Process attributes
+            for (const part of parts.slice(1)) {
+                const partTrimmed = part.trim().toLowerCase();
+                if (partTrimmed.startsWith('domain=')) {
+                    let cookieDomain = part.split('=')[1].trim();
+                    // Remove leading dot
+                    if (cookieDomain.startsWith('.')) cookieDomain = cookieDomain.slice(1);
+                    cookie.domain = cookieDomain;
+                } else if (partTrimmed.startsWith('path=')) {
+                    cookie.path = part.split('=')[1].trim();
                 }
-                
-                debugMode && console.log(`Extracted cookie: ${cookie.name}=${cookie.value}, domain=${cookie.domain}, path=${cookie.path || '/'}`);
-                cookies.push(cookie);
             }
+            
+            debugMode && console.log(`Extracted cookie: ${cookie.name}=${cookie.value}, domain=${cookie.domain}, path=${cookie.path || '/'}`);
+            cookies.push(cookie);
         }
     }
     
