@@ -115,7 +115,7 @@ export function formatDatePattern(
  * @returns UUID string
  */
 export function uuid(): string {
-  return crypto.randomUUID();
+  return safeRandomUuid();
 }
 
 /**
@@ -220,3 +220,4 @@ export function jsonPath(obj: any, path: string): any {
   // Simplified handling for direct property access
   return obj?.[path];
 }
+import { safeRandomUuid } from '$lib/utils/uuid';

@@ -7,6 +7,7 @@ export interface CreateTestFlowInput {
   description?: string;
   apiIds: number[];
   projectId?: number;
+  environmentId?: number;
   flowJson?: any;
 }
 
@@ -33,7 +34,7 @@ export async function createBasicTestFlow(
   userId: number,
   input: CreateTestFlowInput
 ): Promise<CreateTestFlowOutput> {
-  const { name, description, apiIds, projectId, flowJson } = input;
+  const { name, description, apiIds, projectId, environmentId, flowJson } = input;
 
   // Verify all APIs exist and belong to the user
   const validApiIds = await validateUserApis(apiIds, userId);
@@ -55,6 +56,7 @@ export async function createBasicTestFlow(
       description,
       userId,
       projectId,
+      environmentId,
       flowJson: flowJson || defaultFlowJson
     })
     .returning();

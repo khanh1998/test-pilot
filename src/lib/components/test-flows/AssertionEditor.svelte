@@ -4,6 +4,7 @@
   // Import assertion types from our new assertion module
   import type { AssertionDataSource, AssertionOperator, AssertionType, Assertion } from '$lib/assertions/types';
   import { getAllOperators, isValidOperator } from '$lib/assertions';
+  import { safeRandomUuid } from '$lib/utils/uuid';
 
   // Sliding panel props
   export let isOpen = false;
@@ -49,7 +50,7 @@
     enabled: boolean;
     is_template_expression?: boolean; // Add template expression support
   } = {
-    id: crypto.randomUUID(),
+    id: safeRandomUuid(),
     data_source: 'response' as AssertionDataSource,
     assertion_type: 'status_code' as AssertionType,
     data_id: 'status_code',
@@ -342,7 +343,7 @@
   // Add a new assertion
   function addAssertion() {
     // Process the expected value based on operator and type
-    const processedAssertion = { ...newAssertion, id: crypto.randomUUID() };
+    const processedAssertion = { ...newAssertion, id: safeRandomUuid() };
     
     // Handle special operator cases
     if (processedAssertion.operator === 'between' || processedAssertion.operator === 'not_between') {
@@ -409,7 +410,7 @@
     
     // Reset the new assertion form with defaults
     newAssertion = {
-      id: crypto.randomUUID(),
+      id: safeRandomUuid(),
       data_source: 'response' as AssertionDataSource,
       assertion_type: 'status_code' as AssertionType,
       data_id: 'status_code',

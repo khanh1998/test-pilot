@@ -4,7 +4,7 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
-    "dev": "vite dev",
+    "dev": "vite dev --host",
     "dev:desktop": "cross-env VITE_APP_ENV=desktop vite dev",
     "build": "npm run build:web",
     "build:web": "cross-env VITE_APP_ENV=web vite build",
@@ -16,6 +16,7 @@
     "format": "prettier --write .",
     "lint": "prettier --check . && eslint .",
     "test:unit": "vitest",
+    "mcp:v1": "vite-node --script src/mcp/server.ts",
     "drizzle:generate": "npx drizzle-kit generate",
     "drizzle:push": "npx drizzle-kit push",
     "drizzle:studio": "npx drizzle-kit studio",
@@ -67,6 +68,7 @@
     "vitest-browser-svelte": "^0.1.0"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.28.0",
     "@supabase/supabase-js": "^2.50.3",
     "@tauri-apps/plugin-http": "^2.5.0",
     "dotenv": "^17.0.1",

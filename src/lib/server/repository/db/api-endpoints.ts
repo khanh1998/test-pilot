@@ -1,6 +1,6 @@
 import { db } from '$lib/server/db';
 import { apiEndpoints, apis, endpointEmbeddings } from '$lib/server/db/schema';
-import { eq, and, inArray, sql } from 'drizzle-orm';
+import { eq, and, inArray, sql, ilike, or, asc } from 'drizzle-orm';
 import { EndpointEmbeddingsService } from '$lib/server/service/endpoint_embeddings/create_embedding';
 
 export async function getApiEndpointById(endpointId: number, userId?: number) {
@@ -278,4 +278,111 @@ export async function searchByTsVector(params: SearchByTsVectorParams) {
     .limit(params.limit);
 
   return results;
+}
+
+interface SearchByMetadataParams {
+  query: string;
+  userId: number;
+  apiId?: number;
+  apiIds?: number[];
+  limit: number;
+}
+
+export async function searchByMetadata(params: SearchByMetadataParams) {
+  const { query, userId, apiId, apiIds, limit } = params;
+  const searchTerm = `%${query.trim()}%`;
+
+  let whereCondition = and(
+    eq(apis.userId, userId),
+    or(
+      ilike(apiEndpoints.path, searchTerm),
+      ilike(apiEndpoints.method, searchTerm),
+      ilike(apiEndpoints.operationId, searchTerm),
+      ilike(apiEndpoints.summary, searchTerm),
+      ilike(apiEndpoints.description, searchTerm),
+      sql`exists (
+        select 1
+        from unnest(${apiEndpoints.tags}) as tag
+        where tag ilike ${searchTerm}
+      )`
+    )
+  );
+
+  if (apiId) {
+    whereCondition = and(whereCondition, eq(apiEndpoints.apiId, apiId));
+  } else if (apiIds && apiIds.length > 0) {
+    whereCondition = and(whereCondition, inArray(apiEndpoints.apiId, apiIds));
+  }
+
+  return db
+    .select({
+      id: apiEndpoints.id,
+      apiId: apiEndpoints.apiId,
+      path: apiEndpoints.path,
+      method: apiEndpoints.method,
+      operationId: apiEndpoints.operationId,
+      summary: apiEndpoints.summary,
+      description: apiEndpoints.description,
+      tags: apiEndpoints.tags,
+      createdAt: apiEndpoints.createdAt
+    })
+    .from(apiEndpoints)
+    .innerJoin(apis, eq(apiEndpoints.apiId, apis.id))
+    .where(whereCondition)
+    .orderBy(asc(apiEndpoints.path), asc(apiEndpoints.method))
+    .limit(limit);
+}
+
+interface BrowseEndpointsParams {
+  userId: number;
+  apiId?: number;
+  apiIds?: number[];
+  tag?: string;
+  pathPrefix?: string;
+  limit: number;
+}
+
+export async function browseEndpoints(params: BrowseEndpointsParams) {
+  const { userId, apiId, apiIds, tag, pathPrefix, limit } = params;
+
+  let whereCondition = and(eq(apis.userId, userId));
+
+  if (apiId) {
+    whereCondition = and(whereCondition, eq(apiEndpoints.apiId, apiId));
+  } else if (apiIds && apiIds.length > 0) {
+    whereCondition = and(whereCondition, inArray(apiEndpoints.apiId, apiIds));
+  }
+
+  if (tag) {
+    whereCondition = and(
+      whereCondition,
+      sql`exists (
+        select 1
+        from unnest(${apiEndpoints.tags}) as tag
+        where tag ilike ${tag}
+      )`
+    );
+  }
+
+  if (pathPrefix) {
+    whereCondition = and(whereCondition, ilike(apiEndpoints.path, `${pathPrefix}%`));
+  }
+
+  return db
+    .select({
+      id: apiEndpoints.id,
+      apiId: apiEndpoints.apiId,
+      path: apiEndpoints.path,
+      method: apiEndpoints.method,
+      operationId: apiEndpoints.operationId,
+      summary: apiEndpoints.summary,
+      description: apiEndpoints.description,
+      tags: apiEndpoints.tags,
+      createdAt: apiEndpoints.createdAt
+    })
+    .from(apiEndpoints)
+    .innerJoin(apis, eq(apiEndpoints.apiId, apis.id))
+    .where(whereCondition)
+    .orderBy(asc(apiEndpoints.path), asc(apiEndpoints.method))
+    .limit(limit);
 }
