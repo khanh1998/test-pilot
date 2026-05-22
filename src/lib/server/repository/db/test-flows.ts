@@ -9,6 +9,7 @@ export interface TestFlowWithApis {
   flowJson: any;
   userId: number | null;
   projectId: number | null;
+  environmentId: number | null;
   createdAt: Date;
   updatedAt: Date;
   apis: Array<{
@@ -149,6 +150,7 @@ export async function getTestFlowById(id: number, userId: number): Promise<TestF
       flowJson: testFlows.flowJson,
       userId: testFlows.userId,
       projectId: testFlows.projectId,
+      environmentId: testFlows.environmentId,
       createdAt: testFlows.createdAt,
       updatedAt: testFlows.updatedAt
     })

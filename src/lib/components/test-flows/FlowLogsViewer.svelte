@@ -9,7 +9,6 @@
   }
 
   export let isOpen = false;
-  export let isMounted = false;
   export let logs: LogEntry[] = [];
 
   const dispatch = createEventDispatcher();
@@ -137,7 +136,7 @@
   class="fixed inset-0 z-40 flex justify-end transition-opacity duration-200 ease-in-out {isOpen
     ? 'opacity-100'
     : 'pointer-events-none opacity-0'}"
-  on:keydown={(e) => e.key === 'Escape' && closeLogsViewer()}
+  onkeydown={(e) => e.key === 'Escape' && closeLogsViewer()}
   role="dialog"
   aria-modal="true"
   tabindex="-1"
@@ -145,7 +144,7 @@
   <!-- Transparent overlay for the left side -->
   <div
     class="absolute inset-y-0 right-0 left-0 bg-transparent transition-opacity duration-300 ease-in-out sm:right-[75%] md:right-[700px] lg:right-[600px]"
-    on:click={closeLogsViewer}
+    onclick={closeLogsViewer}
     role="presentation"
     aria-hidden="true"
   ></div>
@@ -167,7 +166,7 @@
       </div>
       <button
         class="rounded-full p-2 text-gray-400 transition-colors hover:bg-gray-200 hover:text-gray-600"
-        on:click={closeLogsViewer}
+        onclick={closeLogsViewer}
         aria-label="Close"
       >
         <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -179,8 +178,8 @@
     <!-- Filters and Controls -->
     <div class="border-b bg-gray-50 px-6 py-4">
       <!-- Log Level Filters -->
-      <div class="mb-4">
-        <label class="block text-sm font-medium text-gray-700 mb-2">Log Levels</label>
+      <fieldset class="mb-4">
+        <legend class="block text-sm font-medium text-gray-700 mb-2">Log Levels</legend>
         <div class="flex flex-wrap gap-2">
           {#each ['error', 'warning', 'info', 'debug'] as level}
             {@const colors = getLevelColorClasses(level)}
@@ -188,7 +187,7 @@
               class="flex items-center rounded-full px-3 py-1 text-xs font-medium transition-colors {selectedLevels.has(level)
                 ? `${colors.badge} border border-gray-300`
                 : 'bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200'}"
-              on:click={() => toggleLevel(level)}
+              onclick={() => toggleLevel(level)}
             >
               <span class="capitalize">{level}</span>
               {#if logCounts[level]}
@@ -199,7 +198,7 @@
             </button>
           {/each}
         </div>
-      </div>
+      </fieldset>
 
       <!-- Search Filter -->
       <div class="mb-4">
@@ -217,7 +216,7 @@
       <div class="flex gap-2">
         <button
           class="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-          on:click={exportLogs}
+          onclick={exportLogs}
           disabled={logs.length === 0}
         >
           <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -227,7 +226,7 @@
         </button>
         <button
           class="inline-flex items-center rounded-md border border-red-300 bg-white px-3 py-2 text-sm font-medium text-red-700 shadow-sm hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
-          on:click={clearLogs}
+          onclick={clearLogs}
           disabled={logs.length === 0}
         >
           <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -314,7 +313,7 @@
         </div>
         <button
           class="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-          on:click={closeLogsViewer}
+          onclick={closeLogsViewer}
         >
           Close
         </button>

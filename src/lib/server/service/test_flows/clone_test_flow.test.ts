@@ -21,6 +21,7 @@ describe('cloneTestFlow', () => {
       flowJson: { settings: {}, steps: [] },
       userId: 100,
       projectId: 5,
+      environmentId: null,
       createdAt: new Date(),
       updatedAt: new Date(),
       apis: [{ id: 1, name: 'API 1' }, { id: 2, name: 'API 2' }]

@@ -5,6 +5,7 @@ import { zodTextFormat } from "openai/helpers/zod";
 import { v4 as uuidv4 } from 'uuid';
 import { writeFile } from 'fs/promises';
 import { join } from 'path';
+import type { TestFlowAssertion } from './flow-zod-gen-schema';
 
 // Initialize OpenAI client
 const openai = new OpenAI({
@@ -217,7 +218,7 @@ type EnrichedEndpointBase = {
     id: string;
     data_id: string;
     enabled: boolean;
-    operator: string;
+    operator: TestFlowAssertion['operator'];
     data_source: 'response' | 'transformed_data';
     assertion_type: 'status_code' | 'json_body' | 'response_time' | 'header';
     expected_value: string | number | boolean | Array<string | number | boolean | null> | null;

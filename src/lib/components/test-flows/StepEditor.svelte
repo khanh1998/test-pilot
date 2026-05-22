@@ -732,10 +732,7 @@
   {#if endpoint}
     <ResponseViewer
       isOpen={isResponseViewerOpen}
-      isMounted={true}
       {endpoint}
-      {stepEndpoint}
-      {stepIndex}
       {endpointIndex}
       stepId={step.step_id}
       {duplicateCount}
@@ -789,14 +786,3 @@
     />
   {/if}
 {/if}
-
-<style>
-  .drop-zone {
-    transition: all 0.2s ease-in-out;
-  }
-  
-  .drop-zone:global(.dragging-over) {
-    background-color: #dbeafe;
-    border: 2px dashed #3b82f6;
-  }
-</style>

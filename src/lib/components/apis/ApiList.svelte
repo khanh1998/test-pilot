@@ -128,7 +128,7 @@
   {#if deleteError}
     <div class="my-4 border-l-4 border-red-500 bg-red-100 p-4 text-red-700" role="alert">
       <p>{deleteError}</p>
-      <button class="mt-2 text-sm underline" on:click={() => (deleteError = null)}>
+      <button class="mt-2 text-sm underline" onclick={() => (deleteError = null)}>
         Dismiss
       </button>
     </div>
@@ -170,8 +170,8 @@
         >
           <div
             class="cursor-pointer"
-            on:click={() => viewApi(api.id)}
-            on:keydown={(e) => e.key === 'Enter' && viewApi(api.id)}
+            onclick={() => viewApi(api.id)}
+            onkeydown={(e) => e.key === 'Enter' && viewApi(api.id)}
             tabindex="0"
             role="button"
             aria-label={`View details for API ${api.name}`}
@@ -195,7 +195,7 @@
           <!-- Delete Button -->
           <button
             class="absolute top-2 right-2 rounded-full p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500 focus:outline-none"
-            on:click={(e) => deleteApi(e, api.id)}
+            onclick={(e) => deleteApi(e, api.id)}
             aria-label="Delete API"
             title="Delete API"
             disabled={isDeleting && deleteApiId === api.id}

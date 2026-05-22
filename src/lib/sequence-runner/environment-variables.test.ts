@@ -119,6 +119,7 @@ describe('SequenceParameterResolver.getEnvironmentVariables', () => {
               name: 'user_a',
               type: 'string',
               required: true,
+              value: null,
               description: '',
               defaultValue: null
             }

@@ -1,17 +1,10 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import type { Endpoint, StepEndpoint, ExecutionState } from './types';
+  import type { Endpoint, ExecutionState } from './types';
   import { formatJson, getStatusColor, getEndpointDisplayId } from './utils';
 
   export let isOpen = false;
-  // isMounted prop is passed from parent but not used in this component
-  // Kept for API compatibility
-  export let isMounted = false;
   export let endpoint: Endpoint;
-  export let stepEndpoint: StepEndpoint;
-  // stepIndex is passed from parent but not directly used in this component
-  // Kept for API compatibility and potential event handling
-  export let stepIndex: number;
   export let endpointIndex: number;
   export let duplicateCount: number = 1;
   export let instanceIndex: number = 1;
@@ -37,7 +30,7 @@
   class="fixed inset-0 z-40 flex justify-end transition-opacity duration-200 ease-in-out {isOpen
     ? 'opacity-100'
     : 'opacity-0'}"
-  on:keydown={(e) => e.key === 'Escape' && closeResponseViewer()}
+  onkeydown={(e) => e.key === 'Escape' && closeResponseViewer()}
   role="dialog"
   aria-modal="true"
   tabindex="-1"
@@ -45,7 +38,7 @@
   <!-- Transparent clickable overlay -->
   <div
     class="absolute inset-y-0 right-0 left-0 bg-transparent transition-opacity duration-300 ease-in-out sm:right-[75%] md:right-[600px] lg:right-[500px]"
-    on:click={closeResponseViewer}
+    onclick={closeResponseViewer}
     role="presentation"
     aria-hidden="true"
   ></div>
@@ -87,7 +80,7 @@
       <div>
         <button
           class="rounded-full p-1 text-gray-600 transition-colors hover:bg-gray-200 hover:text-gray-800"
-          on:click={closeResponseViewer}
+          onclick={closeResponseViewer}
           aria-label="Close"
         >
           <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -109,7 +102,7 @@
           class="border-b-2 px-4 py-2 text-sm font-medium transition-colors {activeTab === 'request'
             ? 'border-blue-500 text-blue-600'
             : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}"
-          on:click={() => (activeTab = 'request')}
+          onclick={() => (activeTab = 'request')}
         >
           <div class="flex items-center">
             <span class="mr-1.5 text-blue-600">
@@ -137,7 +130,7 @@
           'response'
             ? 'border-blue-500 text-blue-600'
             : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}"
-          on:click={() => (activeTab = 'response')}
+          onclick={() => (activeTab = 'response')}
         >
           <div class="flex items-center">
             <span class="mr-1.5 text-green-600">
@@ -164,7 +157,7 @@
           class="border-b-2 px-4 py-2 text-sm font-medium transition-colors {activeTab === 'headers'
             ? 'border-blue-500 text-blue-600'
             : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}"
-          on:click={() => (activeTab = 'headers')}
+          onclick={() => (activeTab = 'headers')}
         >
           <div class="flex items-center">
             <span class="mr-1.5 text-yellow-600">

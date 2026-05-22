@@ -839,7 +839,6 @@
 {#if isLogsViewerMounted}
   <FlowLogsViewer
     isOpen={isLogsViewerOpen}
-    isMounted={true}
     logs={executionLogs}
     on:close={closeLogsViewer}
   />

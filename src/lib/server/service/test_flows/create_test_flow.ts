@@ -18,6 +18,7 @@ export interface CreateTestFlowOutput {
     description: string | null;
     flowJson: any;
     userId: number | null;
+    environmentId: number | null;
     createdAt: Date;
     updatedAt: Date;
     apis: Array<{ id: number }>;

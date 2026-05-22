@@ -143,7 +143,7 @@
       {#if unlinkedApisList.length > 0}
         <button 
           class="inline-flex items-center gap-2 bg-green-50 text-green-700 border border-green-300 px-3 py-2 rounded text-sm font-medium cursor-pointer transition-all duration-200 hover:bg-green-100 disabled:opacity-50 disabled:cursor-not-allowed"
-          on:click={() => showApiSelector = true}
+          onclick={() => showApiSelector = true}
           {disabled}
           type="button"
         >
@@ -170,7 +170,7 @@
   {:else if error}
     <div class="p-8 text-center text-red-600">
       <p>Error: {error}</p>
-      <button class="mt-4 bg-red-600 text-white border-0 px-4 py-2 rounded cursor-pointer hover:bg-red-700" on:click={loadApis}>Retry</button>
+      <button class="mt-4 bg-red-600 text-white border-0 px-4 py-2 rounded cursor-pointer hover:bg-red-700" onclick={loadApis}>Retry</button>
     </div>
   {:else if linkedApisList.length === 0}
     <div class="p-8 text-center text-gray-600">
@@ -178,7 +178,7 @@
       {#if unlinkedApisList.length > 0}
         <button 
           class="mt-4 bg-green-600 text-white border-0 px-4 py-2 rounded cursor-pointer hover:bg-green-700"
-          on:click={() => showApiSelector = true}
+          onclick={() => showApiSelector = true}
           {disabled}
           type="button"
         >
@@ -203,7 +203,7 @@
             </h4>
             <button 
               class="inline-flex items-center gap-2 bg-blue-50 text-blue-700 border border-blue-300 px-3 py-2 rounded text-sm font-medium cursor-pointer transition-all duration-200 hover:bg-blue-300 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
-              on:click={() => setDefaultApiHosts(subEnvKey)}
+              onclick={() => setDefaultApiHosts(subEnvKey)}
               {disabled}
               type="button"
               title="Auto-fill with suggested host patterns"
@@ -234,7 +234,7 @@
                   <input
                     type="url"
                     value={currentHost}
-                    on:input={(e) => {
+                    oninput={(e) => {
                       const target = e.target as HTMLInputElement;
                       setApiHost(subEnvKey, apiId, target.value);
                     }}
@@ -245,7 +245,7 @@
                   {#if currentHost}
                     <button 
                       class="p-2 bg-red-50 text-red-600 border-0 rounded cursor-pointer transition-all duration-200 flex items-center justify-center hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                      on:click={() => clearApiHost(subEnvKey, apiId)}
+                      onclick={() => clearApiHost(subEnvKey, apiId)}
                       {disabled}
                       type="button"
                       aria-label="Clear host for {api.name}"
@@ -260,10 +260,11 @@
 
                 <button 
                   class="p-2 bg-red-50 text-red-600 border-0 rounded cursor-pointer transition-all duration-200 flex items-center justify-center hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                  on:click={() => removeApiFromLinked(api.id!)}
+                  onclick={() => removeApiFromLinked(api.id!)}
                   {disabled}
                   type="button"
                   title="Remove API from environment"
+                  aria-label="Remove API from environment"
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="12" cy="12" r="10"></circle>
@@ -312,14 +313,26 @@
 
 <!-- API Selector Modal -->
 {#if showApiSelector}
-  <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" on:click={() => showApiSelector = false}>
-    <div class="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto" on:click|stopPropagation>
+  <div class="fixed inset-0 flex items-center justify-center z-50">
+    <button
+      class="absolute inset-0 bg-black bg-opacity-50"
+      type="button"
+      aria-label="Close API selector"
+      onclick={() => showApiSelector = false}
+    ></button>
+    <div
+      class="relative bg-white rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="api-selector-title"
+    >
       <div class="flex justify-between items-center mb-4">
-        <h3 class="text-lg font-semibold text-gray-900 m-0">Add APIs to Environment</h3>
+        <h3 id="api-selector-title" class="text-lg font-semibold text-gray-900 m-0">Add APIs to Environment</h3>
         <button 
           class="p-2 text-gray-400 hover:text-gray-600 transition-colors"
-          on:click={() => showApiSelector = false}
+          onclick={() => showApiSelector = false}
           type="button"
+          aria-label="Close API selector"
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -345,7 +358,7 @@
               </div>
               <button 
                 class="bg-green-600 text-white border-0 px-4 py-2 rounded cursor-pointer hover:bg-green-700 transition-colors"
-                on:click={() => addApiToLinked(api.id!)}
+                onclick={() => addApiToLinked(api.id!)}
                 type="button"
               >
                 Add
@@ -357,5 +370,4 @@
     </div>
   </div>
 {/if}
-
 

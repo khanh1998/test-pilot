@@ -249,9 +249,7 @@ export class FlowExecutionEngine {
             } else {
               // Value is a string that needs template resolution and comma parsing
               const resolvedValue = this.resolveTemplateValueUnified(value as string);
-              
-              // Always split by comma - the delimiter is always comma regardless of output format
-              arrayValues = resolvedValue.split(',').map(item => item.trim()).filter(item => item !== '');
+              arrayValues = this.parseArrayParameter(resolvedValue, paramDefinition);
             }
             
             this.serializeArrayParameter(queryParams, name, arrayValues, paramDefinition);
@@ -612,6 +610,20 @@ export class FlowExecutionEngine {
 
   private addRequestDebugLogs(path: string, reqHeaders: Record<string, string>) {
     // Implementation for request debug logs
+  }
+
+  /**
+   * Parse comma-separated array input before applying the endpoint's output serialization format.
+   */
+  private parseArrayParameter(value: string, _paramDefinition: any): string[] {
+    if (!value) {
+      return [];
+    }
+
+    return value
+      .split(',')
+      .map((item) => item.trim())
+      .filter((item) => item !== '');
   }
 
   /**

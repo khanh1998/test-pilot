@@ -190,7 +190,8 @@
           <select
             id="api-select"
             bind:value={selectedApiId}
-            on:change={handleApiChange}
+            onchange={handleApiChange}
+            {disabled}
             class="w-full rounded border border-gray-300 px-2 py-1.5 text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
           >
             <option value="">All APIs</option>
@@ -210,10 +211,11 @@
             placeholder="Search endpoints..."
             class="w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
             bind:value={searchTerm}
-            on:input={handleSearchInput}
-            on:focus={handleInputFocus}
-            on:blur={handleInputBlur}
-            on:keydown={handleKeydown}
+            oninput={handleSearchInput}
+            onfocus={handleInputFocus}
+            onblur={handleInputBlur}
+            onkeydown={handleKeydown}
+            {disabled}
           />
 
           <!-- Search icon -->
@@ -262,7 +264,8 @@
               {#each searchResults as result (result.id)}
                 <button
                   class="flex w-full items-start gap-2 p-2 text-left transition hover:bg-gray-50"
-                  on:mousedown={() => selectEndpoint(result)}
+                  onmousedown={() => selectEndpoint(result)}
+                  {disabled}
                 >
                   <span
                     class={`shrink-0 rounded px-1.5 py-0.5 text-xs font-medium

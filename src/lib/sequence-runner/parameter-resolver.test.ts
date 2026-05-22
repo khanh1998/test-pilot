@@ -1,9 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SequenceParameterResolver } from './parameter-resolver';
+import type { FlowSequenceStep } from '$lib/types/flow_sequence';
 import type { TestFlow } from '$lib/types/test-flow';
-import type { FlowSequenceStep, FlowParameterMapping } from '$lib/types/flow_sequence';
-import type { Environment } from '$lib/types/environment';
-import type { Project } from '$lib/types/project';
 
 describe('SequenceParameterResolver', () => {
   let mockOnLog: ReturnType<typeof vi.fn>;
@@ -12,8 +10,7 @@ describe('SequenceParameterResolver', () => {
     mockOnLog = vi.fn();
   });
 
-  describe('Realistic API Test Flow Scenario', () => {
-    // Setup: Login Flow -> Create User Flow -> Get User Flow
+  describe('flow parameter resolution', () => {
     const loginFlow: TestFlow = {
       id: '1',
       name: 'Login Flow',
@@ -43,7 +40,7 @@ describe('SequenceParameterResolver', () => {
             required: false,
             value: null,
             description: 'Request timeout in ms',
-            defaultValue: null
+            defaultValue: 30000
           },
           {
             name: 'debug_mode',
@@ -51,11 +48,17 @@ describe('SequenceParameterResolver', () => {
             required: false,
             value: null,
             description: 'Enable debug logging',
-            defaultValue: null
+            defaultValue: false
           }
         ],
         outputs: [
-          { name: 'access_token', value: '{{response.token}}', description: 'Auth token', isTemplate: true, type: 'string' }
+          {
+            name: 'access_token',
+            value: '{{response.token}}',
+            description: 'Auth token',
+            isTemplate: true,
+            type: 'string'
+          }
         ],
         steps: []
       }
@@ -94,147 +97,19 @@ describe('SequenceParameterResolver', () => {
           }
         ],
         outputs: [
-          { name: 'user_id', value: '{{response.user.id}}', description: 'Created user ID', isTemplate: true, type: 'number' }
-        ],
-        steps: []
-      }
-    };
-
-    const getUserFlow: TestFlow = {
-      id: '3',
-      name: 'Get User Flow',
-      apiId: 1,
-      steps: [],
-      flowJson: {
-        parameters: [
-          {
-            name: 'auth_token',
-            type: 'string',
-            required: true,
-            value: null,
-            description: 'Auth token',
-            defaultValue: null
-          },
           {
             name: 'user_id',
-            type: 'string',
-            required: true,
-            value: null,
-            description: 'User ID to fetch',
-            defaultValue: null
-          },
-          {
-            name: 'base_url',
-            type: 'string',
-            required: true,
-            value: null,
-            description: 'Base API URL',
-            defaultValue: null
+            value: '{{response.user.id}}',
+            description: 'Created user ID',
+            isTemplate: true,
+            type: 'number'
           }
         ],
-        outputs: [],
         steps: []
       }
     };
 
-    const project: Project = {
-      id: 1,
-      name: 'E-commerce API Project',
-      userId: 1,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      projectJson: {
-        variables: [
-          {
-            name: 'base_url',
-            type: 'string',
-            default_value: 'https://api.prod.ecommerce.com'
-          },
-          {
-            name: 'api_timeout',
-            type: 'number',
-            default_value: 30000
-          },
-          {
-            name: 'retry_count',
-            type: 'number',
-            default_value: 3
-          },
-          {
-            name: 'debug_mode',
-            type: 'boolean',
-            default_value: false
-          }
-        ],
-        api_hosts: {
-          'main': {
-            api_id: 1,
-            name: 'Main API',
-            default_host: 'https://api.prod.ecommerce.com'
-          }
-        },
-        environment_mappings: [
-          {
-            environment_id: 1,
-            variable_mappings: {
-              'base_url': 'API_BASE_URL',
-              'debug_mode': 'DEBUG_ENABLED'
-              // api_timeout and retry_count NOT mapped - will use defaults
-            }
-          }
-        ]
-      }
-    };
-
-    const environment: Environment = {
-      id: 1,
-      name: 'Testing Environment',
-      userId: 1,
-      createdAt: '2024-01-01T00:00:00Z',
-      updatedAt: '2024-01-01T00:00:00Z',
-      config: {
-        type: 'environment_set',
-        variable_definitions: {
-          'API_BASE_URL': {
-            type: 'string',
-            description: 'Base URL for the API',
-            required: false,
-            default_value: 'https://api.example.com'
-          },
-          'DEBUG_ENABLED': {
-            type: 'boolean',
-            description: 'Enable debug mode',
-            required: false,
-            default_value: false
-          }
-        },
-        environments: {
-          dev: {
-            name: 'Development',
-            variables: {
-              'API_BASE_URL': 'https://api.dev.ecommerce.com',
-              'DEBUG_ENABLED': true
-            },
-            api_hosts: {
-              '1': 'https://api.dev.ecommerce.com'
-            }
-          },
-          staging: {
-            name: 'Staging',
-            variables: {
-              'API_BASE_URL': 'https://api.staging.ecommerce.com',
-              'DEBUG_ENABLED': false
-            },
-            api_hosts: {
-              '1': 'https://api.staging.ecommerce.com'
-            }
-          }
-        }
-      }
-    };
-
-    it('should resolve all 3 parameter sources in sequence - with sub-environment', () => {
-      // Step 1: Login flow parameters
+    it('resolves static, environment, default, and previous output parameters', () => {
       const loginStep: FlowSequenceStep = {
         id: 'login-step',
         test_flow_id: 1,
@@ -248,40 +123,39 @@ describe('SequenceParameterResolver', () => {
           {
             flow_parameter_name: 'base_url',
             source_type: 'environment_variable',
-            source_value: 'base_url'
-          },
-          {
-            flow_parameter_name: 'api_timeout',
-            source_type: 'environment_variable',
-            source_value: 'api_timeout'
+            source_value: 'API_BASE_URL'
           },
           {
             flow_parameter_name: 'debug_mode',
             source_type: 'environment_variable',
-            source_value: 'debug_mode'
+            source_value: 'DEBUG_ENABLED'
           }
         ]
       };
-
-      // Environment variables with dev sub-env selected
-      const envVars = {
-        'API_BASE_URL': 'https://api.dev.ecommerce.com',
-        'DEBUG_ENABLED': true
-        // Note: api_timeout not in env vars, should use project default
+      const environmentVariables = {
+        API_BASE_URL: 'https://api.dev.ecommerce.com',
+        DEBUG_ENABLED: true
       };
 
       const loginResult = SequenceParameterResolver.resolveFlowParameters(
-        loginFlow, loginStep, {}, envVars, environment, 'dev', project, mockOnLog
+        loginFlow,
+        loginStep,
+        {},
+        environmentVariables,
+        { '1': 'https://api.dev.ecommerce.com' },
+        mockOnLog
       );
 
       expect(loginResult.resolvedParameters).toEqual({
         api_key: 'dev-api-key-12345',
-        base_url: 'https://api.dev.ecommerce.com', // from env var (mapped)
-        api_timeout: 30000, // from project default (not mapped)
-        debug_mode: true // from env var (mapped, converted to boolean)
+        base_url: 'https://api.dev.ecommerce.com',
+        api_timeout: 30000,
+        debug_mode: true
+      });
+      expect(loginResult.flowData.settings.api_hosts).toEqual({
+        '1': { url: 'https://api.dev.ecommerce.com' }
       });
 
-      // Step 2: Create user flow - uses previous output + static + project var
       const createUserStep: FlowSequenceStep = {
         id: 'create-user-step',
         test_flow_id: 2,
@@ -298,103 +172,35 @@ describe('SequenceParameterResolver', () => {
             flow_parameter_name: 'user_email',
             source_type: 'static_value',
             source_value: 'testuser@example.com'
-          },
-          {
-            flow_parameter_name: 'retry_count',
-            source_type: 'project_variable',
-            source_value: 'retry_count'
           }
         ]
       };
-
-      // Previous outputs from login step - structured as expected by the resolver
       const previousOutputs = {
-        'flow_1': {
-          'access_token': 'bearer-token-xyz789',
-          'user_id': '12345'
+        flow_1: {
+          access_token: 'bearer-token-xyz789',
+          user_id: '12345'
         }
       };
 
       const createUserResult = SequenceParameterResolver.resolveFlowParameters(
-        createUserFlow, createUserStep, previousOutputs, envVars, environment, 'dev', project, mockOnLog
+        createUserFlow,
+        createUserStep,
+        previousOutputs,
+        environmentVariables,
+        { '1': 'https://api.dev.ecommerce.com' },
+        mockOnLog
       );
 
       expect(createUserResult.resolvedParameters).toEqual({
-        auth_token: 'bearer-token-xyz789', // from previous output
-        user_email: 'testuser@example.com', // static value
-        retry_count: 3 // from project default (not mapped to env)
+        auth_token: 'bearer-token-xyz789',
+        user_email: 'testuser@example.com',
+        retry_count: 3
       });
     });
 
-    it('should resolve project variables without sub-environment (use defaults)', () => {
-      // Test when no sub-environment is selected - should use project defaults
+    it('uses flow defaults when no parameter mapping is provided', () => {
       const loginStep: FlowSequenceStep = {
-        id: 'login-step-no-env',
-        test_flow_id: 1,
-        step_order: 1,
-        parameter_mappings: [
-          {
-            flow_parameter_name: 'base_url',
-            source_type: 'project_variable',
-            source_value: 'base_url'
-          },
-          {
-            flow_parameter_name: 'debug_mode',
-            source_type: 'project_variable',
-            source_value: 'debug_mode'
-          }
-        ]
-      };
-
-      // No environment variables provided
-      const noEnvVars = {};
-
-      const result = SequenceParameterResolver.resolveFlowParameters(
-        loginFlow, loginStep, {}, noEnvVars, environment, null, project, mockOnLog
-      );
-
-      expect(result.resolvedParameters).toEqual({
-        base_url: 'https://api.prod.ecommerce.com', // from project default (no env mapping)
-        debug_mode: false, // from project default (no env mapping)
-        api_key: null,
-        api_timeout: 30000,
-      });
-    });
-
-    it('should resolve API hosts for different environments', () => {
-      const devHosts = SequenceParameterResolver.resolveApiHosts(environment, 'dev', project, mockOnLog);
-      expect(devHosts).toEqual({
-        '1': {
-        "description": "Environment Testing Environment (dev) host",
-        "name": "Main API",
-        "url": "https://api.dev.ecommerce.com",
-   },
-      });
-
-      const stagingHosts = SequenceParameterResolver.resolveApiHosts(environment, 'staging', project, mockOnLog);
-      expect(stagingHosts).toEqual({
-         "1": {
-            "description": "Environment Testing Environment (staging) host",
-            "name": "Main API",
-            "url": "https://api.staging.ecommerce.com"
-        }
-      });
-
-      // Test with no sub-environment - should use project defaults
-      const noEnvHosts = SequenceParameterResolver.resolveApiHosts(environment, null, project, mockOnLog);
-      expect(noEnvHosts).toEqual({
-        "1": {
-            "description": "Project default host",
-            "name": "Main API",
-            "url": "https://api.prod.ecommerce.com",
-        },
-      });
-    });
-
-
-    it('should fallback to project variable default when no sub-environment selected', () => {
-      const loginStep: FlowSequenceStep = {
-        id: 'login-step',
+        id: 'login-step-defaults',
         test_flow_id: 1,
         step_order: 1,
         parameter_mappings: [
@@ -402,31 +208,66 @@ describe('SequenceParameterResolver', () => {
             flow_parameter_name: 'api_key',
             source_type: 'static_value',
             source_value: 'prod-api-key-67890'
-          },
-          {
-            flow_parameter_name: 'base_url',
-            source_type: 'environment_variable',
-            source_value: 'base_url'
           }
         ]
       };
 
-      // No sub-environment selected, should use project variable default
-      const loginResult = SequenceParameterResolver.resolveFlowParameters(
-        loginFlow, loginStep, {}, {}, environment,  mockOnLog
+      const result = SequenceParameterResolver.resolveFlowParameters(
+        loginFlow,
+        loginStep,
+        {},
+        {},
+        {},
+        mockOnLog
       );
 
-      expect(loginResult.resolvedParameters).toEqual({
+      expect(result.resolvedParameters).toEqual({
         api_key: 'prod-api-key-67890',
-        base_url: 'https://api.prod.ecommerce.com', // project variable default
+        base_url: null,
         api_timeout: 30000,
-        debug_mode: false,
+        debug_mode: false
+      });
+    });
+
+    it('converts typed static values', () => {
+      const step: FlowSequenceStep = {
+        id: 'typed-static-step',
+        test_flow_id: 1,
+        step_order: 1,
+        parameter_mappings: [
+          {
+            flow_parameter_name: 'api_timeout',
+            source_type: 'static_value',
+            source_value: '15000',
+            data_type: 'number'
+          },
+          {
+            flow_parameter_name: 'debug_mode',
+            source_type: 'static_value',
+            source_value: 'true',
+            data_type: 'boolean'
+          }
+        ]
+      };
+
+      const result = SequenceParameterResolver.resolveFlowParameters(
+        loginFlow,
+        step,
+        {},
+        {},
+        {},
+        mockOnLog
+      );
+
+      expect(result.resolvedParameters).toMatchObject({
+        api_timeout: 15000,
+        debug_mode: true
       });
     });
   });
 
-  describe('Error Response Utils', () => {
-    it('should detect errors correctly', () => {
+  describe('error response utils', () => {
+    it('detects errors correctly', () => {
       expect(SequenceParameterResolver.hasErrorInResponse({ __error: 'failed' })).toBe(true);
       expect(SequenceParameterResolver.hasErrorInResponse({ error: 'failed' })).toBe(true);
       expect(SequenceParameterResolver.hasErrorInResponse({ success: false })).toBe(true);
@@ -434,11 +275,19 @@ describe('SequenceParameterResolver', () => {
       expect(SequenceParameterResolver.hasErrorInResponse({})).toBe(false);
     });
 
-    it('should extract error messages correctly', () => {
-      expect(SequenceParameterResolver.getErrorFromResponse({ __error: 'priority error' })).toBe('priority error');
-      expect(SequenceParameterResolver.getErrorFromResponse({ error: 'error msg' })).toBe('error msg');
-      expect(SequenceParameterResolver.getErrorFromResponse({ message: 'general msg' })).toBe('general msg');
-      expect(SequenceParameterResolver.getErrorFromResponse({})).toBe('Unknown error from API response');
+    it('extracts error messages correctly', () => {
+      expect(SequenceParameterResolver.getErrorFromResponse({ __error: 'priority error' })).toBe(
+        'priority error'
+      );
+      expect(SequenceParameterResolver.getErrorFromResponse({ error: 'error msg' })).toBe(
+        'error msg'
+      );
+      expect(SequenceParameterResolver.getErrorFromResponse({ message: 'general msg' })).toBe(
+        'general msg'
+      );
+      expect(SequenceParameterResolver.getErrorFromResponse({})).toBe(
+        'Unknown error from API response'
+      );
     });
   });
 });

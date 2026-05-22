@@ -83,7 +83,6 @@ describe('Parameter Synchronization Bug Fix', () => {
         retryCount: 0,
         timeout: 30000
       },
-      environments: [],
       selectedEnvironment: null,
       environmentVariables: {},
       onLog: vi.fn(),
