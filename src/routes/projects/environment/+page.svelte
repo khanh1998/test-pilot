@@ -1,11 +1,15 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onDestroy } from 'svelte';
   import { projectStore } from '$lib/store/project';
-  import { getProjectEnvironment } from '$lib/http_client/projects';
+  import EnvironmentCreator from '$lib/components/environments/EnvironmentCreator.svelte';
+  import { getProjectEnvironment, linkEnvironment } from '$lib/http_client/projects';
   import type { ProjectEnvironmentLink } from '$lib/types/project_environment';
+  import type { Environment } from '$lib/types/environment';
   
   let environment = $state<ProjectEnvironmentLink | null>(null);
   let isLoading = $state(true);
+  let isLinkingEnvironment = $state(false);
+  let showCreateEnvironment = $state(false);
   let error = $state<string | null>(null);
   let selectedProject = $state<any>(null);
 
@@ -24,6 +28,8 @@
 
   async function loadEnvironment() {
     if (!selectedProject) {
+      environment = null;
+      error = null;
       isLoading = false;
       return;
     }
@@ -38,6 +44,29 @@
       error = err instanceof Error ? err.message : 'Failed to load environment';
     } finally {
       isLoading = false;
+    }
+  }
+
+  async function handleEnvironmentCreated(event: CustomEvent<{ environment: Environment }>) {
+    if (!selectedProject) return;
+
+    isLinkingEnvironment = true;
+    error = null;
+
+    try {
+      const linkedEnvironment = await linkEnvironment(selectedProject.id, {
+        environmentId: event.detail.environment.id,
+        variableMappings: {}
+      });
+
+      environment = linkedEnvironment.link;
+      showCreateEnvironment = false;
+    } catch (err) {
+      console.error('Error linking environment to project:', err);
+      error = err instanceof Error ? err.message : 'Environment was created, but could not be linked to this project';
+      showCreateEnvironment = false;
+    } finally {
+      isLinkingEnvironment = false;
     }
   }
 </script>
@@ -70,12 +99,17 @@
       </svg>
       <h1 class="text-2xl font-semibold text-gray-700 mb-2">No Environment Configured</h1>
       <p class="text-gray-600 mb-6">This project doesn't have an environment configured yet.</p>
-      <a href="/projects/environment" class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
+      <button
+        type="button"
+        onclick={() => showCreateEnvironment = true}
+        disabled={isLinkingEnvironment}
+        class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+      >
         <svg class="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
         </svg>
-        Create Environment
-      </a>
+        {isLinkingEnvironment ? 'Linking Environment...' : 'Create Environment'}
+      </button>
     </div>
   {:else}
     <div class="flex justify-between items-start mb-8 gap-8">
@@ -234,5 +268,12 @@
         {/if}
       </div>
     {/if}
+  {/if}
+
+  {#if showCreateEnvironment}
+    <EnvironmentCreator
+      on:created={handleEnvironmentCreated}
+      on:close={() => showCreateEnvironment = false}
+    />
   {/if}
 </div>

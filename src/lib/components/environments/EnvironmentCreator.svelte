@@ -1,10 +1,10 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import { createEnvironment } from '$lib/http_client/environments';
-  import type { CreateEnvironmentData } from '$lib/types/environment';
+  import type { CreateEnvironmentData, Environment } from '$lib/types/environment';
 
   const dispatch = createEventDispatcher<{
-    created: { environment: any };
+    created: { environment: Environment };
     close: void;
   }>();
 
@@ -13,7 +13,9 @@
   let isCreating = false;
   let error: string | null = null;
 
-  async function handleSubmit() {
+  async function handleSubmit(event: SubmitEvent) {
+    event.preventDefault();
+
     if (!name.trim()) return;
 
     isCreating = true;
@@ -140,5 +142,4 @@
     </form>
   </div>
 </div>
-
 
