@@ -78,6 +78,11 @@ export function isTauriHttpReady(): boolean {
   return tauriHttpReady;
 }
 
+function isTauriScopeError(error: unknown): boolean {
+  return (error instanceof Error && error.message.includes('url not allowed on the configured scope')) ||
+    (typeof error === 'string' && error.includes('url not allowed on the configured scope'));
+}
+
 /**
  * Utility function to make authenticated API requests
  * Uses Tauri HTTP client in desktop mode to bypass CORS and cookie policies
@@ -148,10 +153,9 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}) {
     } catch (error: unknown) {
       console.error('[HTTP Client] Error using Tauri HTTP client:', error);
       // Provide more specific error message for URL scope issues
-      if (error instanceof Error && error.message.includes('url not allowed on the configured scope')) {
+      if (isTauriScopeError(error)) {
         console.error('[HTTP Client] URL scope error. Check Tauri capabilities configuration in src-tauri/capabilities/http.json');
-      } else if (typeof error === 'string' && error.includes('url not allowed on the configured scope')) {
-        console.error('[HTTP Client] URL scope error. Check Tauri capabilities configuration in src-tauri/capabilities/http.json');
+        throw error;
       }
       // Fall back to regular fetch if Tauri HTTP fails
       console.warn('[HTTP Client] Falling back to regular fetch');

@@ -10,7 +10,7 @@
       "identifier": "http:default",
       "allow": [
         {
-          "url": "http://**",
+          "url": "http://*:*",
           "headers": [
             "*"
           ],
@@ -25,7 +25,7 @@
           ]
         },
         {
-          "url": "https://**",
+          "url": "https://*:*",
           "headers": [
             "*"
           ],

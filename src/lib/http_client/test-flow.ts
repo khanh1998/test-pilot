@@ -223,6 +223,11 @@ export async function executeDirectEndpoint(
 /**
  * Execute a request using Tauri's HTTP client
  */
+function isTauriScopeError(error: unknown): boolean {
+    return (error instanceof Error && error.message.includes('url not allowed on the configured scope')) ||
+        (typeof error === 'string' && error.includes('url not allowed on the configured scope'));
+}
+
 async function executeTauriRequest(
     method: string,
     url: string,
@@ -269,6 +274,9 @@ async function executeTauriRequest(
         return response;
     } catch (error) {
         console.error('Error using Tauri HTTP client:', error);
+        if (isTauriScopeError(error)) {
+            throw error;
+        }
         // Fall back to browser fetch
         return fetch(url, {
             method,
