@@ -236,6 +236,10 @@
         return operatorsByType[assertionType];
     }
   }
+
+  function getOperatorAssertionType(assertion: { data_source: AssertionDataSource; assertion_type: AssertionType }): AssertionType {
+    return assertion.data_source === 'transformed_data' ? 'json_body' : assertion.assertion_type;
+  }
   
   // UI state for showing/hiding results
   let showResults = false;
@@ -500,7 +504,7 @@
     }
     
     // Check if the current operator is compatible with the new type
-    const validOperators = getOperatorsForType(assertion.assertion_type, newType, assertion.is_template_expression);
+    const validOperators = getOperatorsForType(getOperatorAssertionType(assertion), newType, assertion.is_template_expression);
     
     // If the current operator isn't valid for the new type, select a compatible one
     if (!validOperators.includes(assertion.operator)) {
@@ -905,7 +909,7 @@
                         handleAssertionChange();
                       }}
                     >
-                      {#each getOperatorsForType(assertion.data_source === 'transformed_data' ? 'json_body' : assertion.assertion_type, assertion.expected_value_type, assertion.is_template_expression) as op}
+                      {#each getOperatorsForType(getOperatorAssertionType(assertion), assertion.expected_value_type, assertion.is_template_expression) as op}
                         <option value={op}>{getOperatorDisplayName(op)}</option>
                       {/each}
                     </select>
@@ -1314,6 +1318,7 @@
                 on:change={(e) => {
                   if (e.target && 'value' in e.target) {
                     const newType = e.target.value as ExpectedValueType;
+                    newAssertion.expected_value_type = newType;
                     
                     // Reset the expected value based on the new type
                     if (newType === 'number') {
@@ -1327,11 +1332,11 @@
                     }
                     
                     // Check if the current operator is compatible with the new type
-                    const validOperators = getOperatorsForType(newAssertion.assertion_type, newType, newAssertion.is_template_expression);
+                    const validOperators = getOperatorsForType(getOperatorAssertionType(newAssertion), newType, newAssertion.is_template_expression);
                     
                     // If the current operator isn't valid for the new type, select a compatible one
                     if (!validOperators.includes(newAssertion.operator)) {
-                      newAssertion.operator = validOperators[0];
+                      updateOperator(newAssertion, validOperators[0]);
                     }
                   }
                 }}
@@ -1356,7 +1361,7 @@
                 }
               }}
             >
-              {#each getOperatorsForType(newAssertion.data_source === 'transformed_data' ? 'json_body' : newAssertion.assertion_type, newAssertion.expected_value_type, newAssertion.is_template_expression) as op}
+              {#each getOperatorsForType(getOperatorAssertionType(newAssertion), newAssertion.expected_value_type, newAssertion.is_template_expression) as op}
                 <option value={op}>{getOperatorDisplayName(op)}</option>
               {/each}
             </select>
