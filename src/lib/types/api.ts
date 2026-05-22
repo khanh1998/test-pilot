@@ -1,38 +1,50 @@
 import { apiEndpoints, type apis } from '$lib/server/db/schema';
 
 export type Api = Omit<typeof apis.$inferSelect, 'specFormat' | 'specContent' | 'userId'> & {
-	endpointCount?: number;
+  endpointCount?: number;
 };
 
 export type ApiEndpoint = typeof apiEndpoints.$inferSelect;
 
 export type GetApisResponse = {
-	apis: Api[];
+  apis: Api[];
 };
 
 export type GetApiEndpointsResponse = {
-	endpoints: ApiEndpoint[];
+  endpoints: ApiEndpoint[];
 };
 
 export type GetApiDetailsResponse = {
-	api: Api;
+  api: Api;
 };
 
 export type UploadSwaggerResponse = {
-	id: number;
-	name: string;
-	description: string | null;
-	host: string | null;
+  success: true;
+  api: {
+    id: number;
+    name: string;
+    description: string | null;
+    host: string | null;
+    projectId: number | null;
+    endpointCount: number;
+  };
 };
 
-export type UpdateSwaggerResponse = UploadSwaggerResponse;
+export type UpdateSwaggerResponse = {
+  success: true;
+  api: UploadSwaggerResponse['api'] & {
+    updated: true;
+    addedEndpoints: number;
+    removedEndpoints: number;
+  };
+};
 
 export type DeleteApiResponse = {
-	success: boolean;
-	message: string;
+  success: boolean;
+  message: string;
 };
 
 export type ErrorResponse = {
-	error: string;
-	details?: string;
+  error: string;
+  details?: string;
 };

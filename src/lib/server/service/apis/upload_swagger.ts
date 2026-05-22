@@ -1,6 +1,8 @@
 import { parseSwaggerSpec, extractEndpoints, extractHost } from '$lib/server/swagger/parser';
 import * as apiRepo from '$lib/server/repository/db/apis';
 import * as apiEndpointsRepo from '$lib/server/repository/db/api-endpoints';
+import * as projectApisRepo from '$lib/server/repository/db/project_apis';
+import { ProjectRepository } from '$lib/server/repository/db/project';
 import { EndpointEmbeddingsService } from '$lib/server/service/endpoint_embeddings/create_embedding';
 
 interface UploadSwaggerParams {
@@ -10,6 +12,7 @@ interface UploadSwaggerParams {
   format: 'yaml' | 'json';
   userProvidedHost?: string;
   userId: number;
+  projectId?: number;
 }
 
 interface UploadSwaggerResponse {
@@ -19,12 +22,22 @@ interface UploadSwaggerResponse {
     name: string;
     description: string | null;
     host: string | null;
+    projectId: number | null;
     endpointCount: number;
   };
 }
 
 export async function uploadSwagger(params: UploadSwaggerParams): Promise<UploadSwaggerResponse> {
-  const { name, description, content, format, userProvidedHost, userId } = params;
+  const { name, description, content, format, userProvidedHost, userId, projectId } = params;
+
+  if (projectId !== undefined) {
+    const projectRepo = new ProjectRepository();
+    const project = await projectRepo.getUserProject(projectId, userId);
+
+    if (!project) {
+      throw new Error('Project not found or access denied');
+    }
+  }
 
   // Parse the Swagger/OpenAPI spec
   const api = await parseSwaggerSpec(content, format);
@@ -44,8 +57,17 @@ export async function uploadSwagger(params: UploadSwaggerParams): Promise<Upload
     specFormat: format,
     specContent: content,
     host: hostValue,
-    userId
+    userId,
+    projectId
   });
+
+  if (projectId !== undefined) {
+    await projectApisRepo.createProjectApi({
+      projectId,
+      apiId: createdApi.id,
+      defaultHost: hostValue ?? undefined
+    });
+  }
 
   // Extract the endpoints from the spec
   const endpoints = extractEndpoints(api);
@@ -75,6 +97,7 @@ export async function uploadSwagger(params: UploadSwaggerParams): Promise<Upload
       name: createdApi.name,
       description: createdApi.description,
       host: createdApi.host,
+      projectId: createdApi.projectId,
       endpointCount: endpoints.length
     }
   };

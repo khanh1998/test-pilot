@@ -11,6 +11,7 @@ interface ApiDetailsResponse {
     name: string;
     description: string | null;
     host: string | null;
+    projectId: number | null;
     createdAt: Date;
     updatedAt: Date;
     endpointCount: number;
@@ -38,6 +39,7 @@ export async function getApiDetails(params: GetApiDetailsParams): Promise<ApiDet
       name: apiWithCount.name,
       description: apiWithCount.description,
       host: apiWithCount.host,
+      projectId: apiWithCount.projectId,
       createdAt: apiWithCount.createdAt,
       updatedAt: apiWithCount.updatedAt,
       endpointCount: apiWithCount.endpointCount

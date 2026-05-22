@@ -1,6 +1,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { uploadSwaggerFile, updateSwaggerFile } from '$lib/http_client/apis';
+  import { projectStore } from '$lib/store/project';
 
   export let apiId: number | null = null; // If provided, we're in update mode
   export let apiName: string = '';
@@ -97,7 +98,14 @@
         }
         await updateSwaggerFile(apiId.toString(), file);
       } else {
-        await uploadSwaggerFile(file, nameInput.trim(), descriptionInput.trim(), hostInput.trim());
+        const projectId = projectStore.getSelectedProjectId();
+        await uploadSwaggerFile(
+          file,
+          nameInput.trim(),
+          descriptionInput.trim(),
+          hostInput.trim(),
+          projectId ?? undefined
+        );
       }
 
       // Redirect based on the operation

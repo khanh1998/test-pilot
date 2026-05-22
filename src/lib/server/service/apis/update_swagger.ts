@@ -18,6 +18,7 @@ interface UpdateSwaggerResponse {
     name: string;
     description: string | null;
     host: string | null;
+    projectId: number | null;
     endpointCount: number;
     updated: true;
     addedEndpoints: number;
@@ -91,7 +92,7 @@ export async function updateSwagger(params: UpdateSwaggerParams): Promise<Update
         parameters: endpoint.parameters,
         tags: endpoint.tags
       });
-      
+
       // Add to updated endpoints for embedding processing
       updatedEndpoints.push({
         id: existingEndpoint.id,
@@ -151,6 +152,7 @@ export async function updateSwagger(params: UpdateSwaggerParams): Promise<Update
       name: existingApi.name,
       description: existingApi.description,
       host: hostValue,
+      projectId: existingApi.projectId,
       endpointCount: newEndpoints.length,
       updated: true,
       addedEndpoints: newEndpoints.length - existingEndpoints.length + endpointsToDelete.length,

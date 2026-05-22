@@ -18,9 +18,18 @@ export async function POST({ request, locals, url }: RequestEvent) {
     const description = url.searchParams.get('description') || '';
     const userProvidedHost = url.searchParams.get('host') || '';
     const fileName = url.searchParams.get('fileName') || 'swagger-spec';
+    const projectIdParam = url.searchParams.get('projectId');
+    const projectId = projectIdParam ? parseInt(projectIdParam, 10) : undefined;
 
     if (!name) {
       return new Response(JSON.stringify({ error: 'Name parameter is required' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    if (projectId !== undefined && Number.isNaN(projectId)) {
+      return new Response(JSON.stringify({ error: 'projectId must be a valid number' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
       });
@@ -48,7 +57,8 @@ export async function POST({ request, locals, url }: RequestEvent) {
       content,
       format,
       userProvidedHost,
-      userId: locals.user.userId
+      userId: locals.user.userId,
+      projectId
     });
 
     return json(result);

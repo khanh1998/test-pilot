@@ -8,6 +8,7 @@ export interface ApiWithEndpointCount {
   description: string | null;
   host: string | null;
   userId: number | null;
+  projectId: number | null;
   createdAt: Date;
   updatedAt: Date;
   endpointCount: number;
@@ -20,6 +21,7 @@ export interface CreateApiParams {
   specContent: string;
   host: string | null;
   userId: number;
+  projectId?: number;
 }
 
 export interface UpdateApiParams {
@@ -39,7 +41,8 @@ export async function createApi(params: CreateApiParams) {
       specFormat: params.specFormat,
       specContent: params.specContent,
       host: params.host,
-      userId: params.userId
+      userId: params.userId,
+      projectId: params.projectId ?? null
     })
     .returning();
 
@@ -70,15 +73,12 @@ export async function getApiById(apiId: number, userId?: number) {
       description: apis.description,
       host: apis.host,
       userId: apis.userId,
+      projectId: apis.projectId,
       createdAt: apis.createdAt,
       updatedAt: apis.updatedAt
     })
     .from(apis)
-    .where(
-      userId 
-        ? and(eq(apis.id, apiId), eq(apis.userId, userId))
-        : eq(apis.id, apiId)
-    )
+    .where(userId ? and(eq(apis.id, apiId), eq(apis.userId, userId)) : eq(apis.id, apiId))
     .limit(1);
 
   const results = await query;
@@ -107,7 +107,7 @@ export async function getApiWithEndpointCount(apiId: number): Promise<ApiWithEnd
 export async function deleteApiById(apiId: number): Promise<void> {
   // Delete related endpoints first to maintain referential integrity
   await db.delete(apiEndpoints).where(eq(apiEndpoints.apiId, apiId));
-  
+
   // Then delete the API itself
   await db.delete(apis).where(eq(apis.id, apiId));
 }
@@ -119,7 +119,7 @@ export async function verifyApiOwnership(apiId: number, userId: number): Promise
 
 export async function getApisByUserId(userId: number, projectId?: number) {
   const whereConditions = [eq(apis.userId, userId)];
-  
+
   if (projectId !== undefined) {
     whereConditions.push(eq(apis.projectId, projectId));
   }
@@ -131,6 +131,7 @@ export async function getApisByUserId(userId: number, projectId?: number) {
       description: apis.description,
       host: apis.host,
       userId: apis.userId,
+      projectId: apis.projectId,
       createdAt: apis.createdAt,
       updatedAt: apis.updatedAt
     })
@@ -139,7 +140,10 @@ export async function getApisByUserId(userId: number, projectId?: number) {
     .orderBy(apis.createdAt);
 }
 
-export async function getApisWithEndpointCounts(userId: number, projectId?: number): Promise<ApiWithEndpointCount[]> {
+export async function getApisWithEndpointCounts(
+  userId: number,
+  projectId?: number
+): Promise<ApiWithEndpointCount[]> {
   // Get all APIs for the user, optionally filtered by project
   const userApis = await getApisByUserId(userId, projectId);
 

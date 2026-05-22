@@ -19,9 +19,21 @@ export async function POST({ request, locals }: RequestEvent) {
     const name = formData.get('name') as string;
     const description = formData.get('description') as string;
     const userProvidedHost = formData.get('host') as string;
+    const projectIdValue = formData.get('projectId');
+    const projectId =
+      typeof projectIdValue === 'string' && projectIdValue.trim()
+        ? parseInt(projectIdValue, 10)
+        : undefined;
 
     if (!file || !name) {
       return new Response(JSON.stringify({ error: 'File and name are required' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    if (projectId !== undefined && Number.isNaN(projectId)) {
+      return new Response(JSON.stringify({ error: 'projectId must be a valid number' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
       });
@@ -40,7 +52,8 @@ export async function POST({ request, locals }: RequestEvent) {
       content,
       format,
       userProvidedHost,
-      userId: locals.user.userId
+      userId: locals.user.userId,
+      projectId
     });
 
     return json(result);

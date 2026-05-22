@@ -11,6 +11,7 @@ interface ListApisResponse {
     name: string;
     description: string | null;
     host: string | null;
+    projectId: number | null;
     createdAt: Date;
     updatedAt: Date;
     endpointCount: number;
@@ -28,6 +29,7 @@ export async function listUserApis(params: ListApisParams): Promise<ListApisResp
       name: api.name,
       description: api.description,
       host: api.host,
+      projectId: api.projectId,
       createdAt: api.createdAt,
       updatedAt: api.updatedAt,
       endpointCount: api.endpointCount
