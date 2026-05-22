@@ -7,7 +7,33 @@ import type { Project } from '$lib/types/project';
 import { defaultTemplateFunctions } from '$lib/template/functions';
 
 export class SequenceParameterResolver {
-  
+  /**
+   * Build concrete environment variables for sequence execution.
+   * Sub-environment values override variable definition defaults when present.
+   */
+  static getEnvironmentVariables(
+    selectedEnvironment: Environment,
+    selectedSubEnvironment: string
+  ): Record<string, unknown> {
+    const variableDefinitions = selectedEnvironment.config.variable_definitions || {};
+    const variables: Record<string, unknown> = {};
+
+    for (const [name, definition] of Object.entries(variableDefinitions)) {
+      if (definition.default_value !== undefined) {
+        variables[name] = definition.default_value;
+      }
+    }
+
+    const subEnvironmentVariables =
+      selectedEnvironment.config.environments[selectedSubEnvironment]?.variables || {};
+
+    for (const [name, value] of Object.entries(subEnvironmentVariables)) {
+      variables[name] = value;
+    }
+
+    return variables;
+  }
+
   /**
    * Resolve parameters for a flow based on its parameter mappings and accumulated data
    * This resolves everything to concrete values - no templates are supported in sequence execution
@@ -18,7 +44,11 @@ export class SequenceParameterResolver {
     accumulatedOutputs: Record<string, unknown>,
     environmentVariables: Record<string, unknown>,
     apiHosts: Record<string, string>,
-    onLog: (level: 'info' | 'debug' | 'error' | 'warning', message: string, details?: string) => void
+    onLog: (
+      level: 'info' | 'debug' | 'error' | 'warning',
+      message: string,
+      details?: string
+    ) => void
   ): ResolvedFlowExecution {
     try {
       if (!flow.flowJson) {
@@ -30,10 +60,7 @@ export class SequenceParameterResolver {
       const flowData: TestFlowData = {
         settings: {
           api_hosts: Object.fromEntries(
-            Object.entries(apiHosts).map(([apiId, url]) => [
-              apiId,
-              { url }
-            ])
+            Object.entries(apiHosts).map(([apiId, url]) => [apiId, { url }])
           ),
           // All parameters resolved to concrete values, no environment info needed
           environment: undefined,
@@ -57,52 +84,70 @@ export class SequenceParameterResolver {
 
       const resolvedParameters: Record<string, unknown> = {};
       const parameterMappings = sequenceStep.parameter_mappings || [];
-      
-      onLog('debug', `Processing ${parameterMappings.length} parameter mapping(s) for flow ${flow.name}`);
+
+      onLog(
+        'debug',
+        `Processing ${parameterMappings.length} parameter mapping(s) for flow ${flow.name}`
+      );
 
       // Resolve each flow parameter
       for (const param of flowData.parameters) {
         onLog('debug', `Processing parameter '${param.name}' (required: ${param.required})`);
-        
+
         // Check if there's a mapping for this parameter
-        const mapping = parameterMappings.find(m => m.flow_parameter_name === param.name);
-        
+        const mapping = parameterMappings.find((m) => m.flow_parameter_name === param.name);
+
         if (mapping) {
-          onLog('debug', `Found parameter mapping for '${param.name}': ${mapping.source_type} -> ${mapping.source_value}`);
-          
+          onLog(
+            'debug',
+            `Found parameter mapping for '${param.name}': ${mapping.source_type} -> ${mapping.source_value}`
+          );
+
           const resolvedValue = this.resolveParameterMapping(
-            mapping, 
-            accumulatedOutputs, 
+            mapping,
+            accumulatedOutputs,
             environmentVariables,
             onLog
           );
-          
+
           if (resolvedValue !== undefined) {
             resolvedParameters[param.name] = resolvedValue;
           }
         } else {
           // Use parameter's default value if no mapping is provided
           if (param.defaultValue !== undefined) {
-            onLog('debug', `Parameter '${param.name}' using flow default value`, String(param.defaultValue));
+            onLog(
+              'debug',
+              `Parameter '${param.name}' using flow default value`,
+              String(param.defaultValue)
+            );
             resolvedParameters[param.name] = param.defaultValue;
           } else if (param.required) {
-            onLog('warning', `Required parameter '${param.name}' has no mapping and no default value in flow ${flow.name}`);
+            onLog(
+              'warning',
+              `Required parameter '${param.name}' has no mapping and no default value in flow ${flow.name}`
+            );
           }
         }
       }
 
-      onLog('info', `Resolved ${Object.keys(resolvedParameters).length} parameters for flow ${flow.name}`,
-        `Parameters: ${Object.keys(resolvedParameters).join(', ')}`);
+      onLog(
+        'info',
+        `Resolved ${Object.keys(resolvedParameters).length} parameters for flow ${flow.name}`,
+        `Parameters: ${Object.keys(resolvedParameters).join(', ')}`
+      );
 
       return {
         flowData,
         resolvedParameters,
         environmentVariables
       };
-
     } catch (error) {
-      onLog('error', `Failed to resolve parameters for flow ${flow.name}`,
-        error instanceof Error ? error.message : String(error));
+      onLog(
+        'error',
+        `Failed to resolve parameters for flow ${flow.name}`,
+        error instanceof Error ? error.message : String(error)
+      );
       throw error;
     }
   }
@@ -115,7 +160,11 @@ export class SequenceParameterResolver {
     mapping: FlowParameterMapping,
     accumulatedOutputs: Record<string, unknown>,
     environmentVariables: Record<string, unknown>,
-    onLog: (level: 'info' | 'debug' | 'error' | 'warning', message: string, details?: string) => void
+    onLog: (
+      level: 'info' | 'debug' | 'error' | 'warning',
+      message: string,
+      details?: string
+    ) => void
   ): unknown {
     try {
       switch (mapping.source_type) {
@@ -123,24 +172,36 @@ export class SequenceParameterResolver {
           // Directly resolve environment variable
           const envValue = environmentVariables[mapping.source_value];
           if (envValue !== undefined) {
-            onLog('debug', `Environment variable '${mapping.source_value}' resolved to value`, String(envValue));
+            onLog(
+              'debug',
+              `Environment variable '${mapping.source_value}' resolved to value`,
+              String(envValue)
+            );
             return envValue;
           } else {
-            onLog('warning', `Environment variable '${mapping.source_value}' not found for parameter '${mapping.flow_parameter_name}'`, 
-              `Available environment variables: ${Object.keys(environmentVariables).join(', ')}`);
+            onLog(
+              'warning',
+              `Environment variable '${mapping.source_value}' not found for parameter '${mapping.flow_parameter_name}'`,
+              `Available environment variables: ${Object.keys(environmentVariables).join(', ')}`
+            );
             return undefined;
           }
 
         case 'previous_output':
           if (!mapping.source_flow_step) {
-            throw new Error(`Missing source_flow_step for previous_output mapping of parameter '${mapping.flow_parameter_name}'`);
+            throw new Error(
+              `Missing source_flow_step for previous_output mapping of parameter '${mapping.flow_parameter_name}'`
+            );
           }
-          
+
           const outputKey = `flow_${mapping.source_flow_step}`;
           const flowOutputs = accumulatedOutputs[outputKey] as Record<string, unknown>;
-          
+
           if (!flowOutputs) {
-            onLog('warning', `No outputs found from flow step ${mapping.source_flow_step} for parameter '${mapping.flow_parameter_name}'`);
+            onLog(
+              'warning',
+              `No outputs found from flow step ${mapping.source_flow_step} for parameter '${mapping.flow_parameter_name}'`
+            );
             return undefined;
           }
 
@@ -153,7 +214,7 @@ export class SequenceParameterResolver {
           if (mapping.data_type) {
             return this.convertValueToType(mapping.source_value, mapping.data_type);
           }
-          
+
           return mapping.source_value;
 
         case 'function':
@@ -164,8 +225,11 @@ export class SequenceParameterResolver {
             onLog('debug', `Function '${mapping.source_value}' returned:`, String(result));
             return result;
           } catch (error) {
-            onLog('error', `Failed to execute function '${mapping.source_value}'`,
-              error instanceof Error ? error.message : String(error));
+            onLog(
+              'error',
+              `Failed to execute function '${mapping.source_value}'`,
+              error instanceof Error ? error.message : String(error)
+            );
             return undefined;
           }
 
@@ -173,8 +237,11 @@ export class SequenceParameterResolver {
           throw new Error(`Unknown parameter mapping source type: ${mapping.source_type}`);
       }
     } catch (error) {
-      onLog('error', `Failed to resolve parameter mapping for '${mapping.flow_parameter_name}'`,
-        error instanceof Error ? error.message : String(error));
+      onLog(
+        'error',
+        `Failed to resolve parameter mapping for '${mapping.flow_parameter_name}'`,
+        error instanceof Error ? error.message : String(error)
+      );
       return undefined;
     }
   }
@@ -201,15 +268,22 @@ export class SequenceParameterResolver {
    * Flow outputs are primitive types only, so just do direct property access
    */
   private static extractValueFromObject(
-    obj: Record<string, unknown>, 
+    obj: Record<string, unknown>,
     propertyName: string,
-    onLog: (level: 'info' | 'debug' | 'error' | 'warning', message: string, details?: string) => void
+    onLog: (
+      level: 'info' | 'debug' | 'error' | 'warning',
+      message: string,
+      details?: string
+    ) => void
   ): unknown {
     try {
       return obj[propertyName];
     } catch (error) {
-      onLog('error', `Failed to extract property '${propertyName}' from object`,
-        error instanceof Error ? error.message : String(error));
+      onLog(
+        'error',
+        `Failed to extract property '${propertyName}' from object`,
+        error instanceof Error ? error.message : String(error)
+      );
       return undefined;
     }
   }
@@ -260,37 +334,51 @@ export class SequenceParameterResolver {
    */
   private static executeTemplateFunction(
     expression: string,
-    onLog: (level: 'info' | 'debug' | 'error' | 'warning', message: string, details?: string) => void
+    onLog: (
+      level: 'info' | 'debug' | 'error' | 'warning',
+      message: string,
+      details?: string
+    ) => void
   ): unknown {
     try {
       // Simple validation - must be a function call pattern
       const functionPattern = /^([a-zA-Z_][a-zA-Z0-9_]*)\s*\((.*?)\)\s*$/;
       const match = expression.trim().match(functionPattern);
-      
+
       if (!match) {
-        throw new Error(`Invalid function expression: ${expression}. Expected format: functionName(args)`);
+        throw new Error(
+          `Invalid function expression: ${expression}. Expected format: functionName(args)`
+        );
       }
 
       const [, functionName, argsString] = match;
-      
+
       // Check if function exists in our template functions
       const templateFunction = defaultTemplateFunctions[functionName];
       if (!templateFunction) {
-        throw new Error(`Unknown function: ${functionName}. Available functions: ${Object.keys(defaultTemplateFunctions).join(', ')}`);
+        throw new Error(
+          `Unknown function: ${functionName}. Available functions: ${Object.keys(defaultTemplateFunctions).join(', ')}`
+        );
       }
 
       // Parse arguments
       const args = this.parseArgumentsString(argsString);
-      
+
       // Execute the function
       const result = templateFunction(...args);
-      
-      onLog('debug', `Function ${functionName} executed successfully with ${args.length} argument(s)`);
-      
+
+      onLog(
+        'debug',
+        `Function ${functionName} executed successfully with ${args.length} argument(s)`
+      );
+
       return result;
     } catch (error) {
-      onLog('error', `Failed to execute template function '${expression}'`,
-        error instanceof Error ? error.message : String(error));
+      onLog(
+        'error',
+        `Failed to execute template function '${expression}'`,
+        error instanceof Error ? error.message : String(error)
+      );
       throw error;
     }
   }
@@ -309,10 +397,10 @@ export class SequenceParameterResolver {
     let inString = false;
     let stringChar = '';
     let parenDepth = 0;
-    
+
     for (let i = 0; i < argsString.length; i++) {
       const char = argsString[i];
-      
+
       if (!inString) {
         if (char === '"' || char === "'") {
           inString = true;
@@ -338,12 +426,12 @@ export class SequenceParameterResolver {
         }
       }
     }
-    
+
     // Add the last argument
     if (current.trim()) {
       args.push(this.parseArgument(current.trim()));
     }
-    
+
     return args;
   }
 
@@ -352,25 +440,25 @@ export class SequenceParameterResolver {
    */
   private static parseArgument(arg: string): unknown {
     arg = arg.trim();
-    
+
     // String literals
     if ((arg.startsWith('"') && arg.endsWith('"')) || (arg.startsWith("'") && arg.endsWith("'"))) {
       return arg.slice(1, -1); // Remove quotes
     }
-    
+
     // Number literals
     if (/^-?\d+(\.\d+)?$/.test(arg)) {
       const num = Number(arg);
       return isNaN(num) ? arg : num;
     }
-    
+
     // Boolean literals
     if (arg === 'true') return true;
     if (arg === 'false') return false;
-    
+
     // Null literal
     if (arg === 'null') return null;
-    
+
     // Default to string
     return arg;
   }
