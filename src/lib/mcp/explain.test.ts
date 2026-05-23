@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { explainAssertion, explainTemplateExpression, explainTransformationExpression, suggestTemplateExpression } from './explain';
+import {
+  explainAssertion,
+  explainTemplateExpression,
+  explainTransformationExpression,
+  suggestTemplateExpression
+} from './explain';
 
 describe('mcp explain helpers', () => {
   it('explains response template expressions in plain english', () => {
@@ -12,7 +17,9 @@ describe('mcp explain helpers', () => {
   });
 
   it('explains transformation pipelines', () => {
-    const result = explainTransformationExpression('$.data[0].steps | map($.approvers[0].user_id) | count()');
+    const result = explainTransformationExpression(
+      '$.data[0].steps | map($.approvers[0].user_id) | count()'
+    );
 
     expect(result.valid).toBe(true);
     expect(result.plainEnglish).toContain('extracts data');
@@ -50,7 +57,29 @@ describe('mcp explain helpers', () => {
   it('suggests missing endpoint index in warnings', () => {
     const result = explainTemplateExpression('{{proc:step_list_terminals.$.terminal_id}}');
 
-    expect(result.warnings.join(' ')).toContain('Step references require a -<endpointIndex> suffix');
+    expect(result.warnings.join(' ')).toContain(
+      'Step references require a -<endpointIndex> suffix'
+    );
     expect(result.warnings.join(' ')).toContain('step_list_terminals-0');
+  });
+
+  it('rejects direct environment template expressions', () => {
+    const result = explainTemplateExpression('{{env:API_TOKEN}}');
+
+    expect(result.valid).toBe(false);
+    expect(result.plainEnglish).toContain('flow parameter');
+  });
+
+  it('explains triple braces as type preservation', () => {
+    const result = explainTemplateExpression('{{{param:item_count}}}');
+
+    expect(result.valid).toBe(true);
+    expect(result.outputType).toBe('parameter value');
+  });
+
+  it('warns when transformations use triple braces', () => {
+    const result = explainTransformationExpression('{{{param:item_count}}} | int()');
+
+    expect(result.warnings.join(' ')).toContain('double-brace templates only');
   });
 });

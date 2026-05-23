@@ -2,16 +2,21 @@
 
 This guide provides instructions for Large Language Models (LLMs) like OpenAI GPT or Anthropic Claude to generate valid test flow JSON configurations for the Test-Pilot tool. Test-Pilot is a tool that helps engineers test REST APIs by creating sequences of API calls with proper data dependencies and validations.
 
+Test flows are self-contained components. They can run alone or be piped together in a test sequence. A flow must only refer to its own primitive input parameters, previous endpoint responses, previous endpoint transformations, and template functions. Do not use direct environment references in templates; environment values are supplied by mapping environment variables to flow parameters at execution time.
+
 ## Test Flow Structure Overview
 
 A test flow JSON consists of three main sections:
+
 1. **Steps**: Sequence of API calls to execute
-2. **Parameters**: User-configurable values used throughout the flow
+2. **Parameters**: Primitive user-configurable values used throughout the flow
+3. **Outputs**: Optional primitive values exported for test sequences
 
 ```json
 {
   "steps": [...],
-  "parameters": [...]
+  "parameters": [...],
+  "outputs": [...]
 }
 ```
 
@@ -54,11 +59,11 @@ Each endpoint within a step has the following structure:
 
 ## 2. Template Expressions
 
-Test-Pilot supports several types of template expressions that allow dynamic values, data dependencies, and test data generation. These templates use a `{{source:expression}}` or `{{{source:expression}}}` syntax.
+Test-Pilot supports four template sources for dynamic primitive values, data dependencies, and test data generation. These templates use a `{{source:expression}}` or `{{{source:expression}}}` syntax.
 
 ### Parameter References
 
-Use parameters for values that should be configurable by users:
+Use primitive parameters for values that should be configurable by users or supplied by a sequence:
 
 ```json
 "username": "{{param:admin_username}}",
@@ -67,7 +72,7 @@ Use parameters for values that should be configurable by users:
 
 ### Response References
 
-Reference data from previous API responses:
+Reference primitive data fields from previous API responses:
 
 ```json
 "user_id": "{{res:step1-0.$.user_id}}",
@@ -78,7 +83,7 @@ Format: `{{res:stepId-endpointIndex.jsonPath}}`
 
 ### Transformation References
 
-Reference transformed data:
+Reference primitive transformed data from previous endpoints:
 
 ```json
 "user_ids": "{{proc:step2-0.$.user_ids}}"
@@ -97,6 +102,7 @@ Generate dynamic test data:
 ```
 
 Available functions:
+
 - `uuid()` - Generate a UUID
 - `randomInt(min, max)` - Generate random integer in range
 - `randomString(length, [charset])` - Generate random string
@@ -108,7 +114,7 @@ Available functions:
 
 ## 3. Response Transformations
 
-Transformations extract and manipulate data from responses for use in subsequent steps:
+Transformations extract and manipulate data from their own endpoint response for use in subsequent steps:
 
 ```json
 "transformations": [
@@ -124,23 +130,29 @@ Transformations extract and manipulate data from responses for use in subsequent
 ```
 
 The transformation engine supports:
+
 - JSONPath expressions (e.g., `$.data[0].id`)
 - Functional pipeline operations (e.g., `map`, `filter`, `where`, `count`)
 - Logical operations (`&&`, `||`, `!`) and comparisons (`==`, `!=`, `>`, `<`, etc.)
 
+Transformations may use `{{...}}` templates for primitive flow-local values. Do not use `{{{...}}}` in transformations.
+
 ### Common Transformation Patterns
 
 1. **Extract single value**:
+
    ```
    $.field_name
    ```
 
 2. **Extract array of values**:
+
    ```
    $.items[*].id
    ```
 
 3. **Count items**:
+
    ```
    $.items | count()
    ```
@@ -201,6 +213,7 @@ Assertions validate response data against expected values:
 ## 5. Parameters
 
 ### Parameters
+
 Define user-configurable values:
 
 ```json
@@ -224,9 +237,26 @@ Define user-configurable values:
 ]
 ```
 
-Parameter types: `string`, `number`, `boolean`, `object`, `array`
+Parameter types for MCP-authored flows: `string`, `number`, `boolean`, `null`
 
-## 6. Best Practices for Flow Generation
+## 6. Flow Outputs
+
+Define primitive outputs when a flow should feed later flows in a sequence:
+
+```json
+"outputs": [
+  {
+    "name": "created_user_id",
+    "value": "{{res:step2-0.$.id}}",
+    "isTemplate": true,
+    "type": "string"
+  }
+]
+```
+
+Output types for MCP-authored flows: `string`, `number`, `boolean`, `null`.
+
+## 7. Best Practices for Flow Generation
 
 1. **Logical Sequencing**: Arrange steps in logical order (authentication → fetch data → create/update → verify)
 
@@ -245,7 +275,7 @@ Parameter types: `string`, `number`, `boolean`, `object`, `array`
 
 7. **Error Handling**: Add assertions that check for appropriate error responses when testing negative scenarios
 
-## 7. Test Flow Generation Process
+## 8. Test Flow Generation Process
 
 When generating a test flow for the user's selected APIs and context:
 
@@ -270,6 +300,7 @@ When generating a test flow for the user's selected APIs and context:
 ## 8. Example Test Flow
 
 Here's a simple example of a test flow that:
+
 1. Authenticates a user
 2. Gets a list of items
 3. Creates a new item
@@ -519,3 +550,4 @@ When creating test flows based on user input, follow these guidelines:
 8. Consider edge cases and error scenarios
 
 Remember that the generated test flow should realistically test the API functionality described by the user in their context.
+Environment values must be mapped to parameters; do not generate `{{env:...}}`.

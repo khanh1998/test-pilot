@@ -5,6 +5,7 @@ This document demonstrates how to use JSON template expressions in assertion exp
 ## Overview
 
 With template expression support, assertion expected values can now reference:
+
 - Response data from previous steps
 - Transformed data
 - Flow parameters
@@ -15,7 +16,9 @@ This enables powerful dynamic comparisons between different parts of your API fl
 ## Template Expression Syntax
 
 ### Double Braces `{{}}` - String Values
+
 Converts the result to a string:
+
 ```json
 {
   "expected_value": "{{res:step1-0.$.data.userId}}",
@@ -23,8 +26,10 @@ Converts the result to a string:
 }
 ```
 
-### Triple Braces `{{{}}}` - Preserve Data Types
-Preserves the original data type (number, boolean, object, array):
+### Triple Braces `{{{}}}` - Preserve Primitive Data Types
+
+Preserves the original primitive data type (number, boolean, string, or null):
+
 ```json
 {
   "expected_value": "{{{res:step1-0.$.user.isActive}}}",
@@ -35,43 +40,55 @@ Preserves the original data type (number, boolean, object, array):
 ## Data Sources
 
 ### Response Data (`res:`)
+
 Reference data from API responses:
+
 ```
 {{res:stepId-endpointIndex.$.jsonPath}}
 ```
 
 Examples:
+
 - `{{res:step1-0.$.data.id}}` - Get user ID from first endpoint in step 1
 - `{{res:step2-1.$.items[0].name}}` - Get name from first item in array
 - `{{res:step1-0}}` - Get entire response body
 
 ### Transformed Data (`proc:`)
+
 Reference data from transformations:
+
 ```
 {{proc:stepId-endpointIndex.$.alias.jsonPath}}
 ```
 
 Examples:
+
 - `{{proc:step1-0.$.userData.firstName}}` - Get transformed user data
 - `{{{proc:step2-0.$.calculations.total}}}` - Get numeric calculation result
 
 ### Parameters (`param:`)
+
 Reference flow parameters:
+
 ```
 {{param:parameterName}}
 ```
 
 Examples:
+
 - `{{param:apiKey}}` - Get API key parameter
 - `{{{param:maxRetries}}}` - Get retry count as number
 
 ### Functions (`func:`)
+
 Call utility functions:
+
 ```
 {{func:functionName(arg1,arg2)}}
 ```
 
 Available functions:
+
 - `{{func:randomInt(1,100)}}` - Random integer between 1-100
 - `{{func:randomString(10)}}` - Random 10-character string
 - `{{func:timestamp()}}` - Current timestamp
@@ -80,9 +97,11 @@ Available functions:
 ## Real-World Examples
 
 ### Example 1: Cross-Step Validation
+
 Validate that user ID remains consistent across different API calls:
 
 **Step 1**: Create user
+
 ```json
 {
   "id": "create-user",
@@ -96,12 +115,13 @@ Validate that user ID remains consistent across different API calls:
 ```
 
 **Step 2**: Get user details - validate same user ID
+
 ```json
 {
   "id": "validate-same-user",
   "data_id": "$.user.id",
   "operator": "equals",
-  "data_source": "response", 
+  "data_source": "response",
   "assertion_type": "json_body",
   "expected_value": "{{res:step1-0.$.data.userId}}",
   "is_template_expression": true
@@ -109,6 +129,7 @@ Validate that user ID remains consistent across different API calls:
 ```
 
 ### Example 2: Dynamic Range Validation
+
 Validate response count matches transformed calculation:
 
 ```json
@@ -117,13 +138,14 @@ Validate response count matches transformed calculation:
   "data_id": "$.meta.totalItems",
   "operator": "equals",
   "data_source": "response",
-  "assertion_type": "json_body", 
+  "assertion_type": "json_body",
   "expected_value": "{{{proc:step1-0.$.countCalculation.total}}}",
   "is_template_expression": true
 }
 ```
 
 ### Example 3: Parameter-Based Validation
+
 Use flow parameters for dynamic thresholds:
 
 ```json
@@ -139,13 +161,14 @@ Use flow parameters for dynamic thresholds:
 ```
 
 ### Example 4: Complex String Composition
+
 Build complex expected values from multiple sources:
 
 ```json
 {
   "id": "validate-message",
   "data_id": "$.notification.message",
-  "operator": "equals", 
+  "operator": "equals",
   "data_source": "response",
   "assertion_type": "json_body",
   "expected_value": "User {{res:step1-0.$.user.name}} completed {{res:step2-0.$.task.type}} task",
@@ -154,12 +177,13 @@ Build complex expected values from multiple sources:
 ```
 
 ### Example 5: Boolean Type Preservation
+
 Validate boolean values without string conversion:
 
 ```json
 {
   "id": "validate-status",
-  "data_id": "$.user.isActive", 
+  "data_id": "$.user.isActive",
   "operator": "equals",
   "data_source": "response",
   "assertion_type": "json_body",

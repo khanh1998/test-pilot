@@ -1,8 +1,11 @@
 # JSON Template Expression Guide
 
-This guide explains how to use template expressions in Test-Pilot to dynamically reference data from various sources within your test flows.
+This guide explains how to use template expressions in Test-Pilot to dynamically reference data inside a self-contained test flow.
+
+A test flow can run alone or be composed inside a test sequence. Inside the flow, templates may only reference flow parameters, previous endpoint responses, previous endpoint transformations, and functions. Environment values are not referenced directly; create a flow parameter and map that parameter to an environment variable when executing the flow.
 
 ## Table of Contents
+
 - [Basic Syntax](#basic-syntax)
 - [Available Sources](#available-sources)
 - [Response References](#response-references)
@@ -21,10 +24,12 @@ Template expressions use the following syntax:
 ```
 
 Where:
+
 - `source` specifies where the data comes from (e.g., a response, transformation, function, or parameter)
 - `path` specifies how to locate the data within that source
 
 Template expressions can be used in:
+
 - URL path parameters
 - Query parameters
 - Request headers
@@ -49,29 +54,31 @@ Unlike some templating systems that use custom parsers, Test-Pilot works with st
 
 ### Why Two Types of Expressions?
 
-This approach creates a challenge: how do we handle non-string values like numbers, booleans, or arrays? This is why we have two expression formats:
+This approach creates a challenge: how do we handle non-string primitive values like numbers and booleans? This is why we have two expression formats:
 
 1. **Double Braces (`{{...}}`)**:
    - Used for string values
    - Result is kept as a string: `"id": "{{res:step1-0.$.user.id}}"` → `"id": "5"`
 
 2. **Triple Braces (`{{{...}}}`)**:
-   - Used when you need to preserve the original data type
+   - Used when you need to preserve the original primitive data type
    - Removes the surrounding quotes: `"id": "{{{res:step1-0.$.user.id}}}"` → `"id": 5`
-   - Works for numbers, booleans, arrays, and objects
+   - Works for primitive values: strings, numbers, booleans, and null
 
-This design balances JSON compatibility with the ability to handle any data type.
+This design balances JSON compatibility with flow portability. Template expressions should resolve to primitive values.
 
 ## Available Sources
 
 Test-Pilot supports four types of data sources:
 
-| Source | Prefix | Description |
-|--------|--------|-------------|
-| Response | `res:` | References data from API responses |
-| Processed Data | `proc:` | References data from transformations |
-| Functions | `func:` | Calls built-in utility functions |
-| Parameters | `param:` | References flow parameters |
+| Source         | Prefix   | Description                          |
+| -------------- | -------- | ------------------------------------ |
+| Response       | `res:`   | References data from API responses   |
+| Processed Data | `proc:`  | References data from transformations |
+| Functions      | `func:`  | Calls built-in utility functions     |
+| Parameters     | `param:` | References flow parameters           |
+
+There is no `env:` source. Environment values enter a flow through parameter mappings.
 
 ## Response References
 
@@ -105,7 +112,7 @@ Reference data directly from previous API responses using `res:`.
 
 ## Transformation References
 
-Reference data that has been processed through transformations using `proc:`.
+Reference data that has been processed through transformations from previous endpoints using `proc:`.
 
 ### Syntax
 
@@ -168,7 +175,7 @@ The Test-Pilot platform includes several utility functions:
 
 ## Parameter References
 
-Reference flow parameters using `param:`.
+Reference primitive flow input parameters using `param:`.
 
 ### Syntax
 
@@ -209,17 +216,17 @@ Templates can be embedded in various contexts:
 
 ### Triple-Braces for Preserving Data Types
 
-When you need to insert non-string values like numbers, booleans, objects, or arrays, use the triple-brace syntax:
+When you need to insert non-string primitive values like numbers or booleans, use the triple-brace syntax:
 
 ```json
 {
   "userId": "{{{res:step1-0.$.user.id}}}", // Inserts as number: "userId": 5
-  "active": "{{{res:step1-0.$.user.active}}}", // Inserts as boolean: "active": true
-  "tags": "{{{res:step1-0.$.user.tags}}}" // Inserts as array: "tags": ["admin", "user"]
+  "active": "{{{res:step1-0.$.user.active}}}" // Inserts as boolean: "active": true
 }
 ```
 
 When processed, the parser will:
+
 1. First evaluate the expression inside `{{{...}}}`
 2. Then remove the surrounding quotes from the JSON string
 3. Insert the value with its original data type into the JSON structure
@@ -251,7 +258,7 @@ You can use different template expressions in the same request:
 
 ```json
 {
-  "metadata": "{{{proc:step1-0.$.extractedMetadata}}}"
+  "metadataId": "{{{proc:step1-0.$.metadata_id}}}"
 }
 ```
 

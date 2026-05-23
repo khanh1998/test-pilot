@@ -18,7 +18,7 @@ export interface ExplanationResult {
 }
 
 export interface TemplateSuggestionInput {
-  source: 'res' | 'proc' | 'param' | 'func' | 'env';
+  source: 'res' | 'proc' | 'param' | 'func';
   preserveType?: boolean;
   stepEndpointRef?: string;
   endpointIndex?: number;
@@ -26,7 +26,6 @@ export interface TemplateSuggestionInput {
   alias?: string;
   nestedPath?: string;
   parameterName?: string;
-  environmentName?: string;
   functionName?: string;
   functionArgs?: Array<string | number | boolean | null>;
 }

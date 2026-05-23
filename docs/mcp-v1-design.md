@@ -10,6 +10,8 @@ Build a first MCP surface that helps a coding assistant:
 - run the flow and report the result
 - explain templates, transformations, and assertions in plain English
 
+The MCP should preserve Test-Pilot's component model: each flow is self-contained, has primitive inputs and primitive outputs, and can run alone or be composed in a sequence. Environment values and previous flow outputs are supplied to flow parameters by execution/sequence mappings, not by direct templates inside the flow.
+
 The assistant is expected to understand the business sequence from the codebase. The MCP is responsible for Test-Pilot-specific construction, validation, execution, and explanation.
 
 ## V1 Tools
@@ -21,6 +23,7 @@ The assistant is expected to understand the business sequence from the codebase.
 Purpose: find candidate endpoints for a feature or test plan.
 
 Backed by:
+
 - `src/lib/server/service/api_endpoints/search_endpoints.ts`
 
 Suggested input:
@@ -55,6 +58,7 @@ Suggested output:
 Purpose: return the request and response shape needed to configure a step.
 
 Backed by:
+
 - `src/lib/server/service/api_endpoints/get_endpoint_details.ts`
 
 #### `list_test_flows`
@@ -62,6 +66,7 @@ Backed by:
 Purpose: find reusable flows before building a new one.
 
 Backed by:
+
 - `src/lib/server/service/test_flows/list_test_flows.ts`
 
 #### `get_test_flow`
@@ -69,6 +74,7 @@ Backed by:
 Purpose: load full flow JSON and the endpoint definitions it references.
 
 Backed by:
+
 - `src/lib/server/service/test_flows/get_test_flow.ts`
 
 ### Flow Authoring
@@ -78,6 +84,7 @@ Backed by:
 Purpose: create a draft flow shell with metadata, API hosts, and parameters.
 
 Initial output shape should match the runtime flow model in:
+
 - `src/lib/components/test-flows/types.ts`
 
 #### `add_step`
@@ -135,12 +142,8 @@ Example output:
 ```json
 {
   "valid": false,
-  "errors": [
-    "step4 path param ref_id references step5-0, which runs later"
-  ],
-  "warnings": [
-    "Double-brace expression in body field order_ids will be serialized as string"
-  ]
+  "errors": ["step4 path param ref_id references step5-0, which runs later"],
+  "warnings": ["Double-brace expression in body field order_ids will be serialized as string"]
 }
 ```
 
@@ -151,6 +154,7 @@ Example output:
 Purpose: execute the selected flow with environment and parameter overrides.
 
 Primary execution logic already exists in:
+
 - `src/lib/flow-runner/execution-engine.ts`
 
 #### `get_flow_run_report`
@@ -158,6 +162,7 @@ Primary execution logic already exists in:
 Purpose: summarize execution for a backend engineer.
 
 Recommended output:
+
 - pass/fail summary
 - failed step and endpoint
 - assertion failures
@@ -171,6 +176,7 @@ Recommended output:
 Purpose: explain a template, transformation, or assertion in plain English.
 
 Backed by:
+
 - `src/lib/mcp/explain.ts`
 
 Recommended output fields:
@@ -182,9 +188,7 @@ Recommended output fields:
   "summary": "Response reference",
   "plainEnglish": "Gets $.ref_id from the response body of step3-0.",
   "outputType": "string",
-  "dependencies": [
-    { "kind": "response", "reference": "step3-0" }
-  ],
+  "dependencies": [{ "kind": "response", "reference": "step3-0" }],
   "warnings": []
 }
 ```
@@ -205,6 +209,7 @@ Purpose: narrate a complete flow step-by-step, including:
 Purpose: generate canonical template syntax from structured intent and pair it with a readable explanation.
 
 Backed by:
+
 - `src/lib/mcp/explain.ts`
 
 ## Why Explainability Is In V1
@@ -216,6 +221,8 @@ Templates, transformations, and assertions are powerful but hard to read:
 - assertion definitions live in `src/lib/assertions`
 
 If the MCP only validates expressions, the assistant will still produce brittle flow edits. V1 should instead help the assistant and the engineer understand exactly what a dynamic reference means.
+
+Valid flow template sources are `param`, `res`, `proc`, and `func`. Direct `env` templates are invalid; use a flow parameter mapped to an environment variable instead.
 
 ## Example V1 Assistant Workflow
 

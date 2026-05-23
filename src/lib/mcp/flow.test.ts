@@ -1,5 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { addAssertionToFlow, addFlowParameter, addStepToFlow, createExpectationAssertion, createFlowDraft, linkEnvironmentToFlow, linkStepOutput, setBodyField, setHeader, setPathParam, setQueryParam, updateStepInFlow, validateFlowDocument } from './flow';
+import {
+  addAssertionToFlow,
+  addFlowParameter,
+  addStepToFlow,
+  addTransformationToFlow,
+  createExpectationAssertion,
+  createFlowDraft,
+  linkEnvironmentToFlow,
+  linkStepOutput,
+  setBodyField,
+  setFlowOutput,
+  setHeader,
+  setPathParam,
+  setQueryParam,
+  updateStepInFlow,
+  validateFlowDocument
+} from './flow';
 
 describe('mcp flow helpers', () => {
   it('creates a draft and appends steps', () => {
@@ -15,7 +31,9 @@ describe('mcp flow helpers', () => {
 
     const updated = addStepToFlow(flow, {
       label: 'Get user info',
-      endpoints: [{ api_id: 1, endpoint_id: 10, pathParams: {}, queryParams: {}, headers: [], body: null }]
+      endpoints: [
+        { api_id: 1, endpoint_id: 10, pathParams: {}, queryParams: {}, headers: [], body: null }
+      ]
     });
 
     expect(updated.flowData.steps).toHaveLength(1);
@@ -97,12 +115,16 @@ describe('mcp flow helpers', () => {
       addStepToFlow(flow, {
         step_id: 'step_list_terminals',
         label: 'List terminals',
-        endpoints: [{ api_id: 1, endpoint_id: 10, pathParams: {}, queryParams: {}, headers: [], body: null }]
+        endpoints: [
+          { api_id: 1, endpoint_id: 10, pathParams: {}, queryParams: {}, headers: [], body: null }
+        ]
       }),
       {
         step_id: 'step_create_order',
         label: 'Create order',
-        endpoints: [{ api_id: 1, endpoint_id: 20, pathParams: {}, queryParams: {}, headers: [], body: null }]
+        endpoints: [
+          { api_id: 1, endpoint_id: 20, pathParams: {}, queryParams: {}, headers: [], body: null }
+        ]
       }
     );
 
@@ -142,9 +164,13 @@ describe('mcp flow helpers', () => {
       }
     });
 
-    expect((withAssertion.flowData.steps[1].endpoints[0].body as any).consumer.name).toBe('Alice');
+    const body = withAssertion.flowData.steps[1].endpoints[0].body as {
+      consumer: { name: string };
+      terminal: { id: string };
+    };
+    expect(body.consumer.name).toBe('Alice');
     expect(withAssertion.flowData.steps[1].endpoints[0].queryParams?.include).toBe('details');
-    expect((withAssertion.flowData.steps[1].endpoints[0].body as any).terminal.id).toBe('{{{proc:step_list_terminals-0.$.terminal_id}}}');
+    expect(body.terminal.id).toBe('{{{proc:step_list_terminals-0.$.terminal_id}}}');
     expect(withAssertion.flowData.steps[1].endpoints[0].assertions).toHaveLength(1);
   });
 
@@ -173,7 +199,102 @@ describe('mcp flow helpers', () => {
     expect(withEnvironment.flowData.parameters).toHaveLength(1);
     expect(withEnvironment.environmentId).toBe(99);
     expect(withEnvironment.flowData.settings.environment?.subEnvironment).toBe('uat');
-    expect(withEnvironment.flowData.settings.linkedEnvironment?.parameterMappings.consumer_token).toBe('CONSUMER_TOKEN');
+    expect(
+      withEnvironment.flowData.settings.linkedEnvironment?.parameterMappings.consumer_token
+    ).toBe('CONSUMER_TOKEN');
+  });
+
+  it('rejects direct environment templates and non-primitive parameters', () => {
+    const flow = createFlowDraft({
+      name: 'Invalid env flow',
+      apiHosts: {
+        '1': { url: 'https://api.example.com', name: 'Food API' }
+      },
+      parameters: [{ name: 'payload', type: 'object', required: true }]
+    });
+
+    const updated = addStepToFlow(flow, {
+      label: 'Create order',
+      endpoints: [
+        {
+          api_id: 1,
+          endpoint_id: 20,
+          pathParams: {},
+          queryParams: {},
+          headers: [{ name: 'Authorization', value: 'Bearer {{env:TOKEN}}', enabled: true }],
+          body: null
+        }
+      ]
+    });
+
+    const result = validateFlowDocument(updated);
+    expect(result.valid).toBe(false);
+    expect(result.errors.join(' ')).toContain('Invalid environment reference');
+    expect(result.errors.join(' ')).toContain('non-primitive type');
+  });
+
+  it('rejects triple-brace templates inside transformations', () => {
+    const flow = createFlowDraft({
+      name: 'Bad transformation',
+      parameters: [{ name: 'limit', type: 'number', required: true }],
+      apiHosts: {
+        '1': { url: 'https://api.example.com', name: 'Food API' }
+      }
+    });
+
+    const updated = addStepToFlow(flow, {
+      label: 'List',
+      endpoints: [
+        {
+          api_id: 1,
+          endpoint_id: 20,
+          pathParams: {},
+          queryParams: {},
+          headers: [],
+          body: null,
+          transformations: [{ alias: 'count', expression: '{{{param:limit}}} | int()' }]
+        }
+      ]
+    });
+
+    const result = validateFlowDocument(updated);
+    expect(result.valid).toBe(false);
+    expect(result.errors.join(' ')).toContain('Transformations use {{...}} templates only');
+  });
+
+  it('upserts transformations and primitive flow outputs', () => {
+    const flow = createFlowDraft({
+      name: 'Output flow',
+      apiHosts: {
+        '1': { url: 'https://api.example.com', name: 'Food API' }
+      }
+    });
+
+    const withStep = addStepToFlow(flow, {
+      step_id: 'step_create',
+      label: 'Create',
+      endpoints: [
+        { api_id: 1, endpoint_id: 20, pathParams: {}, queryParams: {}, headers: [], body: null }
+      ]
+    });
+
+    const withTransformation = addTransformationToFlow(withStep, {
+      stepId: 'step_create',
+      alias: 'created_id',
+      expression: '$.id'
+    });
+
+    const withOutput = setFlowOutput(withTransformation, {
+      name: 'created_id',
+      value: '{{proc:step_create-0.$.created_id}}',
+      isTemplate: true,
+      type: 'string'
+    });
+
+    const result = validateFlowDocument(withOutput);
+    expect(result.valid).toBe(true);
+    expect(withOutput.flowData.steps[0].endpoints[0].transformations?.[0].alias).toBe('created_id');
+    expect(withOutput.flowData.outputs?.[0].name).toBe('created_id');
   });
 
   it('rejects steps that use endpoints outside the selected API scope', () => {
@@ -186,7 +307,9 @@ describe('mcp flow helpers', () => {
     expect(() =>
       addStepToFlow(flow, {
         label: 'Wrong API',
-        endpoints: [{ api_id: 2, endpoint_id: 10, pathParams: {}, queryParams: {}, headers: [], body: null }]
+        endpoints: [
+          { api_id: 2, endpoint_id: 10, pathParams: {}, queryParams: {}, headers: [], body: null }
+        ]
       })
     ).toThrow(/outside this draft's selected API scope/);
   });
@@ -217,7 +340,9 @@ describe('mcp flow helpers', () => {
     const withStep = addStepToFlow(flow, {
       step_id: 'step_lookup',
       label: 'Lookup',
-      endpoints: [{ api_id: 1, endpoint_id: 10, pathParams: {}, queryParams: {}, headers: [], body: null }]
+      endpoints: [
+        { api_id: 1, endpoint_id: 10, pathParams: {}, queryParams: {}, headers: [], body: null }
+      ]
     });
 
     const updatedStep = updateStepInFlow(withStep, {

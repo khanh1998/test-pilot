@@ -111,6 +111,21 @@ export function explainTemplateExpression(expression: string): ExplanationResult
     };
   }
 
+  if (parsed.source === 'env') {
+    return {
+      kind: 'template',
+      valid: false,
+      summary: 'Invalid environment reference',
+      plainEnglish:
+        'Test flows cannot reference environment variables directly. Create a flow parameter and map that parameter to an environment variable when the flow is executed.',
+      outputType: 'unknown',
+      dependencies: [],
+      warnings: [
+        'Use {{param:name}} inside the flow, then bind that parameter to an environment variable.'
+      ]
+    };
+  }
+
   const warnings: string[] = [];
   const dependencies: ExplanationDependency[] = [];
 
@@ -118,17 +133,25 @@ export function explainTemplateExpression(expression: string): ExplanationResult
     const match = parsed.path.match(/^([A-Za-z0-9_-]+-\d+)(\.(.+))?$/);
     const stepEndpointRef = match?.[1];
     const jsonPath = match?.[3];
-    const possibleMissingEndpointIndex = !stepEndpointRef ? parsed.path.match(/^([A-Za-z0-9_-]+)(\.(.+))?$/) : null;
+    const possibleMissingEndpointIndex = !stepEndpointRef
+      ? parsed.path.match(/^([A-Za-z0-9_-]+)(\.(.+))?$/)
+      : null;
 
     if (stepEndpointRef) {
       dependencies.push({ kind: 'response', reference: stepEndpointRef });
     } else {
       const candidate = possibleMissingEndpointIndex ? possibleMissingEndpointIndex[1] : undefined;
-      const candidateJsonPath = possibleMissingEndpointIndex ? possibleMissingEndpointIndex[3] : undefined;
+      const candidateJsonPath = possibleMissingEndpointIndex
+        ? possibleMissingEndpointIndex[3]
+        : undefined;
       if (candidate) {
-        warnings.push(`Response reference is missing an endpoint index. Did you mean ${formatTemplate('res', `${candidate}-0${candidateJsonPath ? `.${candidateJsonPath}` : ''}`, parsed.preserveType)}?`);
+        warnings.push(
+          `Response reference is missing an endpoint index. Did you mean ${formatTemplate('res', `${candidate}-0${candidateJsonPath ? `.${candidateJsonPath}` : ''}`, parsed.preserveType)}?`
+        );
       } else {
-        warnings.push('Response reference does not include a valid step-endpoint reference like step1-0.');
+        warnings.push(
+          'Response reference does not include a valid step-endpoint reference like step1-0.'
+        );
       }
     }
 
@@ -145,7 +168,10 @@ export function explainTemplateExpression(expression: string): ExplanationResult
       dependencies,
       warnings: parsed.preserveType
         ? warnings
-        : [...warnings, 'Double braces are usually rendered as strings inside JSON bodies.']
+        : [
+            ...warnings,
+            'Double braces are rendered as strings when embedded in JSON strings. Use triple braces in JSON bodies when the primitive type must be preserved.'
+          ]
     };
   }
 
@@ -167,9 +193,13 @@ export function explainTemplateExpression(expression: string): ExplanationResult
       dependencies.push({ kind: 'transformation', reference: `${stepEndpointRef}:${alias}` });
     } else {
       if (candidateMatch) {
-        warnings.push(`Transformation reference is missing an endpoint index. Did you mean ${formatTemplate('proc', `${candidateMatch[1]}-0.$.${candidateMatch[2]}`, parsed.preserveType)}? Step references require a -<endpointIndex> suffix.`);
+        warnings.push(
+          `Transformation reference is missing an endpoint index. Did you mean ${formatTemplate('proc', `${candidateMatch[1]}-0.$.${candidateMatch[2]}`, parsed.preserveType)}? Step references require a -<endpointIndex> suffix.`
+        );
       } else {
-        warnings.push('Transformation reference should include a step-endpoint prefix like step2-0.$.alias.');
+        warnings.push(
+          'Transformation reference should include a step-endpoint prefix like step2-0.$.alias.'
+        );
       }
     }
 
@@ -196,19 +226,6 @@ export function explainTemplateExpression(expression: string): ExplanationResult
       valid: true,
       summary: 'Flow parameter reference',
       plainEnglish: `Reads flow parameter "${parsed.path}".`,
-      outputType: guessTemplateOutputType(parsed.source, parsed.preserveType),
-      dependencies,
-      warnings
-    };
-  }
-
-  if (parsed.source === 'env') {
-    dependencies.push({ kind: 'environment', reference: parsed.path });
-    return {
-      kind: 'template',
-      valid: true,
-      summary: 'Environment variable reference',
-      plainEnglish: `Reads environment variable "${parsed.path}".`,
       outputType: guessTemplateOutputType(parsed.source, parsed.preserveType),
       dependencies,
       warnings
@@ -267,7 +284,11 @@ const transformOperationDescriptions: Record<string, string> = {
   transform: 'runs a nested transformation'
 };
 
-function explainTransformStage(stage: string): { summary: string; outputType: string; warnings: string[] } {
+function explainTransformStage(stage: string): {
+  summary: string;
+  outputType: string;
+  warnings: string[];
+} {
   if (stage.startsWith('{{')) {
     const explanation = explainTemplateExpression(stage);
     return {
@@ -299,7 +320,8 @@ function explainTransformStage(stage: string): { summary: string; outputType: st
   const argsText = rawArgs.trim() ? ` with arguments ${rawArgs.trim()}` : '';
 
   let outputType = 'transformed value';
-  if (name === 'count' || name === 'sum' || name === 'int' || name === 'float') outputType = 'number';
+  if (name === 'count' || name === 'sum' || name === 'int' || name === 'float')
+    outputType = 'number';
   if (name === 'first' || name === 'last' || name === 'at') outputType = 'single item';
   if (name === 'bool') outputType = 'boolean';
   if (name === 'string') outputType = 'string';
@@ -327,9 +349,24 @@ export function explainTransformationExpression(expression: string): Explanation
   }
 
   const warnings: string[] = [];
+  const templateExplanations = findTemplateExpressions(expression).map((template) => ({
+    template,
+    explanation: explainTemplateExpression(template)
+  }));
   const dependencies = dedupeDependencies(
-    findTemplateExpressions(expression).flatMap((template) => explainTemplateExpression(template).dependencies)
+    templateExplanations.flatMap(({ explanation }) => explanation.dependencies)
   );
+
+  for (const { template, explanation } of templateExplanations) {
+    if (template.startsWith('{{{')) {
+      warnings.push(
+        'Transformations use double-brace templates only; triple braces are only for JSON request body type preservation.'
+      );
+    }
+    if (!explanation.valid) {
+      warnings.push(...explanation.warnings);
+    }
+  }
 
   const stageExplanations = stages.map(explainTransformStage);
   warnings.push(...stageExplanations.flatMap((stage) => stage.warnings));
@@ -402,7 +439,10 @@ export function explainAssertion(assertion: Assertion): ExplanationResult {
     }
   }
 
-  if ((assertion.operator === 'between' || assertion.operator === 'not_between') && !Array.isArray(assertion.expected_value)) {
+  if (
+    (assertion.operator === 'between' || assertion.operator === 'not_between') &&
+    !Array.isArray(assertion.expected_value)
+  ) {
     warnings.push(`Operator "${assertion.operator}" usually expects a two-item array.`);
   }
 
@@ -411,7 +451,9 @@ export function explainAssertion(assertion: Assertion): ExplanationResult {
     valid: true,
     summary: 'Assertion rule',
     plainEnglish:
-      assertion.operator === 'is_null' || assertion.operator === 'is_not_null' || assertion.operator === 'exists'
+      assertion.operator === 'is_null' ||
+      assertion.operator === 'is_not_null' ||
+      assertion.operator === 'exists'
         ? `Checks that ${target} ${operatorText}.`
         : `Checks that ${target} ${operatorText} ${JSON.stringify(assertion.expected_value)}.`,
     outputType: 'boolean',
@@ -420,7 +462,9 @@ export function explainAssertion(assertion: Assertion): ExplanationResult {
   };
 }
 
-export function suggestTemplateExpression(input: TemplateSuggestionInput): TemplateSuggestionResult {
+export function suggestTemplateExpression(
+  input: TemplateSuggestionInput
+): TemplateSuggestionResult {
   let expression = '';
   const stepRef =
     input.stepEndpointRef && /-\d+$/.test(input.stepEndpointRef)
@@ -433,7 +477,11 @@ export function suggestTemplateExpression(input: TemplateSuggestionInput): Templ
     if (!stepRef) {
       throw new Error('stepEndpointRef is required for response references');
     }
-    expression = formatTemplate(input.source, `${stepRef}${input.jsonPath ? `.${input.jsonPath}` : ''}`, input.preserveType);
+    expression = formatTemplate(
+      input.source,
+      `${stepRef}${input.jsonPath ? `.${input.jsonPath}` : ''}`,
+      input.preserveType
+    );
   } else if (input.source === 'proc') {
     if (!stepRef || !input.alias) {
       throw new Error('stepEndpointRef and alias are required for transformation references');
@@ -445,11 +493,6 @@ export function suggestTemplateExpression(input: TemplateSuggestionInput): Templ
       throw new Error('parameterName is required for parameter references');
     }
     expression = formatTemplate(input.source, input.parameterName, input.preserveType);
-  } else if (input.source === 'env') {
-    if (!input.environmentName) {
-      throw new Error('environmentName is required for environment references');
-    }
-    expression = formatTemplate(input.source, input.environmentName, input.preserveType);
   } else {
     if (!input.functionName) {
       throw new Error('functionName is required for function references');

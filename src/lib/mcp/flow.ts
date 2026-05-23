@@ -1,8 +1,19 @@
 import { randomUUID } from 'node:crypto';
 import { FlowValidator } from '$lib/flow-runner/validator';
-import type { TestFlowData, FlowStep, StepEndpoint, FlowParameter, EnvironmentMapping } from '$lib/components/test-flows/types';
+import type {
+  TestFlowData,
+  FlowStep,
+  StepEndpoint,
+  FlowParameter,
+  EnvironmentMapping,
+  FlowOutput
+} from '$lib/components/test-flows/types';
 import type { Assertion } from '$lib/assertions/types';
-import { explainAssertion, explainTemplateExpression, explainTransformationExpression } from './explain';
+import {
+  explainAssertion,
+  explainTemplateExpression,
+  explainTransformationExpression
+} from './explain';
 import { suggestTemplateExpression } from './explain';
 
 export interface FlowDocument {
@@ -19,6 +30,16 @@ export interface FlowValidationResult {
   valid: boolean;
   errors: string[];
   warnings: string[];
+}
+
+const primitiveTypes = new Set(['string', 'number', 'boolean', 'null']);
+
+function isPrimitiveType(type: string | undefined): boolean {
+  return !type || primitiveTypes.has(type);
+}
+
+function templateExpressions(input: string): string[] {
+  return input.match(/\{\{\{[^}]+\}\}\}|\{\{[^}]+\}\}/g) ?? [];
 }
 
 export interface ExpectationInput {
@@ -73,7 +94,7 @@ export function createFlowDraft(input: {
         environment:
           input.environmentId !== undefined
             ? {
-        environmentId: input.environmentId,
+                environmentId: input.environmentId,
                 subEnvironment: input.subEnvironment ?? null
               }
             : undefined
@@ -140,7 +161,8 @@ export function updateStepInFlow(document: FlowDocument, input: UpdateStepInput)
     label: input.label ?? current.label,
     endpoints: input.endpoints ?? current.endpoints,
     timeout: input.timeout ?? current.timeout,
-    clearCookiesBeforeExecution: input.clearCookiesBeforeExecution ?? current.clearCookiesBeforeExecution
+    clearCookiesBeforeExecution:
+      input.clearCookiesBeforeExecution ?? current.clearCookiesBeforeExecution
   };
 
   return next;
@@ -253,7 +275,9 @@ export function setHeader(
   const next = cloneDocument(document);
   const endpoint = getEndpoint(next, input.stepId, input.endpointIndex ?? 0);
   const headers = endpoint.headers ?? [];
-  const filtered = headers.filter((header) => header.name.toLowerCase() !== input.name.toLowerCase());
+  const filtered = headers.filter(
+    (header) => header.name.toLowerCase() !== input.name.toLowerCase()
+  );
   filtered.push({
     name: input.name,
     value: input.value,
@@ -320,7 +344,7 @@ export function createExpectationAssertion(input: ExpectationInput): Assertion {
   const dataId =
     input.kind === 'equals' && input.headerName
       ? input.headerName
-      : input.jsonPath ?? input.headerName;
+      : (input.jsonPath ?? input.headerName);
 
   if (!dataId) {
     throw new Error(`${input.kind} expectations require jsonPath or headerName.`);
@@ -358,7 +382,9 @@ export function createExpectationAssertion(input: ExpectationInput): Assertion {
 
   if (input.kind === 'equals') {
     return {
-      id: input.id ?? `assert_${slugifyExpectationId(dataId)}_equals_${slugifyExpectationId(String(input.expectedValue ?? 'value')) || randomUUID()}`,
+      id:
+        input.id ??
+        `assert_${slugifyExpectationId(dataId)}_equals_${slugifyExpectationId(String(input.expectedValue ?? 'value')) || randomUUID()}`,
       enabled,
       data_source: dataSource,
       assertion_type: assertionType,
@@ -381,6 +407,49 @@ export function addFlowParameter(document: FlowDocument, parameter: FlowParamete
     next.flowData.parameters.push(parameter);
   }
 
+  return next;
+}
+
+export function addTransformationToFlow(
+  document: FlowDocument,
+  input: {
+    stepId: string;
+    endpointIndex?: number;
+    alias: string;
+    expression: string;
+  }
+): FlowDocument {
+  const next = cloneDocument(document);
+  const endpoint = getEndpoint(next, input.stepId, input.endpointIndex ?? 0);
+  const transformations = endpoint.transformations ?? [];
+  const existingIndex = transformations.findIndex((item) => item.alias === input.alias);
+  const transformation = {
+    alias: input.alias,
+    expression: input.expression
+  };
+
+  if (existingIndex >= 0) {
+    transformations[existingIndex] = transformation;
+  } else {
+    transformations.push(transformation);
+  }
+
+  endpoint.transformations = transformations;
+  return next;
+}
+
+export function setFlowOutput(document: FlowDocument, output: FlowOutput): FlowDocument {
+  const next = cloneDocument(document);
+  const outputs = next.flowData.outputs ?? [];
+  const existingIndex = outputs.findIndex((item) => item.name === output.name);
+
+  if (existingIndex >= 0) {
+    outputs[existingIndex] = output;
+  } else {
+    outputs.push(output);
+  }
+
+  next.flowData.outputs = outputs;
   return next;
 }
 
@@ -453,7 +522,9 @@ export function linkStepOutput(
     endpoint.pathParams[input.fieldName] = expression;
   } else {
     const existingHeaders = endpoint.headers ?? [];
-    const nextHeaders = existingHeaders.filter((header) => header.name.toLowerCase() !== input.fieldName.toLowerCase());
+    const nextHeaders = existingHeaders.filter(
+      (header) => header.name.toLowerCase() !== input.fieldName.toLowerCase()
+    );
     nextHeaders.push({
       name: input.fieldName,
       value: expression,
@@ -465,7 +536,11 @@ export function linkStepOutput(
   return { document: next, expression };
 }
 
-function collectStrings(value: unknown, path: string, results: Array<{ path: string; value: string }>): void {
+function collectStrings(
+  value: unknown,
+  path: string,
+  results: Array<{ path: string; value: string }>
+): void {
   if (typeof value === 'string') {
     results.push({ path, value });
     return;
@@ -501,7 +576,7 @@ function validateTemplateReference(
   const warnings = [...explanation.warnings];
 
   if (!explanation.valid) {
-    errors.push(`Invalid template at ${currentStepId}: ${expression}`);
+    errors.push(`Invalid template at ${currentStepId}: ${expression} (${explanation.summary})`);
     return { valid: false, errors, warnings };
   }
 
@@ -515,7 +590,9 @@ function validateTemplateReference(
       if (dependencyIndex === undefined) {
         errors.push(`Template ${expression} references unknown step ${stepId}.`);
       } else if (dependencyIndex >= currentIndex) {
-        errors.push(`Template ${expression} references ${dependency.reference}, which does not run before ${currentStepId}.`);
+        errors.push(
+          `Template ${expression} references ${dependency.reference}, which does not run before ${currentStepId}.`
+        );
       }
     }
 
@@ -526,13 +603,17 @@ function validateTemplateReference(
       if (dependencyIndex === undefined) {
         errors.push(`Transformation template ${expression} references unknown step ${stepId}.`);
       } else if (dependencyIndex >= currentIndex) {
-        errors.push(`Transformation template ${expression} references ${stepEndpointRef}, which does not run before ${currentStepId}.`);
+        errors.push(
+          `Transformation template ${expression} references ${stepEndpointRef}, which does not run before ${currentStepId}.`
+        );
       } else {
         const step = flowData.steps.find((item) => item.step_id === stepId);
         const endpointIndex = Number(stepEndpointRef.split('-').pop());
         const endpoint = step?.endpoints?.[endpointIndex];
         if (!endpoint || !getTransformationAliases(endpoint).has(alias)) {
-          errors.push(`Transformation template ${expression} references missing alias "${alias}" on ${stepEndpointRef}.`);
+          errors.push(
+            `Transformation template ${expression} references missing alias "${alias}" on ${stepEndpointRef}.`
+          );
         }
       }
     }
@@ -540,7 +621,62 @@ function validateTemplateReference(
     if (dependency.kind === 'parameter') {
       const hasParameter = flowData.parameters.some((item) => item.name === dependency.reference);
       if (!hasParameter) {
-        errors.push(`Template ${expression} references unknown parameter "${dependency.reference}".`);
+        errors.push(
+          `Template ${expression} references unknown parameter "${dependency.reference}".`
+        );
+      }
+    }
+  }
+
+  return { valid: errors.length === 0, errors, warnings };
+}
+
+function validateOutputTemplateReference(
+  expression: string,
+  flowData: TestFlowData
+): FlowValidationResult {
+  const explanation = explainTemplateExpression(expression);
+  const errors: string[] = [];
+  const warnings = [...explanation.warnings];
+
+  if (!explanation.valid) {
+    errors.push(`Invalid output template: ${expression} (${explanation.summary})`);
+    return { valid: false, errors, warnings };
+  }
+
+  const order = stepOrder(flowData);
+
+  for (const dependency of explanation.dependencies) {
+    if (dependency.kind === 'response') {
+      const stepId = dependency.reference.split('-').slice(0, -1).join('-');
+      if (order[stepId] === undefined) {
+        errors.push(`Output template ${expression} references unknown step ${stepId}.`);
+      }
+    }
+
+    if (dependency.kind === 'transformation') {
+      const [stepEndpointRef, alias] = dependency.reference.split(':');
+      const stepId = stepEndpointRef.split('-').slice(0, -1).join('-');
+      if (order[stepId] === undefined) {
+        errors.push(`Output template ${expression} references unknown step ${stepId}.`);
+      } else {
+        const step = flowData.steps.find((item) => item.step_id === stepId);
+        const endpointIndex = Number(stepEndpointRef.split('-').pop());
+        const endpoint = step?.endpoints?.[endpointIndex];
+        if (!endpoint || !getTransformationAliases(endpoint).has(alias)) {
+          errors.push(
+            `Output template ${expression} references missing alias "${alias}" on ${stepEndpointRef}.`
+          );
+        }
+      }
+    }
+
+    if (dependency.kind === 'parameter') {
+      const hasParameter = flowData.parameters.some((item) => item.name === dependency.reference);
+      if (!hasParameter) {
+        errors.push(
+          `Output template ${expression} references unknown parameter "${dependency.reference}".`
+        );
       }
     }
   }
@@ -553,20 +689,28 @@ export function validateFlowDocument(document: FlowDocument): FlowValidationResu
   const errors = [...validator.errors];
   const warnings: string[] = [];
 
+  for (const parameter of document.flowData.parameters) {
+    if (!isPrimitiveType(parameter.type)) {
+      errors.push(
+        `Flow parameter "${parameter.name}" has non-primitive type "${parameter.type}". MCP-authored flow parameters must be string, number, boolean, or null.`
+      );
+    }
+  }
+
   if (!FlowValidator.validateApiHosts(document.flowData)) {
     warnings.push('No API hosts are configured yet. Execution will require at least one host.');
   }
 
   for (const step of document.flowData.steps) {
-    const stepTemplates: Array<{ path: string; value: string }> = [];
     for (const endpoint of step.endpoints) {
+      const stepTemplates: Array<{ path: string; value: string }> = [];
       collectStrings(endpoint.pathParams, `${step.step_id}.pathParams`, stepTemplates);
       collectStrings(endpoint.queryParams, `${step.step_id}.queryParams`, stepTemplates);
       collectStrings(endpoint.body, `${step.step_id}.body`, stepTemplates);
       collectStrings(endpoint.headers, `${step.step_id}.headers`, stepTemplates);
 
       for (const item of stepTemplates) {
-        const templates = item.value.match(/\{\{\{[^}]+\}\}\}|\{\{[^}]+\}\}/g) ?? [];
+        const templates = templateExpressions(item.value);
         for (const template of templates) {
           const result = validateTemplateReference(step.step_id, template, document.flowData);
           errors.push(...result.errors.map((message) => `${item.path}: ${message}`));
@@ -575,22 +719,55 @@ export function validateFlowDocument(document: FlowDocument): FlowValidationResu
       }
 
       for (const transformation of endpoint.transformations ?? []) {
+        for (const template of templateExpressions(transformation.expression)) {
+          if (template.startsWith('{{{')) {
+            errors.push(
+              `${step.step_id}.transformations.${transformation.alias}: Transformations use {{...}} templates only; {{{...}}} is only for JSON request bodies.`
+            );
+          }
+          const result = validateTemplateReference(step.step_id, template, document.flowData);
+          errors.push(
+            ...result.errors.map(
+              (message) => `${step.step_id}.transformations.${transformation.alias}: ${message}`
+            )
+          );
+          warnings.push(
+            ...result.warnings.map(
+              (message) => `${step.step_id}.transformations.${transformation.alias}: ${message}`
+            )
+          );
+        }
+
         const explanation = explainTransformationExpression(transformation.expression);
-        warnings.push(...explanation.warnings
-          .filter((message) => !message.includes('Could not classify this pipeline stage'))
-          .map((message) => `${step.step_id}.transformations.${transformation.alias}: ${message}`));
+        warnings.push(
+          ...explanation.warnings
+            .filter((message) => !message.includes('Could not classify this pipeline stage'))
+            .map((message) => `${step.step_id}.transformations.${transformation.alias}: ${message}`)
+        );
       }
 
       for (const assertion of endpoint.assertions ?? []) {
         const explanation = explainAssertion(assertion);
-        warnings.push(...explanation.warnings.map((message) => `${step.step_id}.assertions.${assertion.id}: ${message}`));
+        warnings.push(
+          ...explanation.warnings.map(
+            (message) => `${step.step_id}.assertions.${assertion.id}: ${message}`
+          )
+        );
 
         if (typeof assertion.expected_value === 'string') {
-          const templates = assertion.expected_value.match(/\{\{\{[^}]+\}\}\}|\{\{[^}]+\}\}/g) ?? [];
+          const templates = templateExpressions(assertion.expected_value);
           for (const template of templates) {
             const result = validateTemplateReference(step.step_id, template, document.flowData);
-            errors.push(...result.errors.map((message) => `${step.step_id}.assertions.${assertion.id}: ${message}`));
-            warnings.push(...result.warnings.map((message) => `${step.step_id}.assertions.${assertion.id}: ${message}`));
+            errors.push(
+              ...result.errors.map(
+                (message) => `${step.step_id}.assertions.${assertion.id}: ${message}`
+              )
+            );
+            warnings.push(
+              ...result.warnings.map(
+                (message) => `${step.step_id}.assertions.${assertion.id}: ${message}`
+              )
+            );
           }
         }
       }
@@ -598,8 +775,14 @@ export function validateFlowDocument(document: FlowDocument): FlowValidationResu
   }
 
   for (const output of document.flowData.outputs ?? []) {
+    if (!isPrimitiveType(output.type)) {
+      errors.push(
+        `Flow output "${output.name}" has non-primitive type "${output.type}". Flow outputs must be string, number, boolean, or null.`
+      );
+    }
+
     if (output.isTemplate) {
-      const result = validateTemplateReference(document.flowData.steps.at(-1)?.step_id ?? 'flow_output', output.value, document.flowData);
+      const result = validateOutputTemplateReference(output.value, document.flowData);
       errors.push(...result.errors.map((message) => `outputs.${output.name}: ${message}`));
       warnings.push(...result.warnings.map((message) => `outputs.${output.name}: ${message}`));
     }
@@ -614,10 +797,24 @@ export function validateFlowDocument(document: FlowDocument): FlowValidationResu
 
 export function explainFlowDocument(document: FlowDocument): {
   summary: string;
+  inputs: string[];
+  outputs: string[];
   steps: string[];
   dependencies: string[];
   warnings: string[];
+  sequenceReady: boolean;
 } {
+  const validation = validateFlowDocument(document);
+  const inputs = document.flowData.parameters.map((parameter) => {
+    const required = parameter.required ? 'required' : 'optional';
+    const type = parameter.type ?? 'unknown';
+    return `${parameter.name}: ${type}, ${required}`;
+  });
+  const outputs = (document.flowData.outputs ?? []).map((output) => {
+    const type = output.type ?? 'unknown';
+    const source = output.isTemplate ? output.value : JSON.stringify(output.value);
+    return `${output.name}: ${type} from ${source}`;
+  });
   const steps = document.flowData.steps.map((step) => {
     const endpointCount = step.endpoints.length;
     return `${step.step_id}: ${step.label} (${endpointCount} endpoint${endpointCount === 1 ? '' : 's'})`;
@@ -645,22 +842,40 @@ export function explainFlowDocument(document: FlowDocument): {
 
       for (const transformation of endpoint.transformations ?? []) {
         const explanation = explainTransformationExpression(transformation.expression);
-        dependencies.push(`${step.step_id}.transformations.${transformation.alias}: ${explanation.plainEnglish}`);
-        warnings.push(...explanation.warnings.map((warning) => `${step.step_id}.transformations.${transformation.alias}: ${warning}`));
+        dependencies.push(
+          `${step.step_id}.transformations.${transformation.alias}: ${explanation.plainEnglish}`
+        );
+        warnings.push(
+          ...explanation.warnings.map(
+            (warning) => `${step.step_id}.transformations.${transformation.alias}: ${warning}`
+          )
+        );
       }
 
       for (const assertion of endpoint.assertions ?? []) {
         const explanation = explainAssertion(assertion);
-        dependencies.push(`${step.step_id}.assertions.${assertion.id}: ${explanation.plainEnglish}`);
-        warnings.push(...explanation.warnings.map((warning) => `${step.step_id}.assertions.${assertion.id}: ${warning}`));
+        dependencies.push(
+          `${step.step_id}.assertions.${assertion.id}: ${explanation.plainEnglish}`
+        );
+        warnings.push(
+          ...explanation.warnings.map(
+            (warning) => `${step.step_id}.assertions.${assertion.id}: ${warning}`
+          )
+        );
       }
     }
   }
 
   return {
-    summary: `${document.name} has ${document.flowData.steps.length} step${document.flowData.steps.length === 1 ? '' : 's'}.`,
+    summary: `${document.name} has ${document.flowData.steps.length} step${document.flowData.steps.length === 1 ? '' : 's'}, ${inputs.length} input${inputs.length === 1 ? '' : 's'}, and ${outputs.length} output${outputs.length === 1 ? '' : 's'}.`,
+    inputs,
+    outputs,
     steps,
     dependencies,
-    warnings
+    warnings: [...warnings, ...validation.warnings],
+    sequenceReady:
+      validation.valid &&
+      document.flowData.parameters.every((parameter) => isPrimitiveType(parameter.type)) &&
+      (document.flowData.outputs ?? []).every((output) => isPrimitiveType(output.type))
   };
 }
