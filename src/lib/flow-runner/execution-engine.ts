@@ -384,14 +384,9 @@ export class FlowExecutionEngine {
 
             const evaluatedResult = transformModule.transformResponse(responseData, transform.expression, templateContext);
 
-            if (evaluatedResult !== null && evaluatedResult !== undefined) {
-              transformedData[transform.alias] = evaluatedResult;
-              this.context.addLog('debug', `Applied transformation: ${transform.alias}`,
-                `Expression: ${transform.expression} evaluated successfully, value: ${JSON.stringify(evaluatedResult)}`);
-            } else {
-              this.context.addLog('warning', `Transformation evaluation returned null/undefined: ${transform.alias}`,
-                `Expression: ${transform.expression}`);
-            }
+            transformedData[transform.alias] = evaluatedResult;
+            this.context.addLog('debug', `Applied transformation: ${transform.alias}`,
+              `Expression: ${transform.expression} evaluated successfully, value: ${JSON.stringify(evaluatedResult)}`);
           } else {
             this.context.addLog('debug', `Applied transformation: ${transform.alias}`, `No expression provided, using raw response`);
           }

@@ -74,6 +74,67 @@ describe('FlowExecutionEngine Template Resolution', () => {
     engine = new FlowExecutionEngine(mockContext);
   });
 
+  describe('processTransformations', () => {
+    it('should store null transformation results instead of falling back to the raw response', async () => {
+      vi.mocked(createTemplateContextFromFlowRunner).mockReturnValue({
+        responses: {},
+        transformedData: {},
+        parameters: {},
+        environment: {},
+        functions: {}
+      });
+
+      const endpoint: StepEndpoint = {
+        endpoint_id: '1',
+        api_id: '1',
+        transformations: [{ alias: 'message_text', expression: '$.text' }]
+      };
+      const responseData = {
+        id: 28,
+        text: null
+      };
+
+      await (engine as any).processTransformations(endpoint, 'send_message-0', responseData);
+
+      expect(mockContext.storedTransformations['send_message-0']).toEqual({
+        message_text: null
+      });
+      expect(mockContext.storedTransformations['send_message-0'].message_text).not.toBe(responseData);
+      expect(mockContext.updateExecutionState).toHaveBeenCalledWith('send_message-0', {
+        transformations: { message_text: null }
+      });
+    });
+
+    it('should store undefined transformation results for missing JSONPath fields', async () => {
+      vi.mocked(createTemplateContextFromFlowRunner).mockReturnValue({
+        responses: {},
+        transformedData: {},
+        parameters: {},
+        environment: {},
+        functions: {}
+      });
+
+      const endpoint: StepEndpoint = {
+        endpoint_id: '1',
+        api_id: '1',
+        transformations: [{ alias: 'message_text', expression: '$.text' }]
+      };
+      const responseData = {
+        id: 28
+      };
+
+      await (engine as any).processTransformations(endpoint, 'send_message-0', responseData);
+
+      const storedTransformations = mockContext.storedTransformations['send_message-0'];
+      expect(Object.prototype.hasOwnProperty.call(storedTransformations, 'message_text')).toBe(true);
+      expect(storedTransformations.message_text).toBeUndefined();
+      expect(storedTransformations.message_text).not.toBe(responseData);
+      expect(mockContext.updateExecutionState).toHaveBeenCalledWith('send_message-0', {
+        transformations: { message_text: undefined }
+      });
+    });
+  });
+
   describe('resolveTemplateObjectUnified', () => {
     it('should resolve template expressions in request body objects', () => {
       // Setup: Mock the template resolution
