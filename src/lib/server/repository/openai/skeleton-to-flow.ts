@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 import { z } from 'zod';
-import * as zo from "zod";
-import { zodTextFormat } from "openai/helpers/zod";
+import * as zo from 'zod';
+import { zodTextFormat } from 'openai/helpers/zod';
 import { v4 as uuidv4 } from 'uuid';
 import { writeFile } from 'fs/promises';
 import { join } from 'path';
@@ -45,7 +45,7 @@ interface EnrichEndpointInput {
   flowParameters: Array<{
     name: string;
     required: boolean;
-    type: "number" | "string" | "boolean" | "null" | "array" | "object";
+    type: 'number' | 'string' | 'boolean' | 'null' | 'array' | 'object';
   }>;
   dependentEndpoints: Array<{
     id: string;
@@ -84,7 +84,7 @@ function convertJsonSchemaToZodManual(schema: any): z.ZodTypeAny {
   if (allOf && Array.isArray(allOf)) {
     // For allOf, we merge the schemas by combining their properties
     let mergedSchema: any = { type: 'object', properties: {}, required: [] };
-    
+
     for (const subSchema of allOf) {
       if (subSchema.type === 'object' && subSchema.properties) {
         mergedSchema.properties = { ...mergedSchema.properties, ...subSchema.properties };
@@ -96,7 +96,7 @@ function convertJsonSchemaToZodManual(schema: any): z.ZodTypeAny {
         mergedSchema.type = subSchema.type;
       }
     }
-    
+
     return convertJsonSchemaToZodManual(mergedSchema);
   }
 
@@ -119,7 +119,7 @@ function convertJsonSchemaToZodManual(schema: any): z.ZodTypeAny {
     }
     // For number/integer enums, use literal values
     if (type === 'number' || type === 'integer') {
-      const literals = enumValues.map(val => z.literal(val));
+      const literals = enumValues.map((val) => z.literal(val));
       if (literals.length === 1) {
         return literals[0];
       }
@@ -131,45 +131,45 @@ function convertJsonSchemaToZodManual(schema: any): z.ZodTypeAny {
   switch (type) {
     case 'string':
       return z.string();
-    
+
     case 'number':
     case 'integer':
       return z.number();
-    
+
     case 'boolean':
       return z.boolean();
-    
+
     case 'null':
       return z.null();
-    
+
     case 'array':
       if (items) {
         return z.array(convertJsonSchemaToZodManual(items));
       }
       return z.array(z.unknown());
-    
+
     case 'object':
       if (properties) {
         const zodProperties: Record<string, z.ZodTypeAny> = {};
-        
+
         for (const [key, propSchema] of Object.entries(properties)) {
           let zodProp = convertJsonSchemaToZodManual(propSchema);
-          
+
           // Make optional and nullable if not in required array
           // OpenAI structured outputs requires optional fields to also be nullable
           if (!required.includes(key)) {
             zodProp = zodProp.nullable().optional();
           }
-          
+
           zodProperties[key] = zodProp;
         }
-        
+
         return z.object(zodProperties);
       }
-      
+
       // Object without properties - use record
       return z.record(z.unknown());
-    
+
     default:
       return z.unknown();
   }
@@ -179,30 +179,80 @@ function convertJsonSchemaToZodManual(schema: any): z.ZodTypeAny {
 function createEnrichedEndpointSchema(jsonSchema: any) {
   const bodySchema = jsonSchemaToZodSchema(jsonSchema) as z.ZodTypeAny;
   return z.object({
-    api_id: z.number().describe("The API ID for this endpoint"),
-    endpoint_id: z.number().describe("The endpoint ID"),
-    headers: z.array(z.object({
-      name: z.string(),
-      value: z.string(),
-      enabled: z.boolean()
-    })).nullable().describe("HTTP headers to send with the request"),
-    pathParams: z.record(z.union([z.string(), z.number(), z.boolean(), z.null()])).nullable().describe("Path parameters for the request"),
-    queryParams: z.record(z.union([z.string(), z.number(), z.boolean(), z.null()])).nullable().describe("Query parameters for the request"),
+    api_id: z.number().describe('The API ID for this endpoint'),
+    endpoint_id: z.number().describe('The endpoint ID'),
+    headers: z
+      .array(
+        z.object({
+          name: z.string(),
+          value: z.string(),
+          enabled: z.boolean()
+        })
+      )
+      .nullable()
+      .describe('HTTP headers to send with the request'),
+    pathParams: z
+      .record(z.union([z.string(), z.number(), z.boolean(), z.null()]))
+      .nullable()
+      .describe('Path parameters for the request'),
+    queryParams: z
+      .record(z.union([z.string(), z.number(), z.boolean(), z.null()]))
+      .nullable()
+      .describe('Query parameters for the request'),
     body: bodySchema,
-    assertions: z.array(z.object({
-      id: z.string().describe("Unique ID for the assertion"),
-      data_id: z.string().describe("JSONPath or status_code"),
-      enabled: z.boolean(),
-      operator: z.enum(['equals', 'not_equals', 'contains', 'exists', 'greater_than', 'less_than', 'starts_with', 'ends_with', 'matches_regex', 'is_empty', 'greater_than_or_equal', 'less_than_or_equal', 'between', 'not_between', 'has_length', 'length_greater_than', 'length_less_than', 'contains_all', 'contains_any', 'is_type', 'is_null', 'is_not_null']),
-      data_source: z.enum(['response', 'transformed_data']),
-      assertion_type: z.enum(['status_code', 'json_body', 'response_time', 'header']),
-      expected_value: z.union([z.string(), z.number(), z.boolean(), z.array(z.union([z.string(), z.number(), z.boolean(), z.null()])), z.null()]),
-      expected_value_type: z.enum(['number', 'string', 'boolean', 'array', 'object', 'null'])
-    })).nullable().describe("Assertions to validate the response"),
-    transformations: z.array(z.object({
-      alias: z.string().describe("Alias name for the extracted value"),
-      expression: z.string().describe("JSONPath expression to extract the value")
-    })).nullable().describe("Data transformations to extract values from response")
+    assertions: z
+      .array(
+        z.object({
+          id: z.string().describe('Unique ID for the assertion'),
+          data_id: z.string().describe('JSONPath or status_code'),
+          enabled: z.boolean(),
+          operator: z.enum([
+            'equals',
+            'not_equals',
+            'contains',
+            'exists',
+            'greater_than',
+            'less_than',
+            'starts_with',
+            'ends_with',
+            'matches_regex',
+            'is_empty',
+            'greater_than_or_equal',
+            'less_than_or_equal',
+            'between',
+            'not_between',
+            'has_length',
+            'length_greater_than',
+            'length_less_than',
+            'contains_all',
+            'contains_any',
+            'is_type',
+            'is_null',
+            'is_not_null'
+          ]),
+          data_source: z.enum(['response', 'transformed_data']),
+          assertion_type: z.enum(['status_code', 'json_body', 'response_time', 'header']),
+          expected_value: z.union([
+            z.string(),
+            z.number(),
+            z.boolean(),
+            z.array(z.union([z.string(), z.number(), z.boolean(), z.null()])),
+            z.null()
+          ]),
+          expected_value_type: z.enum(['number', 'string', 'boolean', 'array', 'object', 'null'])
+        })
+      )
+      .nullable()
+      .describe('Assertions to validate the response'),
+    transformations: z
+      .array(
+        z.object({
+          alias: z.string().describe('Alias name for the extracted value'),
+          expression: z.string().describe('JSONPath expression to extract the value')
+        })
+      )
+      .nullable()
+      .describe('Data transformations to extract values from response')
   });
 }
 
@@ -230,7 +280,9 @@ type EnrichedEndpointBase = {
   }> | null;
 };
 
-export async function enrichEndpointFromSkeleton(input: EnrichEndpointInput): Promise<EnrichedEndpointBase> {
+export async function enrichEndpointFromSkeleton(
+  input: EnrichEndpointInput
+): Promise<EnrichedEndpointBase> {
   const { apiInfoItem, endpointSpec, flowParameters, dependentEndpoints, flowDescription } = input;
 
   // Create dynamic schema based on the endpoint's request schema
@@ -344,52 +396,43 @@ Extract and process data for subsequent steps using powerful transformation expr
 ### JSONPath Expressions
 - Basic access: $.token, $.user.id, $.items[0].id
 - Array access: $.users[*].email (all user emails), $.orders[0].items[*].price
-- Conditional access: $.users[?(@.active == true)].id
 - Complex paths: $.response.data.results[*].profile.settings.theme
 
 ### Functional Pipeline Transformations
 Use pipeline syntax with functional operations:
 // Filter and map operations
-data.users | where($.age > 18) | map(pick(['name', 'email']))
+$.users | where($.age > 18) | map({ name: $.name, email: $.email })
 
 // Aggregation operations
-data.orders | group(by: 'status') | map(count: length(items), total: sum(items.amount))
+$.orders | where($.status == "{{param:status}}") | sum($.amount)
 
 // Sorting and limiting
-data.products | sort(by: 'price', desc: true) | take(10)
+$.products | sort(by: $.price, desc: true) | take({{param:limit}} | int(10))
 
 // Complex transformations
-data.transactions | where($.amount > 100 && $.status == 'completed') | map(userId: $.user.id, amount: $.amount) | sort(by: 'amount')
+$.transactions | where($.amount > 100 && $.status == "completed") | map({ userId: $.user.id, amount: $.amount | float(0) }) | sort(by: $.amount)
 
 ### Available Pipeline Functions
 - **Filtering**: where(), select()
-- **Transformation**: map(), transform(), pick(), omit()
-- **Aggregation**: group(), count(), sum(), avg(), min(), max()
-- **Sorting**: sort(by: field, desc: boolean)
-- **Slicing**: take(n), skip(n), slice(start, end)
-- **Array operations**: join(), flatten(), unique()
-- **Conditional logic**: if(), switch(), coalesce()
+- **Transformation**: map(), transform(), pick()
+- **Aggregation**: count(), sum()
+- **Sorting**: sort(by: expression, desc: boolean)
+- **Slicing**: take(n), skip(n), at(index), first(), last()
+- **Array operations**: flatten(depth)
+- **Math/casts**: add(), sub(), mul(), div(), mod(), int(), float(), string(), bool(), round()
 
 ### Complex Expression Syntax
 Support for logical expressions with operators:
 // Logical operators
 $.user.age > 18 && $.user.verified == true
-$.status == 'active' || $.status == 'pending'
+$.status == "active" || $.status == "pending"
 
 // String operations
-$.email contains '@company.com'
-$.name startswith 'John'
-$.description matches '^[A-Z].*'
+contains($.email, "@company.com")
+startsWith($.name, "John")
+matches($.description, "^[A-Z].*")
 
-// Array operations
-$.tags any (tag => tag == 'premium')
-$.scores all (score => score > 50)
-'admin' in $.user.roles
-
-// Null/existence checks
-$.profile.avatar exists
-$.optionalField null
-$.array empty
+Each function argument can be a JSONPath, template, constant, object/array literal, or nested pipeline. Do not use {{env:...}} in transformations; create a flow parameter and bind it to the environment value at execution time.
 
 ### Multi-step Transformations
 Create multiple transformations to extract different pieces of data:
@@ -403,11 +446,11 @@ Create multiple transformations to extract different pieces of data:
 },
 {
   "alias": "userPermissions",
-  "expression": "$.user.roles | map($.permissions) | flatten() | unique()"
+  "expression": "$.user.roles | map($.permissions) | flatten()"
 },
 {
   "alias": "activeProducts",
-  "expression": "$.products | where($.status == 'active' && $.inventory > 0) | map(pick(['id', 'name', 'price'])) | sort(by: 'price')"
+  "expression": "$.products | where($.status == \"active\" && $.inventory > 0) | map({ id: $.id, name: $.name, price: $.price }) | sort(by: $.price)"
 }
 
 # Instructions
@@ -435,10 +478,14 @@ Test Flow: "${flowDescription}"
 Dependencies: ${apiInfoItem.dependsOn.length > 0 ? apiInfoItem.dependsOn.join(', ') : 'none'}
 
 # Request Body Schema
-${endpointSpec.requestSchema ? `The endpoint expects a request body that follows this JSON schema:
+${
+  endpointSpec.requestSchema
+    ? `The endpoint expects a request body that follows this JSON schema:
 ${JSON.stringify(endpointSpec.requestSchema, null, 2)}
 
-IMPORTANT: Follow the provided JSON schema exactly for the request body structure.` : 'This endpoint does not have a specific request schema defined.'}
+IMPORTANT: Follow the provided JSON schema exactly for the request body structure.`
+    : 'This endpoint does not have a specific request schema defined.'
+}
 
 # Endpoint Specification
 ${JSON.stringify(endpointSpec, null, 2)}
@@ -458,21 +505,21 @@ ${dependentEndpoints.length > 0 ? JSON.stringify(dependentEndpoints, null, 2) : 
   // const promptOutputPath = join(process.cwd(), 'enrich-endpoint-prompt.md');
   // await writeFile(promptOutputPath, userPrompt, 'utf8');
 
-  const expectedSchema = zodTextFormat(enrichedEndpointSchema, "enriched_endpoint");
-  
+  const expectedSchema = zodTextFormat(enrichedEndpointSchema, 'enriched_endpoint');
+
   // // Write the expected schema to file for debugging
   // const schemaOutputPath = join(process.cwd(), 'expected-schema.json');
   // await writeFile(schemaOutputPath, JSON.stringify(expectedSchema, null, 2), 'utf8');
 
   try {
     const response = await openai.responses.parse({
-      model: "gpt-4o",
+      model: 'gpt-4o',
       input: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt }
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
       ],
       text: {
-        format: expectedSchema,
+        format: expectedSchema
       }
     });
 
@@ -490,6 +537,8 @@ ${dependentEndpoints.length > 0 ? JSON.stringify(dependentEndpoints, null, 2) : 
     return enrichedEndpoint;
   } catch (error) {
     console.error('Error enriching endpoint from skeleton:', error);
-    throw new Error(`Failed to enrich endpoint ${apiInfoItem.id}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    throw new Error(
+      `Failed to enrich endpoint ${apiInfoItem.id}: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
   }
 }

@@ -15,8 +15,8 @@ describe('Math Operators in SafeExpressionEvaluator', () => {
     evaluator = new SafeExpressionEvaluator();
     mockContext = {
       responses: {
-        'step1-0': { total: 100, price: 25.50, quantity: 4 },
-        'step2-0': { total: 50, tax: 8.50, discount: 10 }
+        'step1-0': { total: 100, price: 25.5, quantity: 4 },
+        'step2-0': { total: 50, tax: 8.5, discount: 10 }
       },
       transformedData: {
         'step1-0': {
@@ -26,12 +26,11 @@ describe('Math Operators in SafeExpressionEvaluator', () => {
       parameters: {
         taxRate: 0.08,
         quantity: 3,
-        basePrice: 20.00
-      },
-      environment: {
+        basePrice: 20.0,
         exchangeRate: 1.25,
         minimumOrder: 50
       },
+      environment: {},
       functions: {}
     };
     evaluator.setTemplateContext(mockContext);
@@ -176,22 +175,31 @@ describe('Math Operators in SafeExpressionEvaluator', () => {
 
     it('should handle complex template calculations', () => {
       // Calculate total with tax: (price * quantity) + tax
-      const result = evaluator.evaluate('({{res:step1-0.$.price}} * {{param:quantity}}) + {{res:step2-0.$.tax}}', {});
+      const result = evaluator.evaluate(
+        '({{res:step1-0.$.price}} * {{param:quantity}}) + {{res:step2-0.$.tax}}',
+        {}
+      );
       expect(result).toBe(85); // (25.50 * 3) + 8.50 = 76.5 + 8.5 = 85
     });
 
     it('should handle template with math functions', () => {
-      const result = evaluator.evaluate('round({{res:step1-0.$.price}} * {{param:taxRate}}, 2)', {});
+      const result = evaluator.evaluate(
+        'round({{res:step1-0.$.price}} * {{param:taxRate}}, 2)',
+        {}
+      );
       expect(result).toBe(2.04); // round(25.50 * 0.08, 2) = round(2.04, 2) = 2.04
     });
 
-    it('should handle environment variables in calculations', () => {
-      const result = evaluator.evaluate('{{param:basePrice}} * {{env:exchangeRate}}', {});
+    it('should handle parameter-mapped environment values in calculations', () => {
+      const result = evaluator.evaluate('{{param:basePrice}} * {{param:exchangeRate}}', {});
       expect(result).toBe(25); // 20.00 * 1.25
     });
 
     it('should handle transformed data in calculations', () => {
-      const result = evaluator.evaluate('{{proc:step1-0.$.calculated.subtotal}} + {{proc:step1-0.$.calculated.shipping}}', {});
+      const result = evaluator.evaluate(
+        '{{proc:step1-0.$.calculated.subtotal}} + {{proc:step1-0.$.calculated.shipping}}',
+        {}
+      );
       expect(result).toBe(85.24); // 75.25 + 9.99
     });
   });
@@ -199,7 +207,8 @@ describe('Math Operators in SafeExpressionEvaluator', () => {
   describe('Real-world Use Cases', () => {
     it('should calculate order total with discount', () => {
       // Order total = (price * quantity) - discount + tax
-      const expression = '({{res:step1-0.$.price}} * {{res:step1-0.$.quantity}}) - {{res:step2-0.$.discount}} + {{res:step2-0.$.tax}}';
+      const expression =
+        '({{res:step1-0.$.price}} * {{res:step1-0.$.quantity}}) - {{res:step2-0.$.discount}} + {{res:step2-0.$.tax}}';
       const result = evaluator.evaluate(expression, {});
       expect(result).toBe(100.5); // (25.50 * 4) - 10 + 8.50 = 102 - 10 + 8.5 = 100.5
     });
@@ -213,14 +222,16 @@ describe('Math Operators in SafeExpressionEvaluator', () => {
 
     it('should calculate tax amount', () => {
       // Tax = subtotal * tax rate
-      const expression = 'round(({{res:step1-0.$.price}} * {{res:step1-0.$.quantity}}) * {{param:taxRate}}, 2)';
+      const expression =
+        'round(({{res:step1-0.$.price}} * {{res:step1-0.$.quantity}}) * {{param:taxRate}}, 2)';
       const result = evaluator.evaluate(expression, {});
       expect(result).toBe(8.16); // round((25.50 * 4) * 0.08, 2) = round(8.16, 2)
     });
 
     it('should check minimum order requirement', () => {
       // Check if order meets minimum: total >= minimum
-      const expression = '({{res:step1-0.$.price}} * {{res:step1-0.$.quantity}}) >= {{env:minimumOrder}}';
+      const expression =
+        '({{res:step1-0.$.price}} * {{res:step1-0.$.quantity}}) >= {{param:minimumOrder}}';
       const result = evaluator.evaluate(expression, {});
       expect(result).toBe(true); // (25.50 * 4) >= 50 → 102 >= 50 → true
     });
@@ -229,9 +240,9 @@ describe('Math Operators in SafeExpressionEvaluator', () => {
       // Shipping = base rate + (weight * rate_per_unit) + distance_modifier
       const baseRate = 5.99;
       const weight = 2.5;
-      const ratePerUnit = 1.50;
-      const distanceModifier = 2.00;
-      
+      const ratePerUnit = 1.5;
+      const distanceModifier = 2.0;
+
       const expression = `${baseRate} + (${weight} * ${ratePerUnit}) + ${distanceModifier}`;
       const result = evaluator.evaluate(expression, {});
       expect(result).toBe(11.74); // 5.99 + (2.5 * 1.50) + 2.00 = 5.99 + 3.75 + 2.00
@@ -239,27 +250,28 @@ describe('Math Operators in SafeExpressionEvaluator', () => {
 
     it('should handle currency conversion with rounding', () => {
       // Convert USD to EUR and round to 2 decimals
-      const expression = 'round({{res:step1-0.$.total}} * {{env:exchangeRate}}, 2)';
+      const expression = 'round({{res:step1-0.$.total}} * {{param:exchangeRate}}, 2)';
       const result = evaluator.evaluate(expression, {});
       expect(result).toBe(125); // round(100 * 1.25, 2) = 125.00
     });
   });
 
   describe('Edge Cases and Error Handling', () => {
-    it('should handle missing template values gracefully', () => {
-      // If a template resolves to undefined/null, math should return NaN
-      const result = evaluator.evaluate('{{res:nonexistent.$.value}} + 10', {});
-      expect(result).toBeNaN();
+    it('should throw clear errors for missing template values', () => {
+      expect(() => evaluator.evaluate('{{res:nonexistent.$.value}} + 10', {})).toThrow(
+        'Response data not found'
+      );
     });
 
-    it('should handle mixed valid and invalid operations', () => {
-      // Valid math with one invalid operand should return NaN
-      const result = evaluator.evaluate('{{res:step1-0.$.total}} + {{res:nonexistent.$.value}}', {});
-      expect(result).toBeNaN();
+    it('should throw clear errors for mixed valid and invalid template operations', () => {
+      expect(() =>
+        evaluator.evaluate('{{res:step1-0.$.total}} + {{res:nonexistent.$.value}}', {})
+      ).toThrow('Response data not found');
     });
 
     it('should handle chained math operations', () => {
-      const expression = '{{res:step1-0.$.total}} + {{res:step2-0.$.total}} - {{res:step2-0.$.discount}} * 2';
+      const expression =
+        '{{res:step1-0.$.total}} + {{res:step2-0.$.total}} - {{res:step2-0.$.discount}} * 2';
       const result = evaluator.evaluate(expression, {});
       expect(result).toBe(130); // 100 + 50 - (10 * 2) = 150 - 20 = 130
     });
@@ -284,7 +296,7 @@ describe('Math Operators in SafeExpressionEvaluator', () => {
           { total: 150, quantity: 1 }
         ]
       };
-      
+
       const result = evaluator.evaluate('$.orders[0].total + $.orders[1].total', data);
       expect(result).toBe(300); // 100 + 200
     });
@@ -293,7 +305,7 @@ describe('Math Operators in SafeExpressionEvaluator', () => {
       const data = {
         measurements: [-5.7, 10.3, -2.1, 8.9]
       };
-      
+
       const result = evaluator.evaluate('abs($.measurements[0]) + abs($.measurements[2])', data);
       expect(result).toBeCloseTo(7.8, 10); // abs(-5.7) + abs(-2.1) = 5.7 + 2.1 = 7.8
     });

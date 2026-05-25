@@ -4,12 +4,15 @@ import { resolveTemplate, createTemplateContextFromFlowRunner } from '$lib/templ
 import type { TestFlowData, StepEndpoint } from '$lib/components/test-flows/types';
 
 // Mock the dependencies
-vi.mock('$lib/template', () => ({
-  resolveTemplate: vi.fn(),
-  createTemplateContextFromFlowRunner: vi.fn(),
-  createTemplateFunctions: vi.fn(() => ({})),
-  defaultTemplateFunctions: {}
-}));
+vi.mock('$lib/template', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('$lib/template')>();
+  return {
+    ...actual,
+    resolveTemplate: vi.fn(),
+    createTemplateContextFromFlowRunner: vi.fn(),
+    createTemplateFunctions: vi.fn(() => ({}))
+  };
+});
 
 vi.mock('$lib/http_client/test-flow', () => ({
   executeDirectEndpoint: vi.fn(),
@@ -32,8 +35,20 @@ describe('FlowExecutionEngine Template Resolution', () => {
     mockContext = {
       flowData: {
         parameters: [
-          { name: 'username', type: 'string', value: 'testuser', required: true, defaultValue: null },
-          { name: 'password', type: 'string', value: 'testpass', required: true, defaultValue: null }
+          {
+            name: 'username',
+            type: 'string',
+            value: 'testuser',
+            required: true,
+            defaultValue: null
+          },
+          {
+            name: 'password',
+            type: 'string',
+            value: 'testpass',
+            required: true,
+            defaultValue: null
+          }
         ],
         settings: { api_hosts: {}, environment: { environmentId: null, subEnvironment: null } },
         steps: [],
@@ -99,7 +114,9 @@ describe('FlowExecutionEngine Template Resolution', () => {
       expect(mockContext.storedTransformations['send_message-0']).toEqual({
         message_text: null
       });
-      expect(mockContext.storedTransformations['send_message-0'].message_text).not.toBe(responseData);
+      expect(mockContext.storedTransformations['send_message-0'].message_text).not.toBe(
+        responseData
+      );
       expect(mockContext.updateExecutionState).toHaveBeenCalledWith('send_message-0', {
         transformations: { message_text: null }
       });
@@ -126,11 +143,63 @@ describe('FlowExecutionEngine Template Resolution', () => {
       await (engine as any).processTransformations(endpoint, 'send_message-0', responseData);
 
       const storedTransformations = mockContext.storedTransformations['send_message-0'];
-      expect(Object.prototype.hasOwnProperty.call(storedTransformations, 'message_text')).toBe(true);
+      expect(Object.prototype.hasOwnProperty.call(storedTransformations, 'message_text')).toBe(
+        true
+      );
       expect(storedTransformations.message_text).toBeUndefined();
       expect(storedTransformations.message_text).not.toBe(responseData);
       expect(mockContext.updateExecutionState).toHaveBeenCalledWith('send_message-0', {
         transformations: { message_text: undefined }
+      });
+    });
+
+    it('should not store raw response when transformation evaluation fails', async () => {
+      vi.mocked(createTemplateContextFromFlowRunner).mockReturnValue({
+        responses: {},
+        transformedData: {},
+        parameters: {},
+        environment: {},
+        functions: {}
+      });
+
+      const endpoint: StepEndpoint = {
+        endpoint_id: '1',
+        api_id: '1',
+        transformations: [{ alias: 'bad_value', expression: '{{env:LIMIT}} | int()' }]
+      };
+      const responseData = {
+        id: 28,
+        text: 'hello'
+      };
+
+      await (engine as any).processTransformations(endpoint, 'send_message-0', responseData);
+
+      expect(mockContext.storedTransformations['send_message-0']).toEqual({});
+      expect(mockContext.updateExecutionState).toHaveBeenCalledWith('send_message-0', {
+        transformations: {}
+      });
+      expect(mockContext.addLog).toHaveBeenCalledWith(
+        'error',
+        'Failed to apply transformation: bad_value',
+        expect.stringContaining('Template source "env" is not supported')
+      );
+    });
+
+    it('should store raw response only when transformation expression is empty', async () => {
+      const endpoint: StepEndpoint = {
+        endpoint_id: '1',
+        api_id: '1',
+        transformations: [{ alias: 'raw_response', expression: '   ' }]
+      };
+      const responseData = {
+        id: 28,
+        text: 'hello'
+      };
+
+      await (engine as any).processTransformations(endpoint, 'send_message-0', responseData);
+
+      expect(mockContext.storedTransformations['send_message-0']).toEqual({
+        raw_response: responseData
       });
     });
   });
@@ -147,7 +216,7 @@ describe('FlowExecutionEngine Template Resolution', () => {
       };
 
       vi.mocked(createTemplateContextFromFlowRunner).mockReturnValue(mockTemplateContext);
-      
+
       // Mock resolveTemplate to simulate proper template resolution
       vi.mocked(resolveTemplate).mockImplementation((template: string) => {
         // Handle JSON strings with multiple templates
@@ -159,9 +228,9 @@ describe('FlowExecutionEngine Template Resolution', () => {
 
       // Test data: Request body with template expressions
       const requestBody = {
-        "password": "{{param:password}}",
-        "username": "{{param:username}}",
-        "user_type": "employee"
+        password: '{{param:password}}',
+        username: '{{param:username}}',
+        user_type: 'employee'
       };
 
       // Call the private method using bracket notation to access it
@@ -169,8 +238,8 @@ describe('FlowExecutionEngine Template Resolution', () => {
 
       // Verify the template context was created correctly
       expect(createTemplateContextFromFlowRunner).toHaveBeenCalledWith(
-        {},  // storedResponses
-        {},  // storedTransformations
+        {}, // storedResponses
+        {}, // storedTransformations
         { username: 'testuser', password: 'testpass' }, // parameterValues
         {}, // templateFunctions
         {} // environmentVariables
@@ -184,9 +253,9 @@ describe('FlowExecutionEngine Template Resolution', () => {
 
       // Verify the result has resolved templates
       expect(result).toEqual({
-        "password": "testpass",
-        "username": "testuser",
-        "user_type": "employee"
+        password: 'testpass',
+        username: 'testuser',
+        user_type: 'employee'
       });
     });
 
@@ -200,22 +269,20 @@ describe('FlowExecutionEngine Template Resolution', () => {
       };
 
       vi.mocked(createTemplateContextFromFlowRunner).mockReturnValue(mockTemplateContext);
-      
+
       vi.mocked(resolveTemplate).mockImplementation((template: string) => {
-        return template
-          .replace('{{param:userId}}', '123')
-          .replace('{{param:apiKey}}', 'secret123');
+        return template.replace('{{param:userId}}', '123').replace('{{param:apiKey}}', 'secret123');
       });
 
       const requestBody = {
-        "user": {
-          "id": "{{param:userId}}",
-          "auth": {
-            "key": "{{param:apiKey}}"
+        user: {
+          id: '{{param:userId}}',
+          auth: {
+            key: '{{param:apiKey}}'
           }
         },
-        "metadata": {
-          "source": "test"
+        metadata: {
+          source: 'test'
         }
       };
 
@@ -226,14 +293,14 @@ describe('FlowExecutionEngine Template Resolution', () => {
       const result = (engine as any).resolveTemplateObjectUnified(requestBody);
 
       expect(result).toEqual({
-        "user": {
-          "id": "123",
-          "auth": {
-            "key": "secret123"
+        user: {
+          id: '123',
+          auth: {
+            key: 'secret123'
           }
         },
-        "metadata": {
-          "source": "test"
+        metadata: {
+          source: 'test'
         }
       });
     });
@@ -248,16 +315,14 @@ describe('FlowExecutionEngine Template Resolution', () => {
       };
 
       vi.mocked(createTemplateContextFromFlowRunner).mockReturnValue(mockTemplateContext);
-      
+
       vi.mocked(resolveTemplate).mockImplementation((template: string) => {
-        return template
-          .replace('{{param:tag1}}', 'urgent')
-          .replace('{{param:tag2}}', 'important');
+        return template.replace('{{param:tag1}}', 'urgent').replace('{{param:tag2}}', 'important');
       });
 
       const requestBody = {
-        "tags": ["{{param:tag1}}", "{{param:tag2}}", "test"],
-        "user": "{{param:username}}"
+        tags: ['{{param:tag1}}', '{{param:tag2}}', 'test'],
+        user: '{{param:username}}'
       };
 
       // Update context with new parameter values
@@ -275,8 +340,8 @@ describe('FlowExecutionEngine Template Resolution', () => {
       const result = (engine as any).resolveTemplateObjectUnified(requestBody);
 
       expect(result).toEqual({
-        "tags": ["urgent", "important", "test"],
-        "user": "testuser"
+        tags: ['urgent', 'important', 'test'],
+        user: 'testuser'
       });
     });
 
@@ -290,22 +355,22 @@ describe('FlowExecutionEngine Template Resolution', () => {
       };
 
       vi.mocked(createTemplateContextFromFlowRunner).mockReturnValue(mockTemplateContext);
-      
+
       // Mock resolveTemplate to throw an error
       vi.mocked(resolveTemplate).mockImplementation(() => {
         throw new Error('Template resolution failed');
       });
 
       const requestBody = {
-        "username": "{{param:username}}",
-        "invalid": "{{param:nonexistent}}"
+        username: '{{param:username}}',
+        invalid: '{{param:nonexistent}}'
       };
 
       const result = (engine as any).resolveTemplateObjectUnified(requestBody);
 
       // Should return the original object when template resolution fails
       expect(result).toEqual(requestBody);
-      
+
       // Should log the error
       expect(mockContext.addLog).toHaveBeenCalledWith(
         'error',
@@ -329,12 +394,12 @@ describe('FlowExecutionEngine Template Resolution', () => {
       };
 
       vi.mocked(createTemplateContextFromFlowRunner).mockReturnValue(mockTemplateContext);
-      
+
       // Mock resolveTemplate to return a non-string result
       vi.mocked(resolveTemplate).mockReturnValue({ resolved: true, count: 42 });
 
       const requestBody = {
-        "data": "{{param:count}}"
+        data: '{{param:count}}'
       };
 
       const result = (engine as any).resolveTemplateObjectUnified(requestBody);
@@ -399,7 +464,7 @@ describe('FlowExecutionEngine Template Resolution', () => {
 
       // Should return original value on error
       expect(result).toBe(originalValue);
-      
+
       // Should log the error
       expect(mockContext.addLog).toHaveBeenCalledWith(
         'error',
@@ -453,7 +518,7 @@ describe('FlowExecutionEngine Template Resolution', () => {
       };
 
       vi.mocked(createTemplateContextFromFlowRunner).mockReturnValue(mockTemplateContext);
-      
+
       // Mock resolveTemplate for different scenarios
       vi.mocked(resolveTemplate).mockImplementation((template: string) => {
         if (template === '{{param:userId}}') return '123';
@@ -467,11 +532,15 @@ describe('FlowExecutionEngine Template Resolution', () => {
         return template;
       });
 
-      const result = (engine as any).prepareRequest(endpointDef, mockEndpoint, 'https://api.example.com');
+      const result = (engine as any).prepareRequest(
+        endpointDef,
+        mockEndpoint,
+        'https://api.example.com'
+      );
 
       expect(result.url).toBe('https://api.example.com/api/users/123?filter=active');
       expect(result.headers).toEqual({
-        'Authorization': 'Bearer abc123',
+        Authorization: 'Bearer abc123',
         'Content-Type': 'application/json'
       });
       expect(result.body).toEqual({
@@ -579,36 +648,42 @@ describe('FlowExecutionEngine Template Resolution', () => {
     describe('parseArrayParameter', () => {
       it('should parse comma-separated string into array', () => {
         const paramDefinition = { schema: { type: 'array' }, style: 'form' };
-        const result = (engine as any).parseArrayParameter('sent,preparing,accepted', paramDefinition);
-        
+        const result = (engine as any).parseArrayParameter(
+          'sent,preparing,accepted',
+          paramDefinition
+        );
+
         expect(result).toEqual(['sent', 'preparing', 'accepted']);
       });
 
       it('should handle empty string', () => {
         const paramDefinition = { schema: { type: 'array' } };
         const result = (engine as any).parseArrayParameter('', paramDefinition);
-        
+
         expect(result).toEqual([]);
       });
 
       it('should trim whitespace from values', () => {
         const paramDefinition = { schema: { type: 'array' } };
-        const result = (engine as any).parseArrayParameter('sent , preparing ,  accepted  ', paramDefinition);
-        
+        const result = (engine as any).parseArrayParameter(
+          'sent , preparing ,  accepted  ',
+          paramDefinition
+        );
+
         expect(result).toEqual(['sent', 'preparing', 'accepted']);
       });
 
       it('should filter out empty values', () => {
         const paramDefinition = { schema: { type: 'array' } };
         const result = (engine as any).parseArrayParameter('sent,,preparing,', paramDefinition);
-        
+
         expect(result).toEqual(['sent', 'preparing']);
       });
 
       it('should handle single value', () => {
         const paramDefinition = { schema: { type: 'array' } };
         const result = (engine as any).parseArrayParameter('single', paramDefinition);
-        
+
         expect(result).toEqual(['single']);
       });
     });
@@ -622,50 +697,75 @@ describe('FlowExecutionEngine Template Resolution', () => {
 
       it('should serialize form exploded array (default)', () => {
         const paramDefinition = { schema: { type: 'array' }, style: 'form', explode: true };
-        (engine as any).serializeArrayParameter(queryParams, 'statuses', ['sent', 'preparing'], paramDefinition);
-        
+        (engine as any).serializeArrayParameter(
+          queryParams,
+          'statuses',
+          ['sent', 'preparing'],
+          paramDefinition
+        );
+
         expect(queryParams.toString()).toBe('statuses=sent&statuses=preparing');
       });
 
       it('should serialize form non-exploded array', () => {
         const paramDefinition = { schema: { type: 'array' }, style: 'form', explode: false };
-        (engine as any).serializeArrayParameter(queryParams, 'statuses', ['sent', 'preparing'], paramDefinition);
-        
+        (engine as any).serializeArrayParameter(
+          queryParams,
+          'statuses',
+          ['sent', 'preparing'],
+          paramDefinition
+        );
+
         expect(queryParams.toString()).toBe('statuses=sent%2Cpreparing');
       });
 
       it('should serialize space-delimited array', () => {
         const paramDefinition = { schema: { type: 'array' }, style: 'spaceDelimited' };
-        (engine as any).serializeArrayParameter(queryParams, 'tags', ['red', 'blue', 'green'], paramDefinition);
-        
+        (engine as any).serializeArrayParameter(
+          queryParams,
+          'tags',
+          ['red', 'blue', 'green'],
+          paramDefinition
+        );
+
         expect(queryParams.toString()).toBe('tags=red+blue+green');
       });
 
       it('should serialize pipe-delimited array', () => {
         const paramDefinition = { schema: { type: 'array' }, style: 'pipeDelimited' };
-        (engine as any).serializeArrayParameter(queryParams, 'tags', ['red', 'blue', 'green'], paramDefinition);
-        
+        (engine as any).serializeArrayParameter(
+          queryParams,
+          'tags',
+          ['red', 'blue', 'green'],
+          paramDefinition
+        );
+
         expect(queryParams.toString()).toBe('tags=red%7Cblue%7Cgreen');
       });
 
       it('should serialize multi format array', () => {
         const paramDefinition = { schema: { type: 'array' }, collectionFormat: 'multi' };
-        (engine as any).serializeArrayParameter(queryParams, 'colors', ['red', 'blue'], paramDefinition);
-        
+        (engine as any).serializeArrayParameter(
+          queryParams,
+          'colors',
+          ['red', 'blue'],
+          paramDefinition
+        );
+
         expect(queryParams.toString()).toBe('colors=red&colors=blue');
       });
 
       it('should handle empty array', () => {
         const paramDefinition = { schema: { type: 'array' }, style: 'form' };
         (engine as any).serializeArrayParameter(queryParams, 'statuses', [], paramDefinition);
-        
+
         expect(queryParams.toString()).toBe('');
       });
 
       it('should default to exploded form when no style specified', () => {
         const paramDefinition = { schema: { type: 'array' } };
         (engine as any).serializeArrayParameter(queryParams, 'items', ['a', 'b'], paramDefinition);
-        
+
         expect(queryParams.toString()).toBe('items=a&items=b');
       });
     });
@@ -675,7 +775,7 @@ describe('FlowExecutionEngine Template Resolution', () => {
         const mockEndpoint: StepEndpoint = {
           endpoint_id: '1',
           api_id: '1',
-          queryParams: { 
+          queryParams: {
             statuses: 'sent,preparing,accepted'
           }
         };
@@ -696,20 +796,30 @@ describe('FlowExecutionEngine Template Resolution', () => {
 
         // Mock template resolution
         vi.mocked(createTemplateContextFromFlowRunner).mockReturnValue({
-          responses: {}, transformedData: {}, parameters: {}, environment: {}, functions: {}
+          responses: {},
+          transformedData: {},
+          parameters: {},
+          environment: {},
+          functions: {}
         });
         vi.mocked(resolveTemplate).mockReturnValue('sent,preparing,accepted');
 
-        const result = (engine as any).prepareRequest(endpointDef, mockEndpoint, 'https://api.example.com');
+        const result = (engine as any).prepareRequest(
+          endpointDef,
+          mockEndpoint,
+          'https://api.example.com'
+        );
 
-        expect(result.url).toBe('https://api.example.com/api/orders?statuses=sent&statuses=preparing&statuses=accepted');
+        expect(result.url).toBe(
+          'https://api.example.com/api/orders?statuses=sent&statuses=preparing&statuses=accepted'
+        );
       });
 
       it('should process template expression that resolves to comma-separated values', () => {
         const mockEndpoint: StepEndpoint = {
           endpoint_id: '1',
           api_id: '1',
-          queryParams: { 
+          queryParams: {
             statuses: '{{ parameters.status_list }}'
           }
         };
@@ -730,20 +840,30 @@ describe('FlowExecutionEngine Template Resolution', () => {
 
         // Mock template resolution to return comma-separated string
         vi.mocked(createTemplateContextFromFlowRunner).mockReturnValue({
-          responses: {}, transformedData: {}, parameters: { status_list: 'draft,sent,approved' }, environment: {}, functions: {}
+          responses: {},
+          transformedData: {},
+          parameters: { status_list: 'draft,sent,approved' },
+          environment: {},
+          functions: {}
         });
         vi.mocked(resolveTemplate).mockReturnValue('draft,sent,approved');
 
-        const result = (engine as any).prepareRequest(endpointDef, mockEndpoint, 'https://api.example.com');
+        const result = (engine as any).prepareRequest(
+          endpointDef,
+          mockEndpoint,
+          'https://api.example.com'
+        );
 
-        expect(result.url).toBe('https://api.example.com/api/orders?statuses=draft%2Csent%2Capproved');
+        expect(result.url).toBe(
+          'https://api.example.com/api/orders?statuses=draft%2Csent%2Capproved'
+        );
       });
 
       it('should handle array parameter mixed with regular parameters', () => {
         const mockEndpoint: StepEndpoint = {
           endpoint_id: '1',
           api_id: '1',
-          queryParams: { 
+          queryParams: {
             statuses: 'sent,accepted',
             page: '1',
             limit: '10'
@@ -776,11 +896,19 @@ describe('FlowExecutionEngine Template Resolution', () => {
 
         // Mock template resolution
         vi.mocked(createTemplateContextFromFlowRunner).mockReturnValue({
-          responses: {}, transformedData: {}, parameters: {}, environment: {}, functions: {}
+          responses: {},
+          transformedData: {},
+          parameters: {},
+          environment: {},
+          functions: {}
         });
         vi.mocked(resolveTemplate).mockImplementation((value: string) => value);
 
-        const result = (engine as any).prepareRequest(endpointDef, mockEndpoint, 'https://api.example.com');
+        const result = (engine as any).prepareRequest(
+          endpointDef,
+          mockEndpoint,
+          'https://api.example.com'
+        );
 
         // Should handle both array and regular parameters
         expect(result.url).toContain('statuses=sent&statuses=accepted');
@@ -792,7 +920,7 @@ describe('FlowExecutionEngine Template Resolution', () => {
         const mockEndpoint: StepEndpoint = {
           endpoint_id: '1',
           api_id: '1',
-          queryParams: { 
+          queryParams: {
             statuses: ['sent', 'preparing'] // Legacy format - already an array
           }
         };
@@ -813,13 +941,23 @@ describe('FlowExecutionEngine Template Resolution', () => {
 
         // Mock template resolution
         vi.mocked(createTemplateContextFromFlowRunner).mockReturnValue({
-          responses: {}, transformedData: {}, parameters: {}, environment: {}, functions: {}
+          responses: {},
+          transformedData: {},
+          parameters: {},
+          environment: {},
+          functions: {}
         });
         vi.mocked(resolveTemplate).mockImplementation((value: string) => value);
 
-        const result = (engine as any).prepareRequest(endpointDef, mockEndpoint, 'https://api.example.com');
+        const result = (engine as any).prepareRequest(
+          endpointDef,
+          mockEndpoint,
+          'https://api.example.com'
+        );
 
-        expect(result.url).toBe('https://api.example.com/api/orders?statuses=sent&statuses=preparing');
+        expect(result.url).toBe(
+          'https://api.example.com/api/orders?statuses=sent&statuses=preparing'
+        );
       });
     });
   });

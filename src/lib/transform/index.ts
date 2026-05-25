@@ -8,6 +8,7 @@ import { SafeExpressionEvaluator } from './ExpressionEvaluator';
 import type { TemplateContext } from '../template/types';
 
 export { SafeJSONPathEvaluator, SafeExpressionEvaluator };
+export { TransformationExpressionError } from './ExpressionParser';
 
 /**
  * Transform a response using an expression
@@ -16,20 +17,19 @@ export { SafeJSONPathEvaluator, SafeExpressionEvaluator };
  * @param templateContext - Optional template context for resolving template expressions
  * @returns The transformed result
  */
-export function transformResponse(response: unknown, expression: string, templateContext?: TemplateContext): unknown {
+export function transformResponse(
+  response: unknown,
+  expression: string,
+  templateContext?: TemplateContext
+): unknown {
   const evaluator = new SafeExpressionEvaluator();
-  
+
   // Set template context if provided
   if (templateContext) {
     evaluator.setTemplateContext(templateContext);
   }
-  
-  try {
-    return evaluator.evaluate(expression, response);
-  } catch (error) {
-    console.error('Error transforming response:', error);
-    return null;
-  }
+
+  return evaluator.evaluate(expression, response);
 }
 
 /**

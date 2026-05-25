@@ -5,7 +5,7 @@ import type { TemplateContext } from '$lib/template/types';
 
 describe('Transformation with Template Context', () => {
   it('should resolve parameter templates in transformation expressions', () => {
-    const response = { 
+    const response = {
       data: [
         { id: 1, status: 'active' },
         { id: 2, status: 'inactive' },
@@ -29,9 +29,9 @@ describe('Transformation with Template Context', () => {
 
     // Expression that uses a parameter in a where clause
     const expression = '$.data | where(status == "{{param:targetStatus}}")';
-    
+
     const result = evaluator.evaluate(expression, response);
-    
+
     expect(result).toEqual([
       { id: 1, status: 'active' },
       { id: 3, status: 'active' }
@@ -39,7 +39,7 @@ describe('Transformation with Template Context', () => {
   });
 
   it('should resolve response references in transformation expressions', () => {
-    const currentResponse = { 
+    const currentResponse = {
       users: [
         { id: 1, name: 'Alice' },
         { id: 2, name: 'Bob' }
@@ -63,16 +63,14 @@ describe('Transformation with Template Context', () => {
     // Expression that references a previous response using template with JSONPath syntax
     // Use unquoted template to preserve the number type
     const expression = '$.users | where(id == {{res:step1-0.$.targetId}})';
-    
+
     const result = evaluator.evaluate(expression, currentResponse);
-    
-    expect(result).toEqual([
-      { id: 1, name: 'Alice' }
-    ]);
+
+    expect(result).toEqual([{ id: 1, name: 'Alice' }]);
   });
 
-  it('should resolve environment variables in transformation expressions', () => {
-    const response = { 
+  it('should resolve parameter-mapped environment values in transformation expressions', () => {
+    const response = {
       items: [
         { name: 'item1', category: 'electronics' },
         { name: 'item2', category: 'books' },
@@ -83,10 +81,8 @@ describe('Transformation with Template Context', () => {
     const templateContext: TemplateContext = {
       responses: {},
       transformedData: {},
-      parameters: {},
-      environment: {
-        filterCategory: 'electronics'
-      },
+      parameters: { filterCategory: 'electronics' },
+      environment: {},
       functions: {}
     };
 
@@ -94,11 +90,10 @@ describe('Transformation with Template Context', () => {
     const evaluator = new SafeExpressionEvaluator();
     evaluator.setTemplateContext(templateContext);
 
-    // Expression that uses an environment variable
-    const expression = '$.items | where(category == "{{env:filterCategory}}")';
-    
+    const expression = '$.items | where(category == "{{param:filterCategory}}")';
+
     const result = evaluator.evaluate(expression, response);
-    
+
     expect(result).toEqual([
       { name: 'item1', category: 'electronics' },
       { name: 'item3', category: 'electronics' }
@@ -106,7 +101,7 @@ describe('Transformation with Template Context', () => {
   });
 
   it('should resolve parameters in pipeline functions', () => {
-    const response = { 
+    const response = {
       data: [
         { id: 1, value: 10 },
         { id: 2, value: 20 },
@@ -133,9 +128,9 @@ describe('Transformation with Template Context', () => {
     // Expression that uses a parameter in take() function
     // Use unquoted template to preserve the number type
     const expression = '$.data | take({{param:limit}})';
-    
+
     const result = evaluator.evaluate(expression, response);
-    
+
     expect(result).toEqual([
       { id: 1, value: 10 },
       { id: 2, value: 20 },
@@ -144,7 +139,7 @@ describe('Transformation with Template Context', () => {
   });
 
   it('should work without template context (backward compatibility)', () => {
-    const response = { 
+    const response = {
       data: [
         { id: 1, value: 10 },
         { id: 2, value: 20 },
@@ -154,14 +149,14 @@ describe('Transformation with Template Context', () => {
 
     // Simple expression without templates - test transformResponse function
     const expression = '$.data | where(value > 15) | map(id)';
-    
+
     const result = transformResponse(response, expression);
-    
+
     expect(result).toEqual([2, 3]);
   });
 
   it('should work with transformResponse function and template context', () => {
-    const response = { 
+    const response = {
       data: [
         { id: 1, status: 'active' },
         { id: 2, status: 'inactive' },
@@ -181,9 +176,9 @@ describe('Transformation with Template Context', () => {
 
     // Test the transformResponse function with template context
     const expression = '$.data | where(status == "{{param:targetStatus}}")';
-    
+
     const result = transformResponse(response, expression, templateContext);
-    
+
     expect(result).toEqual([
       { id: 1, status: 'active' },
       { id: 3, status: 'active' }
@@ -202,9 +197,7 @@ describe('Transformation with Template Context', () => {
         },
         {
           code: 'other-cafe',
-          terminals: [
-            { code: 'terminal_3', id: 3 }
-          ]
+          terminals: [{ code: 'terminal_3', id: 3 }]
         }
       ]
     };
@@ -224,10 +217,11 @@ describe('Transformation with Template Context', () => {
     evaluator.setTemplateContext(templateContext);
 
     // Complex expression with unquoted parameters - they preserve original types
-    const expression = '$.data | where($.code == {{param:merchant_code}}) | map($.terminals) | flatten() | where($.code == {{param:terminal_code}}) | map($.id) | last()';
-    
+    const expression =
+      '$.data | where($.code == {{param:merchant_code}}) | map($.terminals) | flatten() | where($.code == {{param:terminal_code}}) | map($.id) | last()';
+
     const result = evaluator.evaluate(expression, testData);
-    
+
     expect(result).toBe(1);
   });
 });

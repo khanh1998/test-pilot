@@ -9,7 +9,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
 
   beforeEach(() => {
     evaluator = new SafeExpressionEvaluator();
-    
+
     // Set up test data for pipeline operations
     testData = {
       data: [
@@ -22,9 +22,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
         },
         {
           code: 'XYZ789',
-          terminals: [
-            { code: 'T003', id: 'terminal_3', status: 'active' }
-          ]
+          terminals: [{ code: 'T003', id: 'terminal_3', status: 'active' }]
         }
       ]
     };
@@ -61,15 +59,15 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
       it('should substitute parameter templates with {{param:name}} format', () => {
         const expression = '$.data | where($.code == {{param:merchant_code}})';
         const result = evaluator.evaluate(expression, testData);
-        
+
         // Should find the merchant with code 'ABC123'
         expect(result).toEqual([testData.data[0]]);
       });
 
-      it('should substitute parameter templates with \'{{param:name}}\' format', () => {
-        const expression = '$.data | where($.code == \'{{param:merchant_code}}\')';
+      it("should substitute parameter templates with '{{param:name}}' format", () => {
+        const expression = "$.data | where($.code == '{{param:merchant_code}}')";
         const result = evaluator.evaluate(expression, testData);
-        
+
         // Should find the merchant with code 'ABC123'
         expect(result).toEqual([testData.data[0]]);
       });
@@ -82,7 +80,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
             { user_id: 43, name: 'Bob' }
           ]
         };
-        
+
         const result = evaluator.evaluate(expression, dataWithUserId);
         expect(result).toEqual([{ user_id: 42, name: 'Alice' }]);
       });
@@ -90,7 +88,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
       it('should handle boolean parameters with type preservation', () => {
         templateContext.parameters.is_active = true;
         evaluator.setTemplateContext(templateContext);
-        
+
         const expression = '$.data | where($.active == {{param:is_active}})';
         const dataWithBoolean = {
           data: [
@@ -98,7 +96,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
             { active: false, name: 'Inactive Item' }
           ]
         };
-        
+
         const result = evaluator.evaluate(expression, dataWithBoolean);
         expect(result).toEqual([{ active: true, name: 'Active Item' }]);
       });
@@ -113,7 +111,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
             { user_id: 43, name: 'Bob' }
           ]
         };
-        
+
         const result = evaluator.evaluate(expression, dataWithUserId);
         expect(result).toEqual([{ user_id: 42, name: 'Alice' }]);
       });
@@ -126,14 +124,14 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
             { name: 'Bob', age: 25 }
           ]
         };
-        
+
         const result = evaluator.evaluate(expression, dataWithName);
         expect(result).toEqual([{ name: 'Alice', age: 30 }]);
       });
     });
 
     describe('Environment Templates', () => {
-      it('should substitute environment variable templates with {{env:var}} format', () => {
+      it('should reject direct environment variable templates', () => {
         const expression = '$.data | where($.timeout == {{env:TIMEOUT}})';
         const dataWithTimeout = {
           data: [
@@ -141,12 +139,13 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
             { timeout: 10000, name: 'Slow' }
           ]
         };
-        
-        const result = evaluator.evaluate(expression, dataWithTimeout);
-        expect(result).toEqual([{ timeout: 5000, name: 'Fast' }]);
+
+        expect(() => evaluator.evaluate(expression, dataWithTimeout)).toThrow(
+          'Template source "env" is not supported'
+        );
       });
 
-      it('should handle string environment variables', () => {
+      it('should reject direct string environment variables', () => {
         const expression = '$.data | where($.url == {{env:API_URL}})';
         const dataWithUrl = {
           data: [
@@ -154,9 +153,10 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
             { url: 'https://dev.example.com', name: 'Development' }
           ]
         };
-        
-        const result = evaluator.evaluate(expression, dataWithUrl);
-        expect(result).toEqual([{ url: 'https://api.example.com', name: 'Production' }]);
+
+        expect(() => evaluator.evaluate(expression, dataWithUrl)).toThrow(
+          'Template source "env" is not supported'
+        );
       });
     });
 
@@ -169,7 +169,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
             { user_id: 43, name: 'Bob' }
           ]
         };
-        
+
         const result = evaluator.evaluate(expression, dataWithUserId);
         expect(result).toEqual([{ user_id: 42, name: 'Alice' }]);
       });
@@ -177,14 +177,16 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
 
     describe('Complex Pipeline with Templates', () => {
       it('should handle complex pipeline expression with multiple templates', () => {
-        const expression = '$.data | where($.code == {{param:merchant_code}}) | map($.terminals) | flatten() | where($.code == {{param:terminal_code}}) | map($.id) | last()';
-        
+        const expression =
+          '$.data | where($.code == {{param:merchant_code}}) | map($.terminals) | flatten() | where($.code == {{param:terminal_code}}) | map($.id) | last()';
+
         const result = evaluator.evaluate(expression, testData);
         expect(result).toBe('terminal_1');
       });
 
       it('should handle mixed template types in pipeline', () => {
-        const expression = '$.data | where($.code == {{param:merchant_code}}) | where($.user_id == {{res:step1-0.$.user.id}})';
+        const expression =
+          '$.data | where($.code == {{param:merchant_code}}) | where($.user_id == {{res:step1-0.$.user.id}})';
         const dataWithMixed = {
           data: [
             { code: 'ABC123', user_id: 42, name: 'Valid' },
@@ -192,35 +194,35 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
             { code: 'XYZ789', user_id: 42, name: 'Wrong Code' }
           ]
         };
-        
+
         const result = evaluator.evaluate(expression, dataWithMixed);
         expect(result).toEqual([{ code: 'ABC123', user_id: 42, name: 'Valid' }]);
       });
     });
 
     describe('Error Handling', () => {
-      it('should handle missing parameters gracefully', () => {
+      it('should reject triple-brace templates in transformations', () => {
         const expression = '$.data | where($.code == "{{{param:missing_param}}}")';
-        
-        // Should not throw, template engine handles the error
-        const result = evaluator.evaluate(expression, testData);
-        expect(result).toEqual([]);
+
+        expect(() => evaluator.evaluate(expression, testData)).toThrow(
+          'Transformations use {{...}} templates only'
+        );
       });
 
-      it('should handle invalid template expressions gracefully', () => {
+      it('should reject invalid triple-brace template expressions', () => {
         const expression = '$.data | where($.code == "{{{invalid_source:value}}}")';
-        
-        // Should not throw, template engine handles the error  
-        const result = evaluator.evaluate(expression, testData);
-        expect(result).toEqual([]);
+
+        expect(() => evaluator.evaluate(expression, testData)).toThrow(
+          'Transformations use {{...}} templates only'
+        );
       });
 
-      it('should handle malformed template expressions', () => {
+      it('should reject malformed triple-brace template expressions', () => {
         const expression = '$.data | where($.code == "{{{param}}}")'; // Missing colon
-        
-        // Should not throw, template engine handles the error
-        const result = evaluator.evaluate(expression, testData);
-        expect(result).toEqual([]);
+
+        expect(() => evaluator.evaluate(expression, testData)).toThrow(
+          'Transformations use {{...}} templates only'
+        );
       });
     });
 
@@ -233,7 +235,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
             { status: 'inactive', name: 'Inactive Item' }
           ]
         };
-        
+
         const result = evaluator.evaluate(expression, dataWithStatus);
         expect(result).toEqual([{ status: 'active', name: 'Active Item' }]);
       });
@@ -246,7 +248,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
             { count: 30, name: 'Low Count' }
           ]
         };
-        
+
         const result = evaluator.evaluate(expression, dataWithCount);
         expect(result).toEqual([{ count: 50, name: 'High Count' }]);
       });
@@ -255,7 +257,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
         templateContext.parameters.is_active = true;
         templateContext.parameters.is_disabled = false;
         evaluator.setTemplateContext(templateContext);
-        
+
         const expression = '$.data | where($.active == {{param:is_active}})';
         const dataWithBoolean = {
           data: [
@@ -263,7 +265,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
             { active: false, name: 'Inactive Item' }
           ]
         };
-        
+
         const result = evaluator.evaluate(expression, dataWithBoolean);
         expect(result).toEqual([{ active: true, name: 'Active Item' }]);
       });
@@ -271,7 +273,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
       it('should preserve null values correctly', () => {
         templateContext.parameters.null_value = null;
         evaluator.setTemplateContext(templateContext);
-        
+
         const expression = '$.data | where($.value == {{param:null_value}})';
         const dataWithNull = {
           data: [
@@ -279,7 +281,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
             { value: 'not null', name: 'Non-null Item' }
           ]
         };
-        
+
         const result = evaluator.evaluate(expression, dataWithNull);
         expect(result).toEqual([{ value: null, name: 'Null Item' }]);
       });
@@ -287,7 +289,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
       it('should preserve undefined values correctly', () => {
         templateContext.parameters.undefined_value = undefined;
         evaluator.setTemplateContext(templateContext);
-        
+
         const expression = '$.data | where($.value == {{param:undefined_value}})';
         const dataWithUndefined = {
           data: [
@@ -295,7 +297,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
             { value: 'defined', name: 'Defined Item' }
           ]
         };
-        
+
         const result = evaluator.evaluate(expression, dataWithUndefined);
         expect(result).toEqual([{ value: undefined, name: 'Undefined Item' }]);
       });
@@ -303,7 +305,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
       it('should preserve array types correctly', () => {
         templateContext.parameters.tag_array = ['tag1', 'tag2', 'tag3'];
         evaluator.setTemplateContext(templateContext);
-        
+
         // Test a simpler array test - check if first element matches
         const expression = '$.data | where($.tags[0] == "{{{param:tag_array}}}[0]")';
         const dataWithArrays = {
@@ -312,7 +314,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
             { tags: ['different', 'tag2'], name: 'Two Tags' }
           ]
         };
-        
+
         // This test might not work due to expression complexity, so let's test differently
         // Test using count function in pipeline
         const simpleExpression = '$.data | map(name: $.name) | map($.name)';
@@ -323,7 +325,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
       it('should preserve object types correctly', () => {
         templateContext.parameters.config_object = { theme: 'dark', lang: 'en' };
         evaluator.setTemplateContext(templateContext);
-        
+
         // Test object property access directly
         const expression = '$.data | where($.config.theme == "{{{param:config_object}}}".theme)';
         const dataWithObjects = {
@@ -332,12 +334,12 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
             { config: { theme: 'light', lang: 'en' }, name: 'Light Theme' }
           ]
         };
-        
+
         // Since complex object property access in templates is challenging,
         // let's test a simpler case where we check individual properties
         templateContext.parameters.expected_theme = 'dark';
         evaluator.setTemplateContext(templateContext);
-        
+
         const simpleExpression = '$.data | where($.config.theme == "{{param:expected_theme}}")';
         const result = evaluator.evaluate(simpleExpression, dataWithObjects);
         expect(result).toEqual([{ config: { theme: 'dark', lang: 'en' }, name: 'Dark Theme' }]);
@@ -354,27 +356,55 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
         evaluator.setTemplateContext(templateContext);
 
         // Test string preservation in a where clause
-        let testData: any = { data: [{ value: 'hello', name: 'match' }, { value: 'world', name: 'no match' }] };
-        let result = evaluator.evaluate('$.data | where($.value == "{{param:string_val}}")', testData);
+        let testData: any = {
+          data: [
+            { value: 'hello', name: 'match' },
+            { value: 'world', name: 'no match' }
+          ]
+        };
+        let result = evaluator.evaluate(
+          '$.data | where($.value == "{{param:string_val}}")',
+          testData
+        );
         expect(result).toEqual([{ value: 'hello', name: 'match' }]);
 
         // Test number preservation in a where clause
-        testData = { data: [{ count: 42, name: 'match' }, { count: 24, name: 'no match' }] };
+        testData = {
+          data: [
+            { count: 42, name: 'match' },
+            { count: 24, name: 'no match' }
+          ]
+        };
         result = evaluator.evaluate('$.data | where($.count == {{param:number_val}})', testData);
         expect(result).toEqual([{ count: 42, name: 'match' }]);
 
         // Test boolean preservation in a where clause
-        testData = { data: [{ active: true, name: 'match' }, { active: false, name: 'no match' }] };
+        testData = {
+          data: [
+            { active: true, name: 'match' },
+            { active: false, name: 'no match' }
+          ]
+        };
         result = evaluator.evaluate('$.data | where($.active == {{param:boolean_val}})', testData);
         expect(result).toEqual([{ active: true, name: 'match' }]);
 
         // Test null preservation in a where clause
-        testData = { data: [{ value: null, name: 'match' }, { value: 'not null', name: 'no match' }] };
+        testData = {
+          data: [
+            { value: null, name: 'match' },
+            { value: 'not null', name: 'no match' }
+          ]
+        };
         result = evaluator.evaluate('$.data | where($.value == {{param:null_val}})', testData);
         expect(result).toEqual([{ value: null, name: 'match' }]);
 
         // Test that we can access nested object properties through the template
-        testData = { data: [{ key: 'value', name: 'match' }, { key: 'other', name: 'no match' }] };
+        testData = {
+          data: [
+            { key: 'value', name: 'match' },
+            { key: 'other', name: 'no match' }
+          ]
+        };
         result = evaluator.evaluate('$.data | where($.key == {{param:object_val}}.key)', testData);
         // This might not work due to expression complexity - the template engine should resolve object_val
         // But the expression evaluator might not handle property access on resolved objects
@@ -386,24 +416,25 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
       });
 
       it('should preserve nested object types correctly', () => {
-        templateContext.responses['step1-0'] = { 
-          user: { 
-            profile: { 
+        templateContext.responses['step1-0'] = {
+          user: {
+            profile: {
               settings: { theme: 'dark', notifications: true },
               metadata: { version: 2, tags: ['admin', 'user'] }
             }
-          } 
+          }
         };
         evaluator.setTemplateContext(templateContext);
-        
-        const expression = '$.data | where($.theme == {{res:step1-0.$.user.profile.settings.theme}})';
+
+        const expression =
+          '$.data | where($.theme == {{res:step1-0.$.user.profile.settings.theme}})';
         const dataWithTheme = {
           data: [
             { theme: 'dark', name: 'Dark Theme' },
             { theme: 'light', name: 'Light Theme' }
           ]
         };
-        
+
         const result = evaluator.evaluate(expression, dataWithTheme);
         expect(result).toEqual([{ theme: 'dark', name: 'Dark Theme' }]);
       });
@@ -412,15 +443,15 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
         templateContext.parameters.price = 19.99;
         templateContext.parameters.tax_rate = 0.08;
         evaluator.setTemplateContext(templateContext);
-        
+
         const expression = '$.data | where($.price == {{param:price}})';
         const dataWithFloats = {
           data: [
             { price: 19.99, name: 'Correct Price' },
-            { price: 20.00, name: 'Wrong Price' }
+            { price: 20.0, name: 'Wrong Price' }
           ]
         };
-        
+
         const result = evaluator.evaluate(expression, dataWithFloats);
         expect(result).toEqual([{ price: 19.99, name: 'Correct Price' }]);
       });
@@ -429,7 +460,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
         templateContext.parameters.zero_number = 0;
         templateContext.parameters.empty_string = '';
         evaluator.setTemplateContext(templateContext);
-        
+
         const expression = '$.data | where($.count == {{param:zero_number}})';
         const dataWithZero = {
           data: [
@@ -437,7 +468,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
             { count: 1, name: 'One Count' }
           ]
         };
-        
+
         const result = evaluator.evaluate(expression, dataWithZero);
         expect(result).toEqual([{ count: 0, name: 'Zero Count' }]);
       });
@@ -445,7 +476,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
       it('should preserve large numbers correctly', () => {
         templateContext.parameters.large_number = 9007199254740991; // Number.MAX_SAFE_INTEGER
         evaluator.setTemplateContext(templateContext);
-        
+
         const expression = '$.data | where($.id == {{param:large_number}})';
         const dataWithLargeNumbers = {
           data: [
@@ -453,7 +484,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
             { id: 123, name: 'Small ID' }
           ]
         };
-        
+
         const result = evaluator.evaluate(expression, dataWithLargeNumbers);
         expect(result).toEqual([{ id: 9007199254740991, name: 'Large ID' }]);
       });
@@ -465,30 +496,41 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
         ];
         templateContext.parameters.expected_first_id = 1;
         evaluator.setTemplateContext(templateContext);
-        
+
         // Test simpler case - compare first item's id
         const expression = '$.data | where($.items[0].id == {{param:expected_first_id}})';
         const dataWithNestedArrays = {
           data: [
-            { items: [{ id: 1, values: [10, 20] }, { id: 2, values: [30, 40] }], name: 'Matching' },
+            {
+              items: [
+                { id: 1, values: [10, 20] },
+                { id: 2, values: [30, 40] }
+              ],
+              name: 'Matching'
+            },
             { items: [{ id: 3, values: [50, 60] }], name: 'Not Matching' }
           ]
         };
-        
+
         const result = evaluator.evaluate(expression, dataWithNestedArrays);
-        expect(result).toEqual([{ 
-          items: [{ id: 1, values: [10, 20] }, { id: 2, values: [30, 40] }], 
-          name: 'Matching' 
-        }]);
+        expect(result).toEqual([
+          {
+            items: [
+              { id: 1, values: [10, 20] },
+              { id: 2, values: [30, 40] }
+            ],
+            name: 'Matching'
+          }
+        ]);
       });
     });
 
     describe('Single Quote to Double Quote Conversion', () => {
       it('should convert single quoted templates to double quoted and return strings', () => {
         // Single quoted templates should behave the same as double quoted templates (return strings)
-        const expression = '$.data | where($.code == \'{{param:merchant_code}}\')';
+        const expression = "$.data | where($.code == '{{param:merchant_code}}')";
         const result = evaluator.evaluate(expression, testData);
-        
+
         // Should find the merchant with code 'ABC123'
         expect(result).toEqual([testData.data[0]]);
       });
@@ -496,15 +538,15 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
       it('should handle numeric parameters as strings when single quoted', () => {
         templateContext.parameters.user_id_string = '42'; // String parameter that looks like a number
         evaluator.setTemplateContext(templateContext);
-        
-        const expression = '$.data | where($.user_id == \'{{param:user_id_string}}\')';
+
+        const expression = "$.data | where($.user_id == '{{param:user_id_string}}')";
         const dataWithUserId = {
           data: [
             { user_id: '42', name: 'Alice' }, // String value in data
-            { user_id: 42, name: 'Bob' }      // Numeric value in data
+            { user_id: 42, name: 'Bob' } // Numeric value in data
           ]
         };
-        
+
         const result = evaluator.evaluate(expression, dataWithUserId);
         expect(result).toEqual([{ user_id: '42', name: 'Alice' }]);
       });
@@ -512,15 +554,15 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
       it('should handle boolean parameters as strings when single quoted', () => {
         templateContext.parameters.is_active_string = 'true'; // String parameter
         evaluator.setTemplateContext(templateContext);
-        
-        const expression = '$.data | where($.active == \'{{param:is_active_string}}\')';
+
+        const expression = "$.data | where($.active == '{{param:is_active_string}}')";
         const dataWithBoolean = {
           data: [
-            { active: 'true', name: 'Active Item' },  // String value in data
-            { active: true, name: 'Boolean Item' }    // Boolean value in data
+            { active: 'true', name: 'Active Item' }, // String value in data
+            { active: true, name: 'Boolean Item' } // Boolean value in data
           ]
         };
-        
+
         const result = evaluator.evaluate(expression, dataWithBoolean);
         expect(result).toEqual([{ active: 'true', name: 'Active Item' }]);
       });
@@ -528,49 +570,60 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
       it('should demonstrate difference between quoted and unquoted templates', () => {
         templateContext.parameters.test_number = 42;
         evaluator.setTemplateContext(templateContext);
-        
+
         // Test with numeric parameter
         const dataWithNumber = {
           data: [
-            { value: 42, type: 'number' },     // Numeric value
-            { value: '42', type: 'string' }    // String value
+            { value: 42, type: 'number' }, // Numeric value
+            { value: '42', type: 'string' } // String value
           ]
         };
-        
+
         // Unquoted template should match numeric value (type preserved)
-        const unquotedResult = evaluator.evaluate('$.data | where($.value == {{param:test_number}})', dataWithNumber);
+        const unquotedResult = evaluator.evaluate(
+          '$.data | where($.value == {{param:test_number}})',
+          dataWithNumber
+        );
         expect(unquotedResult).toEqual([{ value: 42, type: 'number' }]);
-        
+
         // Single quoted template should convert to string and match string value
-        const singleQuotedResult = evaluator.evaluate('$.data | where($.value == \'{{param:test_number}}\')    ', dataWithNumber);
+        const singleQuotedResult = evaluator.evaluate(
+          "$.data | where($.value == '{{param:test_number}}')    ",
+          dataWithNumber
+        );
         expect(singleQuotedResult).toEqual([{ value: '42', type: 'string' }]);
-        
+
         // Double quoted template should also convert to string and match string value
-        const doubleQuotedResult = evaluator.evaluate('$.data | where($.value == "{{param:test_number}}")', dataWithNumber);
+        const doubleQuotedResult = evaluator.evaluate(
+          '$.data | where($.value == "{{param:test_number}}")',
+          dataWithNumber
+        );
         expect(doubleQuotedResult).toEqual([{ value: '42', type: 'string' }]);
       });
 
       it('should demonstrate equivalence between single and double quoted templates', () => {
-        const singleQuotedExpression = '$.data | where($.code == \'{{param:merchant_code}}\')';
+        const singleQuotedExpression = "$.data | where($.code == '{{param:merchant_code}}')";
         const doubleQuotedExpression = '$.data | where($.code == "{{param:merchant_code}}")';
-        
+
         const singleResult = evaluator.evaluate(singleQuotedExpression, testData);
         const doubleResult = evaluator.evaluate(doubleQuotedExpression, testData);
-        
+
         // Both should return the same result since both quoted forms return strings
         expect(singleResult).toEqual(doubleResult);
         expect(singleResult).toEqual([testData.data[0]]);
       });
 
       it('should handle complex nested expressions with single quotes', () => {
-        const expression = '$.data | where($.code == \'{{param:merchant_code}}\') | map($.terminals) | flatten() | where($.code == \'{{param:terminal_code}}\') | map($.id)';
-        
+        const expression =
+          "$.data | where($.code == '{{param:merchant_code}}') | map($.terminals) | flatten() | where($.code == '{{param:terminal_code}}') | map($.id)";
+
         const result = evaluator.evaluate(expression, testData);
         expect(result).toEqual(['terminal_1']);
       });
 
       it('should handle single quoted templates in multiple contexts', () => {
-        const expression = '$.data | where($.code == \'{{param:merchant_code}}\' && $.status == \'{{param:status}}\')';
+        const expression =
+          "$.data | where($.code == '{{param:merchant_code}}' && $.status == '{{param:status}}')";
         const dataWithStatus = {
           data: [
             { code: 'ABC123', status: 'active', name: 'Match' },
@@ -578,7 +631,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
             { code: 'XYZ789', status: 'active', name: 'No match - wrong code' }
           ]
         };
-        
+
         const result = evaluator.evaluate(expression, dataWithStatus);
         expect(result).toEqual([{ code: 'ABC123', status: 'active', name: 'Match' }]);
       });
@@ -592,7 +645,7 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
     });
 
     it('should work with where operations', () => {
-      const result = evaluator.evaluate('$.data | where($.code == \'ABC123\')', testData);
+      const result = evaluator.evaluate("$.data | where($.code == 'ABC123')", testData);
       expect(result).toEqual([testData.data[0]]);
     });
 
@@ -623,7 +676,10 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
 
   describe('Backwards Compatibility', () => {
     it('should work with expressions without templates', () => {
-      const result = evaluator.evaluate('$.data | where($.code == \'ABC123\') | map($.terminals) | flatten() | map($.id)', testData);
+      const result = evaluator.evaluate(
+        "$.data | where($.code == 'ABC123') | map($.terminals) | flatten() | map($.id)",
+        testData
+      );
       expect(result).toEqual(['terminal_1', 'terminal_2']);
     });
 
@@ -634,7 +690,10 @@ describe('SafeExpressionEvaluator with Simplified Template Support', () => {
 
     it('should work with complex conditions', () => {
       // Test chained where operations - use array indexing instead of .length
-      const result = evaluator.evaluate('$.data | where($.code == \'ABC123\') | where($.terminals[1])', testData);
+      const result = evaluator.evaluate(
+        "$.data | where($.code == 'ABC123') | where($.terminals[1])",
+        testData
+      );
       expect(result).toEqual([testData.data[0]]);
     });
   });

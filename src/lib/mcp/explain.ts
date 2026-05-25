@@ -1,5 +1,6 @@
 import type { Assertion } from '$lib/assertions/types';
 import { parseTemplateExpression } from '$lib/template';
+import { ExpressionParser } from '$lib/transform/ExpressionParser';
 import type {
   ExplanationDependency,
   ExplanationResult,
@@ -20,11 +21,31 @@ function splitPipeline(expression: string): string[] {
   const parts: string[] = [];
   let current = '';
   let parenDepth = 0;
+  let braceDepth = 0;
+  let bracketDepth = 0;
   let quote: '"' | "'" | null = null;
 
   for (let i = 0; i < expression.length; i += 1) {
     const char = expression[i];
     const prev = expression[i - 1];
+
+    if (!quote && expression.startsWith('{{{', i)) {
+      const end = expression.indexOf('}}}', i + 3);
+      if (end >= 0) {
+        current += expression.slice(i, end + 3);
+        i = end + 2;
+        continue;
+      }
+    }
+
+    if (!quote && expression.startsWith('{{', i)) {
+      const end = expression.indexOf('}}', i + 2);
+      if (end >= 0) {
+        current += expression.slice(i, end + 2);
+        i = end + 1;
+        continue;
+      }
+    }
 
     if ((char === '"' || char === "'") && prev !== '\\') {
       if (quote === char) {
@@ -41,7 +62,15 @@ function splitPipeline(expression: string): string[] {
         parenDepth += 1;
       } else if (char === ')') {
         parenDepth = Math.max(0, parenDepth - 1);
-      } else if (char === '|' && parenDepth === 0) {
+      } else if (char === '{') {
+        braceDepth += 1;
+      } else if (char === '}') {
+        braceDepth = Math.max(0, braceDepth - 1);
+      } else if (char === '[') {
+        bracketDepth += 1;
+      } else if (char === ']') {
+        bracketDepth = Math.max(0, bracketDepth - 1);
+      } else if (char === '|' && parenDepth === 0 && braceDepth === 0 && bracketDepth === 0) {
         const trimmed = current.trim();
         if (trimmed) {
           parts.push(trimmed);
@@ -281,7 +310,21 @@ const transformOperationDescriptions: Record<string, string> = {
   mul: 'multiplies by a numeric value',
   div: 'divides by a numeric value',
   mod: 'applies modulo arithmetic',
-  transform: 'runs a nested transformation'
+  transform: 'runs a nested transformation',
+  pick: 'keeps selected object keys',
+  contains: 'checks whether text contains a value',
+  startsWith: 'checks whether text starts with a value',
+  endsWith: 'checks whether text ends with a value',
+  matches: 'checks text against a regular expression',
+  empty: 'checks whether a value is empty',
+  length: 'gets the length of a string or array',
+  abs: 'gets an absolute numeric value',
+  round: 'rounds a numeric value',
+  ceil: 'rounds a numeric value up',
+  floor: 'rounds a numeric value down',
+  min: 'gets the smaller numeric value',
+  max: 'gets the larger numeric value',
+  pow: 'raises one numeric value to a power'
 };
 
 function explainTransformStage(stage: string): {
@@ -349,6 +392,12 @@ export function explainTransformationExpression(expression: string): Explanation
   }
 
   const warnings: string[] = [];
+  try {
+    new ExpressionParser().parseExpression(expression);
+  } catch (error) {
+    warnings.push(error instanceof Error ? error.message : String(error));
+  }
+
   const templateExplanations = findTemplateExpressions(expression).map((template) => ({
     template,
     explanation: explainTemplateExpression(template)

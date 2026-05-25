@@ -1,4 +1,9 @@
-import type { TestFlowData, FlowStep, StepEndpoint, ExecutionState } from '$lib/components/test-flows/types';
+import type {
+  TestFlowData,
+  FlowStep,
+  StepEndpoint,
+  ExecutionState
+} from '$lib/components/test-flows/types';
 import type { RequestCookie } from '$lib/http_client/test-flow';
 import { executeDirectEndpoint, executeProxiedEndpoint } from '$lib/http_client/test-flow';
 import { isDesktop } from '$lib/environment';
@@ -25,8 +30,16 @@ export interface ExecutionContext {
   shouldStopExecution: boolean;
   error: unknown;
   executionState: ExecutionState;
-  addLog: (level: 'info' | 'debug' | 'error' | 'warning', message: string, details?: string) => void;
-  updateExecutionState: (endpointId: string, updates: Partial<any>, emitEndpointUpdate?: boolean) => void;
+  addLog: (
+    level: 'info' | 'debug' | 'error' | 'warning',
+    message: string,
+    details?: string
+  ) => void;
+  updateExecutionState: (
+    endpointId: string,
+    updates: Partial<any>,
+    emitEndpointUpdate?: boolean
+  ) => void;
 }
 
 export class FlowExecutionEngine {
@@ -56,7 +69,11 @@ export class FlowExecutionEngine {
     // Clear cookies if the step has this flag enabled (do this before checking endpoints)
     if (step.clearCookiesBeforeExecution === true) {
       this.context.cookieStore.clear();
-      this.context.addLog('info', `🍪 Cookies cleared before step ${step.step_id}`, 'All stored cookies removed as configured for this step - starting fresh for new user role');
+      this.context.addLog(
+        'info',
+        `🍪 Cookies cleared before step ${step.step_id}`,
+        'All stored cookies removed as configured for this step - starting fresh for new user role'
+      );
     }
 
     if (!step.endpoints || !Array.isArray(step.endpoints) || step.endpoints.length === 0) {
@@ -94,7 +111,11 @@ export class FlowExecutionEngine {
     }
   }
 
-  async executeEndpoint(endpoint: StepEndpoint, stepId: string, endpointIndex: number): Promise<void> {
+  async executeEndpoint(
+    endpoint: StepEndpoint,
+    stepId: string,
+    endpointIndex: number
+  ): Promise<void> {
     if (!endpoint || !endpoint.endpoint_id) {
       console.error('Invalid endpoint configuration', endpoint);
       return;
@@ -114,14 +135,20 @@ export class FlowExecutionEngine {
         throw new Error(`No endpoints defined in the flow data`);
       }
 
-      const endpointDef = this.context.flowData.endpoints.find((e) => e.id === endpoint.endpoint_id);
+      const endpointDef = this.context.flowData.endpoints.find(
+        (e) => e.id === endpoint.endpoint_id
+      );
       if (!endpointDef) {
         throw new Error(`Endpoint definition not found for ID: ${endpoint.endpoint_id}`);
       }
 
       const endpointHost = this.getEndpointHost(endpoint);
       if (!endpointHost) {
-        this.context.addLog('error', 'No API host available for endpoint', `Endpoint ID: ${endpoint.endpoint_id}, API ID: ${endpoint.api_id}`);
+        this.context.addLog(
+          'error',
+          'No API host available for endpoint',
+          `Endpoint ID: ${endpoint.endpoint_id}, API ID: ${endpoint.api_id}`
+        );
         throw new Error(`No API host available for endpoint ${endpoint.endpoint_id}`);
       }
 
@@ -142,7 +169,7 @@ export class FlowExecutionEngine {
       this.addRequestDebugLogs(endpointDef.path, headers);
 
       const response = await this.makeRequest(endpointDef, url, headers, body, endpointId);
-      
+
       const endTime = performance.now();
       const timing = Math.round(endTime - startTime);
       this.context.updateExecutionState(endpointId, { timing });
@@ -159,7 +186,7 @@ export class FlowExecutionEngine {
       });
 
       this.context.storedResponses[endpointId] = responseData;
-      
+
       this.context.addLog(
         'debug',
         `Stored response for endpoint: ${endpointId}`,
@@ -170,7 +197,6 @@ export class FlowExecutionEngine {
       await this.processAssertions(endpoint, endpointId, response, responseData, timing);
 
       this.updateFinalStatus(endpoint, endpointId, response);
-
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       this.context.updateExecutionState(endpointId, {
@@ -186,33 +212,42 @@ export class FlowExecutionEngine {
 
   private getEndpointHost(endpoint: StepEndpoint): string {
     let endpointHost = '';
-    
+
     // Check environment override first
-    if (this.context.selectedEnvironment && this.context.flowData.settings.environment?.subEnvironment) {
+    if (
+      this.context.selectedEnvironment &&
+      this.context.flowData.settings.environment?.subEnvironment
+    ) {
       const subEnv = this.context.flowData.settings.environment.subEnvironment;
       const subEnvironmentConfig = this.context.selectedEnvironment.config.environments[subEnv];
-      
+
       if (subEnvironmentConfig?.api_hosts && endpoint.api_id) {
         const envHost = subEnvironmentConfig.api_hosts[String(endpoint.api_id)];
         if (envHost) {
           endpointHost = envHost;
-          this.context.addLog('debug', `Using environment host override for API ID ${endpoint.api_id}: ${endpointHost}`, 
-            `Environment: ${this.context.selectedEnvironment.name} (${subEnv})`);
+          this.context.addLog(
+            'debug',
+            `Using environment host override for API ID ${endpoint.api_id}: ${endpointHost}`,
+            `Environment: ${this.context.selectedEnvironment.name} (${subEnv})`
+          );
         }
       }
     }
-    
+
     // Fallback to flow's api_hosts
     if (!endpointHost && endpoint.api_id && this.context.flowData.settings?.api_hosts) {
       const apiHostInfo = this.context.flowData.settings.api_hosts[endpoint.api_id];
       if (apiHostInfo && apiHostInfo.url) {
         endpointHost = apiHostInfo.url;
-        this.context.addLog('debug', `Using flow host for API ID ${endpoint.api_id}: ${endpointHost}`);
+        this.context.addLog(
+          'debug',
+          `Using flow host for API ID ${endpoint.api_id}: ${endpointHost}`
+        );
       } else {
         this.context.addLog('warning', `API host not found for ID: ${endpoint.api_id}`);
       }
     }
-    
+
     return endpointHost;
   }
 
@@ -232,26 +267,35 @@ export class FlowExecutionEngine {
     }
 
     // Add query parameters
-    if (endpoint.queryParams && typeof endpoint.queryParams === 'object' && Object.keys(endpoint.queryParams).length > 0) {
+    if (
+      endpoint.queryParams &&
+      typeof endpoint.queryParams === 'object' &&
+      Object.keys(endpoint.queryParams).length > 0
+    ) {
       try {
         const queryParams = new URLSearchParams();
         Object.entries(endpoint.queryParams).forEach(([name, value]) => {
           // Check if this parameter is an array parameter in the endpoint definition
-          const paramDefinition = endpointDef.parameters?.find((p: any) => p.name === name && p.in === 'query');
-          
-          if (paramDefinition && (paramDefinition.schema?.type === 'array' || paramDefinition.type === 'array')) {
+          const paramDefinition = endpointDef.parameters?.find(
+            (p: any) => p.name === name && p.in === 'query'
+          );
+
+          if (
+            paramDefinition &&
+            (paramDefinition.schema?.type === 'array' || paramDefinition.type === 'array')
+          ) {
             // Handle array parameter serialization
             let arrayValues: string[];
-            
+
             if (Array.isArray(value)) {
               // Value is already an array (e.g., from legacy multi format)
-              arrayValues = value.map(v => this.resolveTemplateValueUnified(String(v)));
+              arrayValues = value.map((v) => this.resolveTemplateValueUnified(String(v)));
             } else {
               // Value is a string that needs template resolution and comma parsing
               const resolvedValue = this.resolveTemplateValueUnified(value as string);
               arrayValues = this.parseArrayParameter(resolvedValue, paramDefinition);
             }
-            
+
             this.serializeArrayParameter(queryParams, name, arrayValues, paramDefinition);
           } else {
             // Handle as single value parameter
@@ -284,7 +328,13 @@ export class FlowExecutionEngine {
     return { url, headers, body };
   }
 
-  private async makeRequest(endpointDef: any, url: string, headers: Record<string, string>, body: any, endpointId: string): Promise<Response> {
+  private async makeRequest(
+    endpointDef: any,
+    url: string,
+    headers: Record<string, string>,
+    body: any,
+    endpointId: string
+  ): Promise<Response> {
     if (this.context.preferences.serverCookieHandling) {
       return await this.makeProxiedRequest(endpointDef, url, headers, body, endpointId);
     } else {
@@ -292,7 +342,13 @@ export class FlowExecutionEngine {
     }
   }
 
-  private async makeProxiedRequest(endpointDef: any, url: string, headers: Record<string, string>, body: any, endpointId: string): Promise<Response> {
+  private async makeProxiedRequest(
+    endpointDef: any,
+    url: string,
+    headers: Record<string, string>,
+    body: any,
+    endpointId: string
+  ): Promise<Response> {
     const targetUrl = new URL(url);
     const domain = targetUrl.hostname;
 
@@ -308,7 +364,11 @@ export class FlowExecutionEngine {
       }
     }
 
-    this.context.addLog('debug', `Sending ${requestCookies.length} cookies with request`, `Target domain: ${domain}`);
+    this.context.addLog(
+      'debug',
+      `Sending ${requestCookies.length} cookies with request`,
+      `Target domain: ${domain}`
+    );
 
     const proxiedResult = await executeProxiedEndpoint(
       endpointDef,
@@ -334,13 +394,22 @@ export class FlowExecutionEngine {
       );
     }
 
-    this.context.addLog('info', 'Request proxied through server for cookie handling', 
-      `Original URL: ${url}\nProxy URL: /api/proxy/request`);
+    this.context.addLog(
+      'info',
+      'Request proxied through server for cookie handling',
+      `Original URL: ${url}\nProxy URL: /api/proxy/request`
+    );
 
     return response;
   }
 
-  private async makeDirectRequest(endpointDef: any, url: string, headers: Record<string, string>, body: any, endpointId: string): Promise<Response> {
+  private async makeDirectRequest(
+    endpointDef: any,
+    url: string,
+    headers: Record<string, string>,
+    body: any,
+    endpointId: string
+  ): Promise<Response> {
     const response = await executeDirectEndpoint(
       endpointDef,
       url,
@@ -352,14 +421,21 @@ export class FlowExecutionEngine {
     );
 
     if (isDesktop) {
-      this.context.addLog('debug', `Desktop mode: cookies managed via Tauri HTTP client`,
-        `Cookies for ${endpointId}: ${this.context.cookieStore.has(endpointId) ? this.context.cookieStore.get(endpointId)?.length : 0} cookies`);
+      this.context.addLog(
+        'debug',
+        `Desktop mode: cookies managed via Tauri HTTP client`,
+        `Cookies for ${endpointId}: ${this.context.cookieStore.has(endpointId) ? this.context.cookieStore.get(endpointId)?.length : 0} cookies`
+      );
     }
 
     return response;
   }
 
-  private async processTransformations(endpoint: StepEndpoint, endpointId: string, responseData: unknown): Promise<void> {
+  private async processTransformations(
+    endpoint: StepEndpoint,
+    endpointId: string,
+    responseData: unknown
+  ): Promise<void> {
     if (!endpoint.transformations || endpoint.transformations.length === 0) {
       return;
     }
@@ -371,8 +447,6 @@ export class FlowExecutionEngine {
 
       for (const transform of endpoint.transformations) {
         try {
-          transformedData[transform.alias] = responseData;
-
           if (transform.expression && transform.expression.trim()) {
             const templateContext = createTemplateContextFromFlowRunner(
               this.context.storedResponses,
@@ -382,43 +456,73 @@ export class FlowExecutionEngine {
               this.context.environmentVariables
             );
 
-            const evaluatedResult = transformModule.transformResponse(responseData, transform.expression, templateContext);
+            const evaluatedResult = transformModule.transformResponse(
+              responseData,
+              transform.expression,
+              templateContext
+            );
 
             transformedData[transform.alias] = evaluatedResult;
-            this.context.addLog('debug', `Applied transformation: ${transform.alias}`,
-              `Expression: ${transform.expression} evaluated successfully, value: ${JSON.stringify(evaluatedResult)}`);
+            this.context.addLog(
+              'debug',
+              `Applied transformation: ${transform.alias}`,
+              `Expression: ${transform.expression} evaluated successfully, value: ${JSON.stringify(evaluatedResult)}`
+            );
           } else {
-            this.context.addLog('debug', `Applied transformation: ${transform.alias}`, `No expression provided, using raw response`);
+            transformedData[transform.alias] = responseData;
+            this.context.addLog(
+              'debug',
+              `Applied transformation: ${transform.alias}`,
+              `No expression provided, using raw response`
+            );
           }
         } catch (error: unknown) {
-          this.context.addLog('error', `Failed to apply transformation: ${transform.alias}`,
-            `Expression: ${transform.expression}\nError: ${error instanceof Error ? error.message : String(error)}`);
+          this.context.addLog(
+            'error',
+            `Failed to apply transformation: ${transform.alias}`,
+            `Expression: ${transform.expression}\nError: ${error instanceof Error ? error.message : String(error)}`
+          );
         }
       }
     } catch (error: unknown) {
-      this.context.addLog('error', `Failed to load transformation module`,
-        `Error: ${error instanceof Error ? error.message : String(error)}`);
+      this.context.addLog(
+        'error',
+        `Failed to load transformation module`,
+        `Error: ${error instanceof Error ? error.message : String(error)}`
+      );
 
-      for (const transform of endpoint.transformations) {
-        transformedData[transform.alias] = responseData;
-        this.context.addLog('debug', `Applied transformation (fallback): ${transform.alias}`,
-          `Expression: ${transform.expression} (evaluation skipped)`);
-      }
+      this.context.addLog(
+        'error',
+        `Transformation evaluation skipped`,
+        `No transformation aliases were stored because the evaluator could not be loaded.`
+      );
     }
 
     this.context.storedTransformations[endpointId] = transformedData;
     this.context.updateExecutionState(endpointId, { transformations: transformedData });
 
-    this.context.addLog('info', `Stored ${endpoint.transformations.length} transformations for endpoint: ${endpointId}`,
-      `Available aliases: ${Object.keys(transformedData).join(', ')}`);
+    this.context.addLog(
+      'info',
+      `Stored ${endpoint.transformations.length} transformations for endpoint: ${endpointId}`,
+      `Available aliases: ${Object.keys(transformedData).join(', ')}`
+    );
   }
 
-  private async processAssertions(endpoint: StepEndpoint, endpointId: string, response: Response, responseData: unknown, timing: number): Promise<void> {
+  private async processAssertions(
+    endpoint: StepEndpoint,
+    endpointId: string,
+    response: Response,
+    responseData: unknown,
+    timing: number
+  ): Promise<void> {
     if (!endpoint.assertions || endpoint.assertions.length === 0) {
       return;
     }
 
-    this.context.addLog('info', `Running ${endpoint.assertions.length} assertions for endpoint: ${endpointId}`);
+    this.context.addLog(
+      'info',
+      `Running ${endpoint.assertions.length} assertions for endpoint: ${endpointId}`
+    );
 
     try {
       const assertionModule = await import('$lib/assertions');
@@ -458,8 +562,11 @@ export class FlowExecutionEngine {
         }
       }
 
-      this.context.addLog('info', `Assertion evaluation completed for endpoint: ${endpointId}`,
-        `${assertionResults.results.length} assertions processed, Overall: ${assertionResults.passed ? 'PASSED' : 'FAILED'}`);
+      this.context.addLog(
+        'info',
+        `Assertion evaluation completed for endpoint: ${endpointId}`,
+        `${assertionResults.results.length} assertions processed, Overall: ${assertionResults.passed ? 'PASSED' : 'FAILED'}`
+      );
 
       if (!assertionResults.passed) {
         this.context.updateExecutionState(endpointId, {
@@ -492,28 +599,40 @@ export class FlowExecutionEngine {
 
   private updateFinalStatus(endpoint: StepEndpoint, endpointId: string, response: Response): void {
     const shouldSkipDefaultCheck = endpoint.skipDefaultStatusCheck === true;
-    
+
     // Check if assertions already failed - if so, don't override the failed status
     const currentState = this.context.executionState[endpointId];
     if (currentState?.status === 'failed') {
-      this.context.addLog('debug', `Endpoint ${endpointId} already marked as failed (likely due to assertion failure), skipping default status check`);
+      this.context.addLog(
+        'debug',
+        `Endpoint ${endpointId} already marked as failed (likely due to assertion failure), skipping default status check`
+      );
       return;
     }
 
     if (shouldSkipDefaultCheck) {
       this.context.updateExecutionState(endpointId, { status: 'completed' }, true);
-      this.context.addLog('debug', `Skipped default status check for endpoint ${endpointId}`,
-        `Response status: ${response.status} - using explicit assertions only`);
+      this.context.addLog(
+        'debug',
+        `Skipped default status check for endpoint ${endpointId}`,
+        `Response status: ${response.status} - using explicit assertions only`
+      );
     } else if (response.ok) {
       this.context.updateExecutionState(endpointId, { status: 'completed' }, true);
     } else {
-      this.context.updateExecutionState(endpointId, {
-        status: 'failed',
-        error: `Request failed with status ${response.status}: ${response.statusText}`
-      }, true);
+      this.context.updateExecutionState(
+        endpointId,
+        {
+          status: 'failed',
+          error: `Request failed with status ${response.status}: ${response.statusText}`
+        },
+        true
+      );
 
       if (this.context.preferences.stopOnError) {
-        this.context.error = new Error(`Request failed with status ${response.status}: ${response.statusText}`);
+        this.context.error = new Error(
+          `Request failed with status ${response.status}: ${response.statusText}`
+        );
       }
     }
   }
@@ -531,8 +650,11 @@ export class FlowExecutionEngine {
       const result = resolveTemplate(value, context);
       return result !== undefined && result !== null ? String(result) : '';
     } catch (error) {
-      this.context.addLog('error', `Template resolution failed for "${value}"`, 
-        error instanceof Error ? error.message : String(error));
+      this.context.addLog(
+        'error',
+        `Template resolution failed for "${value}"`,
+        error instanceof Error ? error.message : String(error)
+      );
       return value;
     }
   }
@@ -560,8 +682,11 @@ export class FlowExecutionEngine {
 
       return result;
     } catch (error) {
-      this.context.addLog('error', 'Template object resolution failed', 
-        error instanceof Error ? error.message : String(error));
+      this.context.addLog(
+        'error',
+        'Template object resolution failed',
+        error instanceof Error ? error.message : String(error)
+      );
       return obj;
     }
   }
@@ -571,7 +696,11 @@ export class FlowExecutionEngine {
       const contentType = response.headers.get('content-type') || '';
       let data: unknown;
 
-      this.context.addLog('debug', 'Response content type:', contentType || 'No content-type header');
+      this.context.addLog(
+        'debug',
+        'Response content type:',
+        contentType || 'No content-type header'
+      );
 
       if (contentType.includes('application/json')) {
         data = await response.json();
@@ -597,8 +726,11 @@ export class FlowExecutionEngine {
 
       return data;
     } catch (_error: unknown) {
-      this.context.addLog('error', 'Failed to parse response:', 
-        _error instanceof Error ? _error.message : String(_error));
+      this.context.addLog(
+        'error',
+        'Failed to parse response:',
+        _error instanceof Error ? _error.message : String(_error)
+      );
       return 'Unable to parse response data';
     }
   }
@@ -624,7 +756,12 @@ export class FlowExecutionEngine {
   /**
    * Serialize array parameter values to query string format
    */
-  private serializeArrayParameter(queryParams: URLSearchParams, name: string, values: string[], paramDefinition: any): void {
+  private serializeArrayParameter(
+    queryParams: URLSearchParams,
+    name: string,
+    values: string[],
+    paramDefinition: any
+  ): void {
     if (values.length === 0) {
       return;
     }
@@ -637,7 +774,7 @@ export class FlowExecutionEngine {
       case 'form':
         if (explode) {
           // Multiple parameters: ?tags=red&tags=blue&tags=green
-          values.forEach(value => queryParams.append(name, value));
+          values.forEach((value) => queryParams.append(name, value));
         } else {
           // Single parameter with comma-separated values: ?tags=red,blue,green
           queryParams.append(name, values.join(','));
@@ -659,11 +796,11 @@ export class FlowExecutionEngine {
         break;
       case 'multi':
         // Multiple parameters: ?tags=red&tags=blue&tags=green
-        values.forEach(value => queryParams.append(name, value));
+        values.forEach((value) => queryParams.append(name, value));
         break;
       default:
         // Default to exploded form (multiple parameters)
-        values.forEach(value => queryParams.append(name, value));
+        values.forEach((value) => queryParams.append(name, value));
         break;
     }
   }

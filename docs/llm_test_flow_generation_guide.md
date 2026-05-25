@@ -132,10 +132,12 @@ Transformations extract and manipulate data from their own endpoint response for
 The transformation engine supports:
 
 - JSONPath expressions (e.g., `$.data[0].id`)
-- Functional pipeline operations (e.g., `map`, `filter`, `where`, `count`)
+- Recursive functional pipeline operations (e.g., `where`, `map`, `count`, `take`)
 - Logical operations (`&&`, `||`, `!`) and comparisons (`==`, `!=`, `>`, `<`, etc.)
+- Constant inputs: strings, numbers, booleans, null, arrays, and object literals with expression values
+- Function arguments that can be JSONPath, templates, constants, object/array literals, or nested pipelines
 
-Transformations may use `{{...}}` templates for primitive flow-local values. Do not use `{{{...}}}` in transformations.
+Transformations may use `{{param:...}}`, `{{res:...}}`, `{{proc:...}}`, and `{{func:...}}` templates. Do not use `{{{...}}}` in transformations. Do not use `{{env:...}}`; map environment values into flow parameters first and reference them through `{{param:...}}`.
 
 ### Common Transformation Patterns
 
@@ -158,8 +160,20 @@ Transformations may use `{{...}}` templates for primitive flow-local values. Do 
    ```
 
 4. **Filter and map**:
+
    ```
    $.users | where($.age > 18) | map($.name)
+   ```
+
+5. **Shape objects with recursive expressions**:
+
+   ```
+   $.items | map({ id: $.id, total: $.price | mul($.quantity), tags: [$.status, true] })
+   ```
+
+6. **Use template-driven limits**:
+   ```
+   $.items | where($.status == "{{param:status}}") | take({{param:limit}} | int(10))
    ```
 
 ## 4. Assertions
