@@ -10,10 +10,9 @@ An expression can be:
 - Template: `{{param:limit}}`, `{{res:step1-0.$.id}}`, `{{proc:step1-0.$.user_id}}`, `{{func:uuid()}}`
 - Constant: `"active"`, `10`, `true`, `null`, `[1, 2]`, `{ id: $.id, name: $.name }`
 - Unary/binary expression: `!$.active`, `$.price * $.quantity`, `$.age >= 18 && $.active == true`
-- Function call: `round($.total, 2)`, `contains($.email, "@company.com")`
 - Pipeline: `$.data | where($.active == true) | map($.id)`
 
-Pipelines evaluate left to right. `input | fn(arg)` is equivalent to calling `fn` with the previous pipeline value as its input. Function arguments are recursively parsed, so each argument can be a JSONPath, template, constant, object/array literal, function call, or nested pipeline.
+Pipelines evaluate left to right. Transformation functions are pipeline stages only: `value | fn(args...)`. Direct function calls such as `length($.items)` or `round($.total, 2)` are invalid. Function arguments are recursively parsed expressions, so each argument can be a JSONPath, template, constant, object/array literal, operator expression, or nested pipeline.
 
 ## Template Rules
 
@@ -67,6 +66,7 @@ Use recursive pipeline arguments:
 ```txt
 $.items | take({{param:limit}} | int(10))
 $.orders | map({ id: $.id, total: $.price | mul($.quantity) })
+$.orders | map({ id: $.id, total: $.price * $.quantity })
 ```
 
 Sort and select:
@@ -92,7 +92,7 @@ $.items | sum($.amount)
 - Arrays/objects: `flatten(depth)`, `pick(["key"])`
 - Arithmetic pipeline helpers: `add(x)`, `sub(x)`, `mul(x)`, `div(x)`, `mod(x)`
 - Type casts: `int(default?)`, `float(default?)`, `string(default?)`, `bool(default?)`
-- Expression functions: `contains(a, b)`, `startsWith(a, b)`, `endsWith(a, b)`, `matches(a, pattern)`, `empty(x)`, `length(x)`, `abs(x)`, `round(x, digits)`, `ceil(x)`, `floor(x)`, `min(x, y)`, `max(x, y)`, `pow(x, y)`
+- Value pipeline functions: `contains(search)`, `startsWith(prefix)`, `endsWith(suffix)`, `matches(pattern)`, `empty()`, `length()`, `abs()`, `round(digits?)`, `ceil()`, `floor()`, `min(value)`, `max(value)`, `pow(value)`
 
 ## Error Behavior
 

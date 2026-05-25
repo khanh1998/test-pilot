@@ -363,10 +363,26 @@ function explainTransformStage(stage: string): {
   const argsText = rawArgs.trim() ? ` with arguments ${rawArgs.trim()}` : '';
 
   let outputType = 'transformed value';
-  if (name === 'count' || name === 'sum' || name === 'int' || name === 'float')
+  if (
+    [
+      'count',
+      'sum',
+      'int',
+      'float',
+      'length',
+      'abs',
+      'round',
+      'ceil',
+      'floor',
+      'min',
+      'max',
+      'pow'
+    ].includes(name)
+  )
     outputType = 'number';
   if (name === 'first' || name === 'last' || name === 'at') outputType = 'single item';
-  if (name === 'bool') outputType = 'boolean';
+  if (['bool', 'contains', 'startsWith', 'endsWith', 'matches', 'empty'].includes(name))
+    outputType = 'boolean';
   if (name === 'string') outputType = 'string';
   if (['where', 'map', 'flatten', 'sort', 'take', 'skip'].includes(name)) outputType = 'collection';
 
@@ -392,9 +408,11 @@ export function explainTransformationExpression(expression: string): Explanation
   }
 
   const warnings: string[] = [];
+  let hasParseError = false;
   try {
     new ExpressionParser().parseExpression(expression);
   } catch (error) {
+    hasParseError = true;
     warnings.push(error instanceof Error ? error.message : String(error));
   }
 
@@ -422,7 +440,7 @@ export function explainTransformationExpression(expression: string): Explanation
 
   return {
     kind: 'transformation',
-    valid: !warnings.some((warning) => warning.startsWith('Unknown')),
+    valid: !hasParseError && !warnings.some((warning) => warning.startsWith('Unknown')),
     summary: `Transformation pipeline with ${stages.length} stage${stages.length === 1 ? '' : 's'}`,
     plainEnglish: stageExplanations
       .map((stage, index) => `${index === 0 ? 'First' : 'Then'} it ${stage.summary}.`)

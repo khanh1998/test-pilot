@@ -262,6 +262,34 @@ describe('mcp flow helpers', () => {
     expect(result.errors.join(' ')).toContain('Transformations use {{...}} templates only');
   });
 
+  it('rejects direct function calls inside transformations', () => {
+    const flow = createFlowDraft({
+      name: 'Direct function transformation',
+      apiHosts: {
+        '1': { url: 'https://api.example.com', name: 'Food API' }
+      }
+    });
+
+    const updated = addStepToFlow(flow, {
+      label: 'List',
+      endpoints: [
+        {
+          api_id: 1,
+          endpoint_id: 20,
+          pathParams: {},
+          queryParams: {},
+          headers: [],
+          body: null,
+          transformations: [{ alias: 'count', expression: 'length($.items)' }]
+        }
+      ]
+    });
+
+    const result = validateFlowDocument(updated);
+    expect(result.valid).toBe(false);
+    expect(result.errors.join(' ')).toContain('Direct function call');
+  });
+
   it('upserts transformations and primitive flow outputs', () => {
     const flow = createFlowDraft({
       name: 'Output flow',

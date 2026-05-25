@@ -427,12 +427,13 @@ Support for logical expressions with operators:
 $.user.age > 18 && $.user.verified == true
 $.status == "active" || $.status == "pending"
 
-// String operations
-contains($.email, "@company.com")
-startsWith($.name, "John")
-matches($.description, "^[A-Z].*")
+// Value pipeline functions
+$.email | contains("@company.com")
+$.name | startsWith("John")
+$.description | matches("^[A-Z].*")
+($.price * $.quantity) | round(2)
 
-Each function argument can be a JSONPath, template, constant, object/array literal, or nested pipeline. Do not use {{env:...}} in transformations; create a flow parameter and bind it to the environment value at execution time.
+Transformation functions are pipeline stages only: use value | fn(args...). Do not write direct function calls like length($.items), round($.amount, 2), or contains($.email, "@"). Each function argument can be a JSONPath, template, constant, object/array literal, operator expression, or nested pipeline. Do not use {{env:...}} in transformations; create a flow parameter and bind it to the environment value at execution time.
 
 ### Multi-step Transformations
 Create multiple transformations to extract different pieces of data:

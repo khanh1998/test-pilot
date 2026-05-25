@@ -100,11 +100,7 @@ export class ExpressionParser {
     const calls: FunctionCallNode[] = [];
 
     while (this.match('pipe')) {
-      const next = this.parsePrimary();
-      if (next.type !== 'functionCall') {
-        throw this.error('A pipeline stage must be a function call.');
-      }
-      calls.push(next);
+      calls.push(this.parsePipelineStage());
     }
 
     if (calls.length === 0) {
@@ -116,6 +112,12 @@ export class ExpressionParser {
     }
 
     return { type: 'pipeline', input, calls };
+  }
+
+  private parsePipelineStage(): FunctionCallNode {
+    const name = this.expect('identifier').value;
+    this.expectValue('paren', '(');
+    return this.parseFunctionCall(name);
   }
 
   private parseBinaryExpression(minPrecedence: number): ExpressionNode {
@@ -204,8 +206,10 @@ export class ExpressionParser {
       if (token.value === 'null') return { type: 'literal', value: null };
       if (token.value === 'undefined') return { type: 'literal', value: undefined };
 
-      if (this.matchValue('paren', '(')) {
-        return this.parseFunctionCall(token.value);
+      if (this.peek().type === 'paren' && this.peek().value === '(') {
+        throw this.error(
+          `Direct function call "${token.value}(...)" is not valid in transformations. Use pipeline syntax: value | ${token.value}(...).`
+        );
       }
 
       return { type: 'identifier', name: token.value };
@@ -375,7 +379,10 @@ export class ASTEvaluator {
       case 'binary':
         return this.evaluateBinary(node, scope);
       case 'functionCall':
-        return this.evaluateFunctionCall(node, scope.current, scope);
+        throw new TransformationExpressionError(
+          `Direct function call "${node.name}(...)" is not valid in transformations. Use pipeline syntax: value | ${node.name}(...).`,
+          'INVALID_FUNCTION_CALL'
+        );
       case 'pipeline':
         return this.evaluatePipeline(node, scope);
       default:
@@ -624,7 +631,7 @@ export class ASTEvaluator {
       case 'min':
       case 'max':
       case 'pow':
-        return this.callOperator(node.name, args);
+        return this.callOperator(node.name, [input, ...args]);
       default:
         if (this.operators[node.name]) {
           return this.operators[node.name](...args);

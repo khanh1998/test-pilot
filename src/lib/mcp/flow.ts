@@ -739,11 +739,14 @@ export function validateFlowDocument(document: FlowDocument): FlowValidationResu
         }
 
         const explanation = explainTransformationExpression(transformation.expression);
-        warnings.push(
-          ...explanation.warnings
-            .filter((message) => !message.includes('Could not classify this pipeline stage'))
-            .map((message) => `${step.step_id}.transformations.${transformation.alias}: ${message}`)
-        );
+        const transformationMessages = explanation.warnings
+          .filter((message) => !message.includes('Could not classify this pipeline stage'))
+          .map((message) => `${step.step_id}.transformations.${transformation.alias}: ${message}`);
+        if (explanation.valid) {
+          warnings.push(...transformationMessages);
+        } else {
+          errors.push(...transformationMessages);
+        }
       }
 
       for (const assertion of endpoint.assertions ?? []) {

@@ -82,4 +82,11 @@ describe('mcp explain helpers', () => {
 
     expect(result.warnings.join(' ')).toContain('double-brace templates only');
   });
+
+  it('rejects direct transformation function calls', () => {
+    const result = explainTransformationExpression('length($.items)');
+
+    expect(result.valid).toBe(false);
+    expect(result.warnings.join(' ')).toContain('Direct function call');
+  });
 });

@@ -102,63 +102,69 @@ describe('Math Operators in SafeExpressionEvaluator', () => {
     });
   });
 
-  describe('Math Functions', () => {
+  describe('Math Pipeline Functions', () => {
     it('should handle abs function', () => {
-      expect(evaluator.evaluate('abs(-10)', {})).toBe(10);
-      expect(evaluator.evaluate('abs(10)', {})).toBe(10);
-      expect(evaluator.evaluate('abs(-5.5)', {})).toBe(5.5);
-      expect(evaluator.evaluate('abs(0)', {})).toBe(0);
+      expect(evaluator.evaluate('-10 | abs()', {})).toBe(10);
+      expect(evaluator.evaluate('10 | abs()', {})).toBe(10);
+      expect(evaluator.evaluate('-5.5 | abs()', {})).toBe(5.5);
+      expect(evaluator.evaluate('0 | abs()', {})).toBe(0);
     });
 
     it('should handle round function', () => {
-      expect(evaluator.evaluate('round(10.4)', {})).toBe(10);
-      expect(evaluator.evaluate('round(10.6)', {})).toBe(11);
-      expect(evaluator.evaluate('round(10.5)', {})).toBe(11);
-      expect(evaluator.evaluate('round(-10.6)', {})).toBe(-11);
+      expect(evaluator.evaluate('10.4 | round()', {})).toBe(10);
+      expect(evaluator.evaluate('10.6 | round()', {})).toBe(11);
+      expect(evaluator.evaluate('10.5 | round()', {})).toBe(11);
+      expect(evaluator.evaluate('-10.6 | round()', {})).toBe(-11);
     });
 
     it('should support round with precision', () => {
-      const result = evaluator.evaluate('round(10.456, 2)', {});
+      const result = evaluator.evaluate('10.456 | round(2)', {});
       expect(result).toBe(10.46);
     });
 
     it('should handle ceil function', () => {
-      expect(evaluator.evaluate('ceil(10.1)', {})).toBe(11);
-      expect(evaluator.evaluate('ceil(10.9)', {})).toBe(11);
-      expect(evaluator.evaluate('ceil(-10.1)', {})).toBe(-10);
-      expect(evaluator.evaluate('ceil(10)', {})).toBe(10);
+      expect(evaluator.evaluate('10.1 | ceil()', {})).toBe(11);
+      expect(evaluator.evaluate('10.9 | ceil()', {})).toBe(11);
+      expect(evaluator.evaluate('-10.1 | ceil()', {})).toBe(-10);
+      expect(evaluator.evaluate('10 | ceil()', {})).toBe(10);
     });
 
     it('should handle floor function', () => {
-      expect(evaluator.evaluate('floor(10.1)', {})).toBe(10);
-      expect(evaluator.evaluate('floor(10.9)', {})).toBe(10);
-      expect(evaluator.evaluate('floor(-10.1)', {})).toBe(-11);
-      expect(evaluator.evaluate('floor(10)', {})).toBe(10);
+      expect(evaluator.evaluate('10.1 | floor()', {})).toBe(10);
+      expect(evaluator.evaluate('10.9 | floor()', {})).toBe(10);
+      expect(evaluator.evaluate('-10.1 | floor()', {})).toBe(-11);
+      expect(evaluator.evaluate('10 | floor()', {})).toBe(10);
     });
 
     it('should handle min function', () => {
-      expect(evaluator.evaluate('min(10, 5)', {})).toBe(5);
-      expect(evaluator.evaluate('min(-10, -5)', {})).toBe(-10);
-      expect(evaluator.evaluate('min(10.5, 10.3)', {})).toBe(10.3);
+      expect(evaluator.evaluate('10 | min(5)', {})).toBe(5);
+      expect(evaluator.evaluate('-10 | min(-5)', {})).toBe(-10);
+      expect(evaluator.evaluate('10.5 | min(10.3)', {})).toBe(10.3);
     });
 
     it('should handle max function', () => {
-      expect(evaluator.evaluate('max(10, 5)', {})).toBe(10);
-      expect(evaluator.evaluate('max(-10, -5)', {})).toBe(-5);
-      expect(evaluator.evaluate('max(10.5, 10.3)', {})).toBe(10.5);
+      expect(evaluator.evaluate('10 | max(5)', {})).toBe(10);
+      expect(evaluator.evaluate('-10 | max(-5)', {})).toBe(-5);
+      expect(evaluator.evaluate('10.5 | max(10.3)', {})).toBe(10.5);
     });
 
     it('should handle pow function', () => {
-      expect(evaluator.evaluate('pow(2, 3)', {})).toBe(8);
-      expect(evaluator.evaluate('pow(10, 2)', {})).toBe(100);
-      expect(evaluator.evaluate('pow(5, 0)', {})).toBe(1);
-      expect(evaluator.evaluate('pow(2, -1)', {})).toBe(0.5);
+      expect(evaluator.evaluate('2 | pow(3)', {})).toBe(8);
+      expect(evaluator.evaluate('10 | pow(2)', {})).toBe(100);
+      expect(evaluator.evaluate('5 | pow(0)', {})).toBe(1);
+      expect(evaluator.evaluate('2 | pow(-1)', {})).toBe(0.5);
     });
 
     it('should handle invalid function arguments', () => {
-      expect(evaluator.evaluate('abs("hello")', {})).toBeNaN();
-      expect(evaluator.evaluate('min("a", "b")', {})).toBeNaN();
-      expect(evaluator.evaluate('pow(null, undefined)', {})).toBeNaN();
+      expect(evaluator.evaluate('"hello" | abs()', {})).toBeNaN();
+      expect(evaluator.evaluate('"a" | min("b")', {})).toBeNaN();
+      expect(evaluator.evaluate('null | pow(undefined)', {})).toBeNaN();
+    });
+
+    it('should reject direct function syntax', () => {
+      expect(() => evaluator.evaluate('abs(-10)', {})).toThrow('Direct function call');
+      expect(() => evaluator.evaluate('round(10.456, 2)', {})).toThrow('Direct function call');
+      expect(() => evaluator.evaluate('min(10, 5)', {})).toThrow('Direct function call');
     });
   });
 
@@ -184,7 +190,7 @@ describe('Math Operators in SafeExpressionEvaluator', () => {
 
     it('should handle template with math functions', () => {
       const result = evaluator.evaluate(
-        'round({{res:step1-0.$.price}} * {{param:taxRate}}, 2)',
+        '({{res:step1-0.$.price}} * {{param:taxRate}}) | round(2)',
         {}
       );
       expect(result).toBe(2.04); // round(25.50 * 0.08, 2) = round(2.04, 2) = 2.04
@@ -223,7 +229,7 @@ describe('Math Operators in SafeExpressionEvaluator', () => {
     it('should calculate tax amount', () => {
       // Tax = subtotal * tax rate
       const expression =
-        'round(({{res:step1-0.$.price}} * {{res:step1-0.$.quantity}}) * {{param:taxRate}}, 2)';
+        '(({{res:step1-0.$.price}} * {{res:step1-0.$.quantity}}) * {{param:taxRate}}) | round(2)';
       const result = evaluator.evaluate(expression, {});
       expect(result).toBe(8.16); // round((25.50 * 4) * 0.08, 2) = round(8.16, 2)
     });
@@ -250,7 +256,7 @@ describe('Math Operators in SafeExpressionEvaluator', () => {
 
     it('should handle currency conversion with rounding', () => {
       // Convert USD to EUR and round to 2 decimals
-      const expression = 'round({{res:step1-0.$.total}} * {{param:exchangeRate}}, 2)';
+      const expression = '({{res:step1-0.$.total}} * {{param:exchangeRate}}) | round(2)';
       const result = evaluator.evaluate(expression, {});
       expect(result).toBe(125); // round(100 * 1.25, 2) = 125.00
     });
@@ -306,7 +312,10 @@ describe('Math Operators in SafeExpressionEvaluator', () => {
         measurements: [-5.7, 10.3, -2.1, 8.9]
       };
 
-      const result = evaluator.evaluate('abs($.measurements[0]) + abs($.measurements[2])', data);
+      const result = evaluator.evaluate(
+        '($.measurements[0] | abs()) + ($.measurements[2] | abs())',
+        data
+      );
       expect(result).toBeCloseTo(7.8, 10); // abs(-5.7) + abs(-2.1) = 5.7 + 2.1 = 7.8
     });
   });

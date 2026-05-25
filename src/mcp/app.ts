@@ -65,6 +65,197 @@ function asTextResult(structuredContent: Record<string, unknown>) {
 
 const primitiveParameterTypeSchema = z.enum(['string', 'number', 'boolean', 'null']);
 const primitiveOutputTypeSchema = z.enum(['string', 'number', 'boolean', 'null']);
+const transformationExpressionDescription =
+  'Pipeline-only transformation expression. Use value | fn(args...), for example $.items | count(), $.items | map({ id: $.id, total: $.price * $.qty }), $.email | contains("@company.com"), $.amount | round(2), or $.items | take({{param:limit}} | int(10)). Do not use direct function calls such as length($.items), round($.amount, 2), or contains($.email, "@"). Arguments may be JSONPath, templates, constants, object/array literals, operator expressions, or parenthesized nested pipelines.';
+const transformationReference = {
+  functions: {
+    filtering: [
+      {
+        syntax: 'where(condition)',
+        input: 'array',
+        output: 'array',
+        notes: 'Keeps items where condition is truthy. Inside condition, $ is each item.'
+      },
+      {
+        syntax: 'select(condition)',
+        input: 'array',
+        output: 'array',
+        notes: 'Alias of where(condition).'
+      }
+    ],
+    mapping: [
+      {
+        syntax: 'map(expression)',
+        input: 'array',
+        output: 'array',
+        notes: 'Maps each item. Inside expression, $ is each item.'
+      },
+      {
+        syntax: 'map({ key: expression }) or map(key: expression)',
+        input: 'array',
+        output: 'array<object>',
+        notes: 'Builds an object for each item.'
+      },
+      {
+        syntax: 'transform(expression) or transform(key: expression)',
+        input: 'object|array',
+        output: 'value|array',
+        notes: 'Transforms one value, or each item if input is an array.'
+      }
+    ],
+    sortingAndSlicing: [
+      {
+        syntax: 'sort(by: expression, desc: boolean)',
+        input: 'array',
+        output: 'array',
+        notes: 'Sorts items. In by, $ is each item.'
+      },
+      { syntax: 'take(n)', input: 'array', output: 'array', notes: 'Keeps first n items.' },
+      { syntax: 'skip(n)', input: 'array', output: 'array', notes: 'Drops first n items.' },
+      { syntax: 'at(index)', input: 'array', output: 'value', notes: 'Supports negative indexes.' },
+      { syntax: 'first()', input: 'array', output: 'value', notes: 'Returns first item.' },
+      { syntax: 'last()', input: 'array', output: 'value', notes: 'Returns last item.' }
+    ],
+    aggregation: [
+      { syntax: 'count()', input: 'array', output: 'number', notes: 'Counts array items.' },
+      {
+        syntax: 'sum(expression?)',
+        input: 'array',
+        output: 'number',
+        notes: 'Sums each item or expression evaluated per item.'
+      }
+    ],
+    arraysAndObjects: [
+      {
+        syntax: 'flatten(depth?)',
+        input: 'array',
+        output: 'array',
+        notes: 'Flattens nested arrays. Default depth is 1.'
+      },
+      {
+        syntax: 'pick(["key"])',
+        input: 'object',
+        output: 'object',
+        notes: 'Keeps selected object keys.'
+      }
+    ],
+    arithmetic: [
+      { syntax: 'add(value)', input: 'number', output: 'number', notes: 'Adds value.' },
+      { syntax: 'sub(value)', input: 'number', output: 'number', notes: 'Subtracts value.' },
+      { syntax: 'mul(value)', input: 'number', output: 'number', notes: 'Multiplies by value.' },
+      { syntax: 'div(value)', input: 'number', output: 'number', notes: 'Divides by value.' },
+      { syntax: 'mod(value)', input: 'number', output: 'number', notes: 'Modulo by value.' }
+    ],
+    casts: [
+      {
+        syntax: 'int(default?)',
+        input: 'value',
+        output: 'number|null',
+        notes: 'Casts to integer.'
+      },
+      {
+        syntax: 'float(default?)',
+        input: 'value',
+        output: 'number|null',
+        notes: 'Casts to float.'
+      },
+      {
+        syntax: 'string(default?)',
+        input: 'value',
+        output: 'string|null',
+        notes: 'Casts to string.'
+      },
+      {
+        syntax: 'bool(default?)',
+        input: 'value',
+        output: 'boolean|null',
+        notes: 'Casts to boolean.'
+      }
+    ],
+    value: [
+      {
+        syntax: 'contains(search)',
+        input: 'string',
+        output: 'boolean',
+        notes: 'Checks whether input contains search.'
+      },
+      {
+        syntax: 'startsWith(prefix)',
+        input: 'string',
+        output: 'boolean',
+        notes: 'Checks string prefix.'
+      },
+      {
+        syntax: 'endsWith(suffix)',
+        input: 'string',
+        output: 'boolean',
+        notes: 'Checks string suffix.'
+      },
+      {
+        syntax: 'matches(pattern)',
+        input: 'string',
+        output: 'boolean',
+        notes: 'Checks input against a safe regex pattern.'
+      },
+      {
+        syntax: 'empty()',
+        input: 'value',
+        output: 'boolean',
+        notes: 'True for empty string, null, undefined, empty array, or empty object.'
+      },
+      {
+        syntax: 'length()',
+        input: 'array|string',
+        output: 'number',
+        notes: 'Returns array or string length; otherwise 0.'
+      },
+      { syntax: 'abs()', input: 'number', output: 'number', notes: 'Absolute value.' },
+      {
+        syntax: 'round(digits?)',
+        input: 'number',
+        output: 'number',
+        notes: 'Rounds input, optionally to decimal digits.'
+      },
+      { syntax: 'ceil()', input: 'number', output: 'number', notes: 'Rounds up.' },
+      { syntax: 'floor()', input: 'number', output: 'number', notes: 'Rounds down.' },
+      {
+        syntax: 'min(value)',
+        input: 'number',
+        output: 'number',
+        notes: 'Smaller of input and value.'
+      },
+      {
+        syntax: 'max(value)',
+        input: 'number',
+        output: 'number',
+        notes: 'Larger of input and value.'
+      },
+      { syntax: 'pow(value)', input: 'number', output: 'number', notes: 'Raises input to value.' }
+    ]
+  },
+  operators: {
+    comparison: [
+      { syntax: 'a == b', output: 'boolean' },
+      { syntax: 'a != b', output: 'boolean' },
+      { syntax: 'a > b', output: 'boolean' },
+      { syntax: 'a < b', output: 'boolean' },
+      { syntax: 'a >= b', output: 'boolean' },
+      { syntax: 'a <= b', output: 'boolean' }
+    ],
+    logical: [
+      { syntax: 'a && b', output: 'boolean' },
+      { syntax: 'a || b', output: 'boolean' },
+      { syntax: '!a', output: 'boolean' }
+    ],
+    arithmetic: [
+      { syntax: 'a + b', output: 'number' },
+      { syntax: 'a - b', output: 'number' },
+      { syntax: 'a * b', output: 'number' },
+      { syntax: 'a / b', output: 'number' },
+      { syntax: 'a % b', output: 'number' }
+    ]
+  }
+};
 
 function ttlInfo(kind: 'draft' | 'session' | 'run', expiresAt?: number) {
   const ttlMs =
@@ -694,6 +885,86 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
   });
 
   server.registerTool(
+    'get_context',
+    {
+      title: 'Get Context',
+      description:
+        'Get a concise guide for how AI agents should use the Test-Pilot MCP app, including the normal flow-building workflow, key tools, and transformation syntax rules.',
+      inputSchema: {
+        focus: z.enum(['overview', 'flow', 'transformations']).optional()
+      }
+    },
+    async ({ focus = 'overview' }) =>
+      asTextResult({
+        app: {
+          name: 'Test-Pilot',
+          purpose:
+            'Generate, edit, validate, run, and save API test flows from imported OpenAPI/Swagger endpoints.'
+        },
+        agentWorkflow: [
+          'For a new flow, call prepare_flow_context(projectId) first to inspect APIs, environments, existing flows, and clarification needs.',
+          'If guidance says clarification is needed, ask the human to choose APIs and/or environment before drafting.',
+          'Start stateful work with start_flow_session(projectId), then choose_flow_scope when APIs/environment are known.',
+          'Create or load a draft with create_flow_draft, start_edit_flow_session, get_flow_session, or get_draft.',
+          'Find endpoints with search_endpoints or browse_endpoints, then build steps with add_step or update_step.',
+          'Use add_transformation for response data needed later, link_step_output for dependencies, and add_assertion or add_expectation_assertion for checks.',
+          'Before save or run, call validate_flow and review_flow_session.'
+        ],
+        keyTools: {
+          context: ['prepare_flow_context', 'get_project_context', 'get_flow_session', 'get_draft'],
+          endpointDiscovery: ['search_endpoints', 'browse_endpoints', 'get_endpoint_detail'],
+          drafting: [
+            'start_flow_session',
+            'choose_flow_scope',
+            'create_flow_draft',
+            'add_step',
+            'update_step'
+          ],
+          dataDependencies: [
+            'add_transformation',
+            'suggest_expression',
+            'link_step_output',
+            'link_parameter'
+          ],
+          validation: ['validate_flow', 'explain_flow', 'review_flow_session'],
+          execution: ['run_flow', 'get_flow_run', 'save_flow']
+        },
+        transformationSyntax:
+          focus === 'overview' || focus === 'transformations'
+            ? {
+                rule: 'Transformation functions are pipeline stages only: value | fn(args...). Do not use fn(value, args).',
+                validExamples: [
+                  '$.items | count()',
+                  '$.items | map({ id: $.id, total: $.price * $.qty })',
+                  '$.email | contains("@company.com")',
+                  '$.amount | round(2)',
+                  '$.items | take({{param:limit}} | int(10))'
+                ],
+                invalidExamples: [
+                  'length($.items)',
+                  'round($.amount, 2)',
+                  'contains($.email, "@company.com")'
+                ],
+                inputs:
+                  'Function args may be JSONPath, {{param/res/proc/func}} templates, constants, arrays, objects, operator expressions, or parenthesized nested pipelines.',
+                templates:
+                  'Transformations allow {{param:...}}, {{res:...}}, {{proc:...}}, and {{func:...}}. Do not use {{env:...}} or {{{...}}} in transformations.'
+              }
+            : null,
+        transformationReference:
+          focus === 'overview' || focus === 'transformations' ? transformationReference : null,
+        templateRules: {
+          parameters: 'Use {{param:name}} for flow inputs.',
+          responses: 'Use {{res:stepId-0.$.path}} for previous endpoint responses.',
+          transformations: 'Use {{proc:stepId-0.$.alias.path}} for transformation outputs.',
+          environment:
+            'Do not reference environment values directly in flows. Add a flow parameter, then map it to an environment variable.'
+        },
+        focus
+      })
+  );
+
+  server.registerTool(
     'explain_expression',
     {
       title: 'Explain Expression',
@@ -1141,7 +1412,7 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
                 .array(
                   z.object({
                     alias: z.string(),
-                    expression: z.string()
+                    expression: z.string().describe(transformationExpressionDescription)
                   })
                 )
                 .optional(),
@@ -1218,7 +1489,7 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
                 .array(
                   z.object({
                     alias: z.string(),
-                    expression: z.string()
+                    expression: z.string().describe(transformationExpressionDescription)
                   })
                 )
                 .optional(),
@@ -1304,7 +1575,7 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
     {
       title: 'Add Transformation',
       description:
-        'Add or update an endpoint transformation by alias. Transformations read their own endpoint response with JSONPath and may use double-brace templates for primitive flow-local values from parameters, previous responses, previous transformations, or functions.',
+        'Add or update an endpoint transformation by alias. Transformations read their own endpoint response. Functions are pipeline stages only: use value | fn(args...), not fn(value, args). Operators like +, *, ==, && are normal expressions and may be used inside arguments or object mappings.',
       inputSchema: {
         draftId: z.string().optional(),
         sessionId: z.string().optional(),
@@ -1312,7 +1583,7 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
         stepId: z.string(),
         endpointIndex: z.number().optional(),
         alias: z.string(),
-        expression: z.string()
+        expression: z.string().describe(transformationExpressionDescription)
       }
     },
     async ({ draftId, sessionId, flowDocument, stepId, endpointIndex, alias, expression }) => {

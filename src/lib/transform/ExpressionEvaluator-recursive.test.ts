@@ -99,6 +99,51 @@ describe('Recursive transformation expression grammar', () => {
     ]);
   });
 
+  it('supports value functions only as pipeline stages', () => {
+    const result = evaluator.evaluate(
+      '$.data | map(tagCount: $.tags | length(), hasA: $.tags | contains("a"), activePrefix: $.status | startsWith("act"), activeSuffix: $.status | endsWith("ive"), statusMatches: $.status | matches("^act"), rounded: ($.price * $.qty) | round(1), emptyTags: $.tags | empty())',
+      data
+    );
+
+    expect(result).toEqual([
+      {
+        tagCount: 1,
+        hasA: false,
+        activePrefix: false,
+        activeSuffix: true,
+        statusMatches: false,
+        rounded: 60,
+        emptyTags: false
+      },
+      {
+        tagCount: 2,
+        hasA: true,
+        activePrefix: true,
+        activeSuffix: true,
+        statusMatches: true,
+        rounded: 40,
+        emptyTags: false
+      },
+      {
+        tagCount: 0,
+        hasA: false,
+        activePrefix: true,
+        activeSuffix: true,
+        statusMatches: true,
+        rounded: 60,
+        emptyTags: true
+      }
+    ]);
+  });
+
+  it('rejects direct transformation function calls', () => {
+    expect(() => evaluator.evaluate('length($.data)', data)).toThrow('Direct function call');
+    expect(() => evaluator.evaluate('contains($.status, "active")', data)).toThrow(
+      'Direct function call'
+    );
+    expect(() => evaluator.evaluate('$.data | map(int())', data)).toThrow('Direct function call');
+  });
+
   it('supports member access after template values for compatibility', () => {
     const result = evaluator.evaluate('{{proc:step1-0.$.config}}.limit | int(0)', data);
     expect(result).toBe(2);
@@ -118,7 +163,9 @@ describe('Recursive transformation expression grammar', () => {
 
   it('throws clear parse errors for malformed recursive syntax', () => {
     expect(() => evaluator.evaluate('$.data | map({ id: $.id ', data)).toThrow('Expected');
-    expect(() => evaluator.evaluate('$.data | | map($.id)', data)).toThrow('Unexpected token "|"');
+    expect(() => evaluator.evaluate('$.data | | map($.id)', data)).toThrow(
+      'Expected identifier but found "|"'
+    );
     expect(() => evaluator.evaluate('$.data | map(id: $.id, id: $.status)', data)).toThrow(
       'Duplicate named argument "id"'
     );

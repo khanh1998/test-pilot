@@ -134,8 +134,11 @@ The transformation engine supports:
 - JSONPath expressions (e.g., `$.data[0].id`)
 - Recursive functional pipeline operations (e.g., `where`, `map`, `count`, `take`)
 - Logical operations (`&&`, `||`, `!`) and comparisons (`==`, `!=`, `>`, `<`, etc.)
+- Arithmetic operators (`+`, `-`, `*`, `/`, `%`) inside expressions
 - Constant inputs: strings, numbers, booleans, null, arrays, and object literals with expression values
-- Function arguments that can be JSONPath, templates, constants, object/array literals, or nested pipelines
+- Function arguments that can be JSONPath, templates, constants, object/array literals, operator expressions, or nested pipelines
+
+Transformation functions are pipeline stages only. Use `value | fn(args...)`; do not write direct calls like `length($.items)`, `round($.amount, 2)`, or `contains($.email, "@")`.
 
 Transformations may use `{{param:...}}`, `{{res:...}}`, `{{proc:...}}`, and `{{func:...}}` templates. Do not use `{{{...}}}` in transformations. Do not use `{{env:...}}`; map environment values into flow parameters first and reference them through `{{param:...}}`.
 
@@ -168,7 +171,7 @@ Transformations may use `{{param:...}}`, `{{res:...}}`, `{{proc:...}}`, and `{{f
 5. **Shape objects with recursive expressions**:
 
    ```
-   $.items | map({ id: $.id, total: $.price | mul($.quantity), tags: [$.status, true] })
+   $.items | map({ id: $.id, total: $.price * $.quantity, tags: [$.status, true] })
    ```
 
 6. **Use template-driven limits**:
