@@ -140,7 +140,7 @@
       </div>
     {/if}
 
-    <div class="mx-auto max-w-4xl">
+    <div class="mx-auto max-w-6xl">
       <EnvironmentEditor
         {environment}
         isEditing={true}

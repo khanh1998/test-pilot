@@ -96,7 +96,7 @@ npm run tauri:build
   - Static values
   - Template expressions: `{{res:step1-0.$.data.userId}}`
   - Flow parameters: `{{param:username}}`
-  - Environment variables: `{{env:API_KEY}}`
+  - Environment values by mapping linked environment variables to flow parameters
 
 ### 3. Add Assertions
 

@@ -10,16 +10,19 @@
     change: { variableDefinitions: Record<string, VariableDefinition> };
   }>();
 
+  let showAddRow = false;
   let newVariableName = '';
-  let showAddForm = false;
+  let newVariableType: VariableDefinition['type'] = 'string';
+  let newVariableDescription = '';
+  let newVariableRequired = false;
+  let newVariableDefaultValue: unknown = '';
 
-  // Confirm dialog state
   let showConfirmDialog = false;
   let pendingDeleteVariable: string | null = null;
 
   function addVariable() {
     if (!newVariableName.trim()) return;
-    
+
     const name = newVariableName.trim();
     if (name in variableDefinitions) {
       alert('Variable with this name already exists');
@@ -29,16 +32,14 @@
     variableDefinitions = {
       ...variableDefinitions,
       [name]: {
-        type: 'string',
-        description: '',
-        required: false,
-        default_value: ''
+        type: newVariableType,
+        description: newVariableDescription.trim(),
+        required: newVariableRequired,
+        default_value: newVariableDefaultValue
       }
     };
 
-    newVariableName = '';
-    showAddForm = false;
-    
+    resetAddRow();
     dispatch('change', { variableDefinitions });
   }
 
@@ -49,11 +50,11 @@
 
   function confirmDeleteVariable() {
     if (!pendingDeleteVariable) return;
-    
+
     const { [pendingDeleteVariable]: removed, ...rest } = variableDefinitions;
     variableDefinitions = rest;
     dispatch('change', { variableDefinitions });
-    
+
     pendingDeleteVariable = null;
     showConfirmDialog = false;
   }
@@ -67,26 +68,54 @@
     dispatch('change', { variableDefinitions });
   }
 
-  function toggleAddForm() {
-    showAddForm = !showAddForm;
-    if (!showAddForm) {
-      newVariableName = '';
-    }
+  function toggleAddRow() {
+    showAddRow = !showAddRow;
+    if (!showAddRow) resetAddRow();
+  }
+
+  function resetAddRow() {
+    showAddRow = false;
+    newVariableName = '';
+    newVariableType = 'string';
+    newVariableDescription = '';
+    newVariableRequired = false;
+    newVariableDefaultValue = '';
+  }
+
+  function handleNewVariableTypeChange() {
+    newVariableDefaultValue = newVariableType === 'boolean' ? false : '';
   }
 
   $: variableEntries = Object.entries(variableDefinitions);
 </script>
 
-<div class="border border-gray-200 rounded-lg bg-white" class:opacity-60={disabled} class:pointer-events-none={disabled}>
-  <div class="flex justify-between items-center p-6 border-b border-gray-100">
-    <h3 class="text-lg font-semibold text-gray-900 m-0">Variable Definitions</h3>
-    <button 
-      class="inline-flex items-center gap-2 bg-blue-600 text-white border-0 px-4 py-2 rounded-md font-medium cursor-pointer transition-colors text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed" 
-      on:click={toggleAddForm}
+<div
+  class="rounded-lg border border-gray-200 bg-white"
+  class:opacity-60={disabled}
+  class:pointer-events-none={disabled}
+>
+  <div class="flex items-center justify-between gap-4 border-b border-gray-100 p-4">
+    <div>
+      <h3 class="m-0 text-lg font-semibold text-gray-900">Variable Definitions</h3>
+      <p class="mt-1 text-sm text-gray-500">
+        Define values that can be mapped into flow or sequence parameters when an environment is
+        linked.
+      </p>
+    </div>
+    <button
+      class="inline-flex cursor-pointer items-center gap-2 rounded-md border-0 bg-blue-600 px-3 py-2 text-sm font-medium whitespace-nowrap text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+      on:click={toggleAddRow}
       {disabled}
       type="button"
     >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+      >
         <line x1="12" y1="5" x2="12" y2="19"></line>
         <line x1="5" y1="12" x2="19" y2="12"></line>
       </svg>
@@ -94,71 +123,35 @@
     </button>
   </div>
 
-  <div class="p-4 bg-gray-50 border-b border-gray-100 text-sm text-gray-600">
-    Define variables that can be used in test flows with <code class="bg-gray-200 px-1 py-0.5 rounded text-xs">&#123;&#123;env:variable_name&#125;&#125;</code> expressions.
-  </div>
-
-  {#if showAddForm}
-    <form class="p-6 border-b border-gray-100 bg-gray-50" on:submit|preventDefault={addVariable}>
-      <div class="flex gap-4 items-center">
-        <input
-          type="text"
-          bind:value={newVariableName}
-          placeholder="Variable name (e.g., username, api_key)"
-          class="flex-1 px-3 py-3 border border-gray-300 rounded-md text-sm font-mono focus:outline-none focus:border-blue-500 focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)]"
-          required
-          {disabled}
-        />
-        <button type="submit" class="px-4 py-3 rounded-md font-medium cursor-pointer transition-all border-0 text-sm bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed" {disabled}>Add</button>
-        <button type="button" class="px-4 py-3 rounded-md font-medium cursor-pointer transition-all text-sm bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed" on:click={toggleAddForm} {disabled}>Cancel</button>
-      </div>
-    </form>
-  {/if}
-
-  {#if variableEntries.length > 0}
-    <div class="p-6">
-      {#each variableEntries as [name, definition]}
-        <div class="border border-gray-200 rounded-md mb-4 bg-gray-50 last:mb-0">
-          <div class="flex justify-between items-center p-4 bg-gray-50 border-b border-gray-200">
-            <div class="font-semibold">
-              <code class="bg-gray-200 px-2 py-1 rounded text-sm">{name}</code>
-            </div>
-            <button 
-              class="p-2 bg-red-50 text-red-600 border-0 rounded cursor-pointer transition-all hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed" 
-              on:click={() => removeVariable(name)}
-              {disabled}
-              type="button"
-              aria-label="Remove variable {name}"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="3,6 5,6 21,6"></polyline>
-                <path d="m19,6v14a2,2 0 0 1-2,2H7a2,2 0 0 1-2-2V6m3,0V4a2,2 0 0 1 2-2h4a2,2 0 0 1 2,2v2"></path>
-              </svg>
-            </button>
-          </div>
-
-          <div class="p-4 flex flex-col gap-4">
-            <div class="flex flex-col gap-2">
-              <label for="description-{name}" class="text-sm font-medium text-gray-700">Description</label>
-              <input
-                id="description-{name}"
-                type="text"
-                bind:value={definition.description}
-                on:input={updateVariableDefinitions}
-                placeholder="Describe this variable..."
-                class="px-2 py-2 border border-gray-300 rounded text-sm transition-colors focus:outline-none focus:border-blue-500 focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)]"
-                {disabled}
-              />
-            </div>
-
-            <div class="grid grid-cols-[1fr_auto] gap-4">
-              <div class="flex flex-col gap-2">
-                <label for="type-{name}" class="text-sm font-medium text-gray-700">Type</label>
+  {#if variableEntries.length > 0 || showAddRow}
+    <div class="overflow-x-auto">
+      <table class="w-full min-w-[980px] border-collapse text-sm">
+        <thead
+          class="bg-gray-50 text-left text-xs font-semibold tracking-wide text-gray-500 uppercase"
+        >
+          <tr>
+            <th class="w-[180px] border-b border-gray-200 px-3 py-2">Name</th>
+            <th class="w-[140px] border-b border-gray-200 px-3 py-2">Type</th>
+            <th class="w-[110px] border-b border-gray-200 px-3 py-2">Required</th>
+            <th class="border-b border-gray-200 px-3 py-2">Default Value</th>
+            <th class="border-b border-gray-200 px-3 py-2">Description</th>
+            <th class="w-[100px] border-b border-gray-200 px-3 py-2 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          {#each variableEntries as [name, definition]}
+            <tr class="bg-white hover:bg-gray-50">
+              <td class="px-3 py-2 align-middle">
+                <code class="rounded bg-gray-100 px-2 py-1 text-xs font-medium text-gray-900"
+                  >{name}</code
+                >
+              </td>
+              <td class="px-3 py-2 align-middle">
                 <select
                   id="type-{name}"
                   bind:value={definition.type}
                   on:change={updateVariableDefinitions}
-                  class="px-2 py-2 border border-gray-300 rounded text-sm transition-colors focus:outline-none focus:border-blue-500 focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)]"
+                  class="w-full rounded border border-gray-300 px-2 py-1.5 text-sm transition-colors focus:border-blue-500 focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)] focus:outline-none"
                   {disabled}
                 >
                   <option value="string">String</option>
@@ -167,92 +160,223 @@
                   <option value="object">Object</option>
                   <option value="array">Array</option>
                 </select>
-              </div>
-
-              <div class="flex flex-row items-center gap-2 cursor-pointer">
-                <label class="flex flex-row items-center gap-2 cursor-pointer text-sm font-medium text-gray-700">
+              </td>
+              <td class="px-3 py-2 align-middle">
+                <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700">
                   <input
                     type="checkbox"
                     bind:checked={definition.required}
                     on:change={updateVariableDefinitions}
-                    class="w-auto m-0"
+                    class="m-0"
                     {disabled}
                   />
                   Required
                 </label>
-              </div>
-            </div>
+              </td>
+              <td class="px-3 py-2 align-middle">
+                {#if definition.type === 'boolean'}
+                  <select
+                    id="default-{name}"
+                    bind:value={definition.default_value}
+                    on:change={updateVariableDefinitions}
+                    class="w-full rounded border border-gray-300 px-2 py-1.5 text-sm transition-colors focus:border-blue-500 focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)] focus:outline-none"
+                    {disabled}
+                  >
+                    <option value={false}>false</option>
+                    <option value={true}>true</option>
+                  </select>
+                {:else if definition.type === 'number'}
+                  <input
+                    id="default-{name}"
+                    type="number"
+                    bind:value={definition.default_value}
+                    on:input={updateVariableDefinitions}
+                    placeholder="0"
+                    class="w-full rounded border border-gray-300 px-2 py-1.5 text-sm transition-colors focus:border-blue-500 focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)] focus:outline-none"
+                    {disabled}
+                  />
+                {:else}
+                  <input
+                    id="default-{name}"
+                    type="text"
+                    bind:value={definition.default_value}
+                    on:input={updateVariableDefinitions}
+                    placeholder={definition.type === 'object'
+                      ? '{}'
+                      : definition.type === 'array'
+                        ? '[]'
+                        : 'Default value...'}
+                    class="w-full rounded border border-gray-300 px-2 py-1.5 text-sm transition-colors focus:border-blue-500 focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)] focus:outline-none {definition.type ===
+                      'object' || definition.type === 'array'
+                      ? 'font-mono'
+                      : ''}"
+                    {disabled}
+                  />
+                {/if}
+              </td>
+              <td class="px-3 py-2 align-middle">
+                <input
+                  id="description-{name}"
+                  type="text"
+                  bind:value={definition.description}
+                  on:input={updateVariableDefinitions}
+                  placeholder="Describe this variable..."
+                  class="w-full rounded border border-gray-300 px-2 py-1.5 text-sm transition-colors focus:border-blue-500 focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)] focus:outline-none"
+                  {disabled}
+                />
+              </td>
+              <td class="px-3 py-2 text-right align-middle">
+                <button
+                  class="inline-flex h-8 w-8 items-center justify-center rounded border-0 bg-red-50 text-red-600 transition-all hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  on:click={() => removeVariable(name)}
+                  {disabled}
+                  type="button"
+                  aria-label="Remove variable {name}"
+                >
+                  <svg
+                    width="15"
+                    height="15"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <polyline points="3,6 5,6 21,6"></polyline>
+                    <path
+                      d="m19,6v14a2,2 0 0 1-2,2H7a2,2 0 0 1-2-2V6m3,0V4a2,2 0 0 1 2-2h4a2,2 0 0 1 2,2v2"
+                    ></path>
+                  </svg>
+                </button>
+              </td>
+            </tr>
+          {/each}
 
-            <div class="flex flex-col gap-2">
-              <label for="default-{name}" class="text-sm font-medium text-gray-700">Default Value</label>
-              {#if definition.type === 'boolean'}
+          {#if showAddRow}
+            <tr class="bg-blue-50/60">
+              <td class="px-3 py-2 align-middle">
+                <input
+                  type="text"
+                  bind:value={newVariableName}
+                  placeholder="variable_name"
+                  class="w-full rounded border border-blue-200 px-2 py-1.5 font-mono text-sm transition-colors focus:border-blue-500 focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)] focus:outline-none"
+                  required
+                  {disabled}
+                />
+              </td>
+              <td class="px-3 py-2 align-middle">
                 <select
-                  id="default-{name}"
-                  bind:value={definition.default_value}
-                  on:change={updateVariableDefinitions}
-                  class="px-2 py-2 border border-gray-300 rounded text-sm transition-colors focus:outline-none focus:border-blue-500 focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)]"
+                  bind:value={newVariableType}
+                  on:change={handleNewVariableTypeChange}
+                  class="w-full rounded border border-blue-200 px-2 py-1.5 text-sm transition-colors focus:border-blue-500 focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)] focus:outline-none"
                   {disabled}
                 >
-                  <option value={false}>false</option>
-                  <option value={true}>true</option>
+                  <option value="string">String</option>
+                  <option value="number">Number</option>
+                  <option value="boolean">Boolean</option>
+                  <option value="object">Object</option>
+                  <option value="array">Array</option>
                 </select>
-              {:else if definition.type === 'number'}
+              </td>
+              <td class="px-3 py-2 align-middle">
+                <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700">
+                  <input
+                    type="checkbox"
+                    bind:checked={newVariableRequired}
+                    class="m-0"
+                    {disabled}
+                  />
+                  Required
+                </label>
+              </td>
+              <td class="px-3 py-2 align-middle">
+                {#if newVariableType === 'boolean'}
+                  <select
+                    bind:value={newVariableDefaultValue}
+                    class="w-full rounded border border-blue-200 px-2 py-1.5 text-sm transition-colors focus:border-blue-500 focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)] focus:outline-none"
+                    {disabled}
+                  >
+                    <option value={false}>false</option>
+                    <option value={true}>true</option>
+                  </select>
+                {:else if newVariableType === 'number'}
+                  <input
+                    type="number"
+                    bind:value={newVariableDefaultValue}
+                    placeholder="0"
+                    class="w-full rounded border border-blue-200 px-2 py-1.5 text-sm transition-colors focus:border-blue-500 focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)] focus:outline-none"
+                    {disabled}
+                  />
+                {:else}
+                  <input
+                    type="text"
+                    bind:value={newVariableDefaultValue}
+                    placeholder={newVariableType === 'object'
+                      ? '{}'
+                      : newVariableType === 'array'
+                        ? '[]'
+                        : 'Default value...'}
+                    class="w-full rounded border border-blue-200 px-2 py-1.5 text-sm transition-colors focus:border-blue-500 focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)] focus:outline-none {newVariableType ===
+                      'object' || newVariableType === 'array'
+                      ? 'font-mono'
+                      : ''}"
+                    {disabled}
+                  />
+                {/if}
+              </td>
+              <td class="px-3 py-2 align-middle">
                 <input
-                  id="default-{name}"
-                  type="number"
-                  bind:value={definition.default_value}
-                  on:input={updateVariableDefinitions}
-                  placeholder="0"
-                  class="px-2 py-2 border border-gray-300 rounded text-sm transition-colors focus:outline-none focus:border-blue-500 focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)]"
-                  {disabled}
-                />
-              {:else if definition.type === 'object' || definition.type === 'array'}
-                <textarea
-                  id="default-{name}"
-                  bind:value={definition.default_value}
-                  on:input={updateVariableDefinitions}
-                  placeholder={definition.type === 'object' ? '{}' : '[]'}
-                  rows="3"
-                  class="px-2 py-2 border border-gray-300 rounded text-sm transition-colors resize-y min-h-[60px] font-mono focus:outline-none focus:border-blue-500 focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)]"
-                  {disabled}
-                ></textarea>
-              {:else}
-                <input
-                  id="default-{name}"
                   type="text"
-                  bind:value={definition.default_value}
-                  on:input={updateVariableDefinitions}
-                  placeholder="Default value..."
-                  class="px-2 py-2 border border-gray-300 rounded text-sm transition-colors focus:outline-none focus:border-blue-500 focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)]"
+                  bind:value={newVariableDescription}
+                  placeholder="Describe this variable..."
+                  class="w-full rounded border border-blue-200 px-2 py-1.5 text-sm transition-colors focus:border-blue-500 focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)] focus:outline-none"
                   {disabled}
                 />
-              {/if}
-            </div>
-          </div>
-        </div>
-      {/each}
+              </td>
+              <td class="px-3 py-2 align-middle">
+                <div class="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    class="rounded bg-green-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    on:click={addVariable}
+                    disabled={disabled || !newVariableName.trim()}
+                  >
+                    Add
+                  </button>
+                  <button
+                    type="button"
+                    class="rounded border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    on:click={resetAddRow}
+                    {disabled}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </td>
+            </tr>
+          {/if}
+        </tbody>
+      </table>
     </div>
   {:else}
     <div class="p-8 text-center text-gray-600">
       <p class="mb-4">No variables defined yet.</p>
       <p class="text-sm text-gray-400">
-        Variables allow you to define reusable values that can be set differently for each environment 
-        (dev, staging, prod) and referenced in your test flows.
+        Variables allow you to define reusable values that can be set differently for each
+        environment (dev, staging, prod) and passed into flows through parameter mappings.
       </p>
     </div>
   {/if}
 </div>
 
-<!-- Confirm Delete Dialog -->
 <ConfirmDialog
   bind:isOpen={showConfirmDialog}
   title="Remove Variable"
-  message={pendingDeleteVariable ? `Are you sure you want to remove variable "${pendingDeleteVariable}"?` : ''}
+  message={pendingDeleteVariable
+    ? `Are you sure you want to remove variable "${pendingDeleteVariable}"?`
+    : ''}
   confirmText="Remove"
   cancelText="Cancel"
   confirmVariant="danger"
   on:confirm={confirmDeleteVariable}
   on:cancel={cancelDeleteVariable}
 />
-
-
