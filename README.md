@@ -166,9 +166,6 @@ We welcome contributions! This section is for developers who want to contribute 
    
    # Database
    DATABASE_URL=postgresql://user:password@localhost:5432/testpilot
-   
-   # Optional: OpenAI for future LLM features
-   OPENAI_API_KEY=your_openai_key
    ```
 
 4. **Database Setup**

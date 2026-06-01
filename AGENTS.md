@@ -46,7 +46,6 @@ This is a SvelteKit + Supabase project with optional Tauri desktop support.
 - `src/lib/server/service/`: Business logic and workflows.
 - `src/lib/server/repository/`: Data access abstractions.
 - `src/lib/server/repository/db/`: Drizzle database operations.
-- `src/lib/server/repository/openai/`: OpenAI API interactions.
 - `src/lib/server/repository/supabase/`: Supabase-specific data operations.
 - `src/lib/server/db/`: Drizzle schema, relations, types, and database connection.
 - `src/lib/server/auth/`: Authentication-related server logic.
@@ -116,7 +115,6 @@ Common local values include:
 - `PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_KEY`
 - `DATABASE_URL`
-- `OPENAI_API_KEY`
 
 ## Development Commands
 

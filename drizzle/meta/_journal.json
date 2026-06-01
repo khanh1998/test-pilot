@@ -127,6 +127,13 @@
       "when": 1758894629644,
       "tag": "0017_migrate-data-to-projects",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1780293824968,
+      "tag": "0018_soft_gravity",
+      "breakpoints": true
     }
   ]
 }

@@ -1,7 +1,7 @@
 import { parseSwaggerSpec, extractEndpoints, extractHost } from '$lib/server/swagger/parser';
 import * as apiRepo from '$lib/server/repository/db/apis';
 import * as apiEndpointsRepo from '$lib/server/repository/db/api-endpoints';
-import { EndpointEmbeddingsService } from '$lib/server/service/endpoint_embeddings/create_embedding';
+import { EndpointSearchIndexService } from '$lib/server/service/api_endpoints/search_index';
 
 interface UpdateSwaggerParams {
   apiId: number;
@@ -69,7 +69,7 @@ export async function updateSwagger(params: UpdateSwaggerParams): Promise<Update
 
   // Track which endpoints are processed to determine which ones to delete
   const processedEndpoints = new Set();
-  const embeddingService = new EndpointEmbeddingsService();
+  const searchIndexService = new EndpointSearchIndexService();
   const createdEndpoints = [];
   const updatedEndpoints = [];
 
@@ -93,7 +93,7 @@ export async function updateSwagger(params: UpdateSwaggerParams): Promise<Update
         tags: endpoint.tags
       });
 
-      // Add to updated endpoints for embedding processing
+      // Add to updated endpoints for search index processing.
       updatedEndpoints.push({
         id: existingEndpoint.id,
         apiId: existingEndpoint.apiId,
@@ -115,9 +115,9 @@ export async function updateSwagger(params: UpdateSwaggerParams): Promise<Update
     }
   }
 
-  // Process embeddings for created endpoints
+  // Process search indexes for created endpoints.
   if (createdEndpoints.length > 0) {
-    await embeddingService.batchProcessEndpoints(
+    await searchIndexService.batchProcessEndpoints(
       createdEndpoints,
       existingApi.name,
       existingApi.description || undefined,
@@ -125,9 +125,9 @@ export async function updateSwagger(params: UpdateSwaggerParams): Promise<Update
     );
   }
 
-  // Process embeddings for updated endpoints
+  // Process search indexes for updated endpoints.
   if (updatedEndpoints.length > 0) {
-    await embeddingService.batchProcessEndpoints(
+    await searchIndexService.batchProcessEndpoints(
       updatedEndpoints,
       existingApi.name,
       existingApi.description || undefined,

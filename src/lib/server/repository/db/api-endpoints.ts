@@ -1,7 +1,6 @@
 import { db } from '$lib/server/db';
 import { apiEndpoints, apis, endpointEmbeddings } from '$lib/server/db/schema';
 import { eq, and, inArray, sql, ilike, or, asc } from 'drizzle-orm';
-import { EndpointEmbeddingsService } from '$lib/server/service/endpoint_embeddings/create_embedding';
 
 export async function getApiEndpointById(endpointId: number, userId?: number) {
   const query = db
@@ -145,39 +144,7 @@ export async function createApiEndpoints(apiId: number, endpoints: CreateEndpoin
     tags: endpoint.tags
   }));
 
-  const createdEndpoints = await db.insert(apiEndpoints).values(endpointValues).returning();
-
-  // Automatically create embeddings for the created endpoints
-  if (createdEndpoints.length > 0) {
-    try {
-      // Get API information for embedding processing
-      const api = await db
-        .select({
-          id: apis.id,
-          name: apis.name,
-          description: apis.description,
-          userId: apis.userId
-        })
-        .from(apis)
-        .where(eq(apis.id, apiId))
-        .limit(1);
-
-      if (api.length > 0) {
-        const embeddingService = new EndpointEmbeddingsService();
-        await embeddingService.batchProcessEndpoints(
-          createdEndpoints,
-          api[0].name,
-          api[0].description || undefined,
-          api[0].userId || undefined
-        );
-      }
-    } catch (error) {
-      console.error('Error creating embeddings for new endpoints:', error);
-      // Continue execution - embeddings are not critical for endpoint creation
-    }
-  }
-
-  return createdEndpoints;
+  return await db.insert(apiEndpoints).values(endpointValues).returning();
 }
 
 export async function updateApiEndpoint(params: UpdateEndpointParams) {
@@ -194,37 +161,6 @@ export async function updateApiEndpoint(params: UpdateEndpointParams) {
     })
     .where(eq(apiEndpoints.id, params.id));
 
-  // Automatically update embeddings for the updated endpoint
-  try {
-    // Get the updated endpoint with API information for embedding processing
-    const updatedEndpoint = await db
-      .select({
-        endpoint: apiEndpoints,
-        api: {
-          id: apis.id,
-          name: apis.name,
-          description: apis.description,
-          userId: apis.userId
-        }
-      })
-      .from(apiEndpoints)
-      .innerJoin(apis, eq(apiEndpoints.apiId, apis.id))
-      .where(eq(apiEndpoints.id, params.id))
-      .limit(1);
-
-    if (updatedEndpoint.length > 0) {
-      const embeddingService = new EndpointEmbeddingsService();
-      await embeddingService.processEndpoint(
-        updatedEndpoint[0].endpoint,
-        updatedEndpoint[0].api.name,
-        updatedEndpoint[0].api.description || undefined,
-        updatedEndpoint[0].api.userId || undefined
-      );
-    }
-  } catch (error) {
-    console.error('Error updating embedding for updated endpoint:', error);
-    // Continue execution - embeddings are not critical for endpoint updates
-  }
 }
 
 export async function deleteApiEndpoints(endpointIds: number[]) {
@@ -235,7 +171,7 @@ export async function deleteApiEndpoints(endpointIds: number[]) {
   await db.delete(apiEndpoints).where(inArray(apiEndpoints.id, endpointIds));
 }
 
-// search endpoints by using `search_vector` in `endpoint_embeddings`
+// Search endpoints using the `search_vector` index in `endpoint_embeddings`.
 interface SearchByTsVectorParams {
   query: string;
   userId: number;

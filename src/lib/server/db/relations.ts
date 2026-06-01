@@ -38,7 +38,7 @@ export const apiEndpointsRelations = relations(apiEndpoints, ({ one, many }) => 
     fields: [apiEndpoints.apiId],
     references: [apis.id]
   }),
-  embeddings: many(endpointEmbeddings)
+  searchIndex: many(endpointEmbeddings)
 }));
 
 export const testFlowsRelations = relations(testFlows, ({ one, many }) => ({

@@ -419,17 +419,6 @@
     </div>
     <div class="flex gap-3">
       <button
-        class="rounded-md bg-emerald-600 px-4 py-2 text-white transition hover:bg-emerald-700"
-        on:click={() => goto('/projects/test-flows/generate')}
-      >
-        <div class="flex items-center">
-          <svg xmlns="http://www.w3.org/2000/svg" class="mr-1.5 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-          </svg>
-          Generate Flow
-        </div>
-      </button>
-      <button
         class="rounded-md bg-blue-600 px-4 py-2 text-white transition hover:bg-blue-700"
         on:click={() => (showCreateModal = true)}
       >
@@ -749,6 +738,5 @@
   on:confirm={confirmCloneFlow}
   on:cancel={cancelCloneFlow}
 />
-
 
 

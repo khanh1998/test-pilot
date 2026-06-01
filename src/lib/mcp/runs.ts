@@ -52,6 +52,7 @@ export function createFlowRun(
 ): FlowRunRecord {
   purgeExpiredRuns();
   const ttlMs = resolveTtlMs();
+  const now = Date.now();
   const record: FlowRunRecord = {
     id: randomUUID(),
     userId,
@@ -61,8 +62,8 @@ export function createFlowRun(
     status: 'running',
     summary: 'Flow execution started.',
     success: false,
-    startedAt: Date.now(),
-    expiresAt: Date.now() + ttlMs,
+    startedAt: now,
+    expiresAt: now + ttlMs,
     executionState: {},
     logs: [],
     storedResponses: {},

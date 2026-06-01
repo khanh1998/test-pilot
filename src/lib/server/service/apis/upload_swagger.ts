@@ -3,7 +3,7 @@ import * as apiRepo from '$lib/server/repository/db/apis';
 import * as apiEndpointsRepo from '$lib/server/repository/db/api-endpoints';
 import * as projectApisRepo from '$lib/server/repository/db/project_apis';
 import { ProjectRepository } from '$lib/server/repository/db/project';
-import { EndpointEmbeddingsService } from '$lib/server/service/endpoint_embeddings/create_embedding';
+import { EndpointSearchIndexService } from '$lib/server/service/api_endpoints/search_index';
 
 interface UploadSwaggerParams {
   name: string;
@@ -79,10 +79,10 @@ export async function uploadSwagger(params: UploadSwaggerParams): Promise<Upload
     createdEndpoints.push(...dbEndpoints);
   }
 
-  // Create embeddings for all created endpoints
+  // Create full-text search indexes for all created endpoints.
   if (createdEndpoints.length > 0) {
-    const embeddingService = new EndpointEmbeddingsService();
-    await embeddingService.batchProcessEndpoints(
+    const searchIndexService = new EndpointSearchIndexService();
+    await searchIndexService.batchProcessEndpoints(
       createdEndpoints,
       createdApi.name,
       createdApi.description || undefined,
