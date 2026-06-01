@@ -1,5 +1,5 @@
 import { writable, derived, get } from 'svelte/store';
-import type { TestFlowData } from '$lib/components/test-flows/types';
+import type { EnvironmentMapping, TestFlowData } from '$lib/components/test-flows/types';
 import { saveTestFlow as saveTestFlowAPI } from '$lib/http_client/test-flow';
 
 /**
@@ -38,6 +38,16 @@ const error = writable<string | null>(null);
 // Keep track of the original state for dirty checking
 let originalState: string = '';
 
+function normalizeLinkedEnvironment(
+	linkedEnvironment: (EnvironmentMapping & { selectedSubEnvironment?: string }) | null | undefined
+): EnvironmentMapping | null {
+	if (!linkedEnvironment) return null;
+
+	const { selectedSubEnvironment: _selectedSubEnvironment, ...storedLinkedEnvironment } =
+		linkedEnvironment;
+	return storedLinkedEnvironment;
+}
+
 /**
  * Initialize the test flow store with data
  */
@@ -50,7 +60,7 @@ export function initializeTestFlow(id: number, name: string, description: string
 				environmentId: null,
 				subEnvironment: null
 			},
-			linkedEnvironment: flowJson.settings?.linkedEnvironment || null
+			linkedEnvironment: normalizeLinkedEnvironment(flowJson.settings?.linkedEnvironment)
 		},
 		steps: flowJson.steps || [],
 		parameters: flowJson.parameters || [],
@@ -109,7 +119,10 @@ export function updateFlowJson(flowJson: TestFlowData) {
  */
 export function updateFlowSettings(settings: TestFlowData['settings']) {
 	testFlowState.update((state) => {
-		state.flowJson.settings = { ...settings };
+		state.flowJson.settings = {
+			...settings,
+			linkedEnvironment: normalizeLinkedEnvironment(settings.linkedEnvironment)
+		};
 		return state;
 	});
 	checkDirty();

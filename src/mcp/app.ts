@@ -618,7 +618,6 @@ async function loadSelectedEnvironmentForDocument(
   const subEnvironment =
     overrides?.subEnvironment ??
     document.flowData.settings.environment?.subEnvironment ??
-    document.flowData.settings.linkedEnvironment?.selectedSubEnvironment ??
     Object.keys(environment.config.environments ?? {})[0] ??
     null;
 
@@ -1712,7 +1711,7 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
         environmentId,
         environmentName,
         selectedSubEnvironment:
-          resolved.flowDocument.flowData.settings.linkedEnvironment?.selectedSubEnvironment ??
+          resolved.flowDocument.flowData.settings.environment?.subEnvironment ??
           session?.subEnvironment,
         parameterMappings
       });
@@ -2317,8 +2316,6 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
                     subEnvironment:
                       environmentOverrides?.subEnvironment ??
                       runnableDocument.flowData.settings.environment?.subEnvironment ??
-                      runnableDocument.flowData.settings.linkedEnvironment
-                        ?.selectedSubEnvironment ??
                       null
                   },
                   linkedEnvironment: runnableDocument.flowData.settings.linkedEnvironment
@@ -2326,11 +2323,7 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
                         ...runnableDocument.flowData.settings.linkedEnvironment,
                         environmentId:
                           environmentOverrides?.environmentId ??
-                          runnableDocument.flowData.settings.linkedEnvironment.environmentId,
-                        selectedSubEnvironment:
-                          environmentOverrides?.subEnvironment ??
-                          runnableDocument.flowData.settings.linkedEnvironment
-                            .selectedSubEnvironment
+                          runnableDocument.flowData.settings.linkedEnvironment.environmentId
                       }
                     : runnableDocument.flowData.settings.linkedEnvironment
                 }

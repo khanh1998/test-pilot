@@ -471,7 +471,6 @@ export function linkEnvironmentToFlow(
   const linkedEnvironment: EnvironmentMapping = {
     environmentId: input.environmentId,
     environmentName: input.environmentName,
-    selectedSubEnvironment: input.selectedSubEnvironment,
     parameterMappings: input.parameterMappings ?? {}
   };
   next.flowData.settings.linkedEnvironment = linkedEnvironment;

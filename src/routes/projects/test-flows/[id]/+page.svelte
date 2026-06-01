@@ -149,6 +149,19 @@
     });
   }
 
+  function handleEnvironmentSubEnvironmentChange(
+    event: CustomEvent<{ environmentId: number; subEnvironment: string }>
+  ) {
+    const currentSettings = $flowJson.settings;
+    updateFlowSettings({
+      ...currentSettings,
+      environment: {
+        environmentId: event.detail.environmentId,
+        subEnvironment: event.detail.subEnvironment
+      }
+    });
+  }
+
   function handleTestFlowChange(event: CustomEvent) {
     const updatedFlowData = event.detail;
     if (updatedFlowData) {
@@ -280,6 +293,7 @@
               on:descriptionChange={handleDescriptionChange}
               on:apiHostsChange={handleApiHostsChange}
               on:environmentChange={handleEnvironmentChange}
+              on:environmentSubEnvironmentChange={handleEnvironmentSubEnvironmentChange}
             />
           {/if}
         </div>

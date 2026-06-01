@@ -7,10 +7,12 @@
   export let environment: Environment | null = null;
   export let linkedEnvironment: EnvironmentMapping | null = null;
   export let flowParameters: FlowParameter[] = [];
+  export let selectedSubEnvironment: string | null = null;
   export let disabled: boolean = false;
 
   const dispatch = createEventDispatcher<{
     change: { linkedEnvironment: EnvironmentMapping | null };
+    subEnvironmentChange: { environmentId: number; subEnvironment: string };
   }>();
 
   let showLinkForm = false;
@@ -25,14 +27,9 @@
       return;
     }
 
-    // Get the first sub-environment as default
-    const subEnvironments = Object.keys(environment.config.environments || {});
-    const defaultSubEnv = subEnvironments.length > 0 ? subEnvironments[0] : undefined;
-
     const newMapping: EnvironmentMapping = {
       environmentId: environment.id,
       environmentName: environment.name,
-      selectedSubEnvironment: defaultSubEnv,
       parameterMappings: {}
     };
 
@@ -58,11 +55,12 @@
     }
   }
 
-  // Handle sub-environment selection change
   function handleSubEnvironmentChange(selectedSubEnvironment: string) {
-    if (linkedEnvironment) {
-      linkedEnvironment = { ...linkedEnvironment, selectedSubEnvironment };
-      dispatch('change', { linkedEnvironment });
+    if (environment) {
+      dispatch('subEnvironmentChange', {
+        environmentId: environment.id,
+        subEnvironment: selectedSubEnvironment
+      });
     }
   }
 </script>
@@ -142,11 +140,7 @@
   {#if linkedEnvironment && environment}
     {#if environment.config.environments}
       {@const subEnvironments = Object.keys(environment.config.environments)}
-      {@const selectedSubEnv = linkedEnvironment.selectedSubEnvironment || (subEnvironments.length > 0 ? subEnvironments[0] : undefined)}
-      <!-- Initialize selectedSubEnvironment if not set -->
-      {#if subEnvironments.length > 0 && !linkedEnvironment.selectedSubEnvironment}
-        {(linkedEnvironment.selectedSubEnvironment = subEnvironments[0], '')}
-      {/if}
+      {@const selectedSubEnv = selectedSubEnvironment || undefined}
       <div class="space-y-4">
         <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
           <div class="flex items-center justify-between mb-4">
@@ -184,7 +178,7 @@
           <!-- Sub-Environment Selection -->
           {#if subEnvironments.length > 0}
             <div class="mb-4 flex items-center gap-3">
-              <span class="text-sm font-medium text-gray-700">Sub-Environment:</span>
+              <span class="text-sm font-medium text-gray-700">Preview Sub-Environment:</span>
               <div class="flex gap-1">
                 {#each subEnvironments as subEnv}
                   <button

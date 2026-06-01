@@ -13,7 +13,6 @@
 
   let newSubEnvName = '';
   let showAddForm = false;
-  let subEnvKeyDrafts: Record<string, string> = {};
 
   // Confirm dialog state
   let showConfirmDialog = false;
@@ -71,45 +70,6 @@
     dispatch('change', { subEnvironments });
   }
 
-  function renameSubEnvironment(oldKey: string) {
-    const draftKey = subEnvKeyDrafts[oldKey] ?? oldKey;
-    const newKey = draftKey.trim().toLowerCase();
-
-    if (newKey === oldKey) {
-      subEnvKeyDrafts[oldKey] = oldKey;
-      return;
-    }
-
-    if (!newKey) {
-      alert('Sub-environment key is required');
-      subEnvKeyDrafts[oldKey] = oldKey;
-      return;
-    }
-
-    if (newKey in subEnvironments) {
-      alert('Sub-environment with this key already exists');
-      subEnvKeyDrafts[oldKey] = oldKey;
-      return;
-    }
-
-    const renamedSubEnvironments: Record<string, SubEnvironment> = {};
-    for (const [key, subEnv] of Object.entries(subEnvironments)) {
-      renamedSubEnvironments[key === oldKey ? newKey : key] = subEnv;
-    }
-
-    const { [oldKey]: removedDraft, ...remainingDrafts } = subEnvKeyDrafts;
-    subEnvKeyDrafts = {
-      ...remainingDrafts,
-      [newKey]: newKey
-    };
-    subEnvironments = renamedSubEnvironments;
-    dispatch('change', { subEnvironments });
-  }
-
-  function resetSubEnvironmentKeyDraft(key: string) {
-    subEnvKeyDrafts[key] = key;
-  }
-
   function toggleAddForm() {
     showAddForm = !showAddForm;
     if (!showAddForm) {
@@ -136,13 +96,6 @@
 
   $: subEnvEntries = Object.entries(subEnvironments);
   $: availableCommonEnvs = commonSubEnvNames.filter((name) => !(name in subEnvironments));
-  $: {
-    for (const key of Object.keys(subEnvironments)) {
-      if (!(key in subEnvKeyDrafts)) {
-        subEnvKeyDrafts[key] = key;
-      }
-    }
-  }
 </script>
 
 <div
@@ -267,21 +220,14 @@
                 <input
                   id="key-{subEnvKey}"
                   type="text"
-                  value={subEnvKeyDrafts[subEnvKey] ?? subEnvKey}
-                  on:input={(event) => (subEnvKeyDrafts[subEnvKey] = event.currentTarget.value)}
-                  on:blur={() => renameSubEnvironment(subEnvKey)}
-                  on:keydown={(event) => {
-                    if (event.key === 'Enter') {
-                      event.currentTarget.blur();
-                    } else if (event.key === 'Escape') {
-                      resetSubEnvironmentKeyDraft(subEnvKey);
-                      event.currentTarget.blur();
-                    }
-                  }}
+                  value={subEnvKey}
                   placeholder="dev"
-                  class="rounded border border-gray-300 px-2 py-2 font-mono text-sm transition-colors focus:border-blue-500 focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)] focus:outline-none"
-                  {disabled}
+                  class="rounded border border-gray-200 bg-gray-100 px-2 py-2 font-mono text-sm text-gray-600"
+                  readonly
                 />
+                <p class="m-0 text-xs text-gray-500">
+                  Stable ID used by saved flows and run settings.
+                </p>
               </div>
 
               <div class="flex flex-col gap-2">

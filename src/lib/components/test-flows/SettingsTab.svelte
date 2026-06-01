@@ -29,6 +29,12 @@
   function handleEnvironmentChange(event: CustomEvent<{ linkedEnvironment: any }>) {
     dispatch('environmentChange', event.detail);
   }
+
+  function handleSubEnvironmentChange(
+    event: CustomEvent<{ environmentId: number; subEnvironment: string }>
+  ) {
+    dispatch('environmentSubEnvironmentChange', event.detail);
+  }
 </script>
 
 <div class="space-y-8">
@@ -61,8 +67,10 @@
       {environment}
       linkedEnvironment={flowJson.settings.linkedEnvironment || null}
       flowParameters={flowJson.parameters || []}
+      selectedSubEnvironment={flowJson.settings.environment?.subEnvironment || null}
       {disabled}
       on:change={handleEnvironmentChange}
+      on:subEnvironmentChange={handleSubEnvironmentChange}
     />
   </div>
 </div>

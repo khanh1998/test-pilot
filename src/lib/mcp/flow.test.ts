@@ -200,6 +200,10 @@ describe('mcp flow helpers', () => {
     expect(withEnvironment.environmentId).toBe(99);
     expect(withEnvironment.flowData.settings.environment?.subEnvironment).toBe('uat');
     expect(
+      (withEnvironment.flowData.settings.linkedEnvironment as { selectedSubEnvironment?: string })
+        ?.selectedSubEnvironment
+    ).toBeUndefined();
+    expect(
       withEnvironment.flowData.settings.linkedEnvironment?.parameterMappings.consumer_token
     ).toBe('CONSUMER_TOKEN');
   });

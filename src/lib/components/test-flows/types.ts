@@ -99,7 +99,6 @@ export type FlowOutput = {
 export type EnvironmentMapping = {
   environmentId: number;
   environmentName: string; // Store environment name for display
-  selectedSubEnvironment?: string; // Selected sub-environment (dev, sit, uat, etc.)
   parameterMappings: Record<string, string>; // flowParameterName -> environmentVariableName
 };
 
