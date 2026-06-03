@@ -1,6 +1,15 @@
-import type { TestFlowData, FlowStep, FlowParameter, ExecutionState } from '$lib/components/test-flows/types';
+import type {
+  TestFlowData,
+  FlowStep,
+  FlowParameter,
+  ExecutionState
+} from '$lib/components/test-flows/types';
 import type { RequestCookie } from '$lib/http_client/test-flow';
-import { FlowExecutionEngine, type ExecutionPreferences, type ExecutionContext } from './execution-engine';
+import {
+  FlowExecutionEngine,
+  type ExecutionPreferences,
+  type ExecutionContext
+} from './execution-engine';
 import { ParameterManager, type ParameterManagerContext } from './parameter-manager';
 import { FlowOutputEvaluator, type OutputEvaluatorContext } from './output-evaluator';
 import { FlowValidator } from './validator';
@@ -13,14 +22,21 @@ export interface FlowRunnerOptions {
   onLog: (level: 'info' | 'debug' | 'error' | 'warning', message: string, details?: string) => void;
   onExecutionStateUpdate: (state: ExecutionState) => void;
   onEndpointStateUpdate: (data: { endpointId: string; state: any }) => void;
-  onStepExecutionComplete?: (data: { stepId: string; stepIndex?: number; success: boolean; error?: unknown }) => void;
+  onStepExecutionComplete?: (data: {
+    stepId: string;
+    stepIndex?: number;
+    success: boolean;
+    error?: unknown;
+  }) => void;
   onExecutionStart?: () => void;
-  onExecutionComplete?: (data: { 
-    success: boolean; 
-    error?: unknown; 
-    storedResponses: Record<string, unknown>; 
-    parameterValues: Record<string, unknown>; 
-    flowOutputs: Record<string, unknown> 
+  onExecutionComplete?: (data: {
+    success: boolean;
+    error?: unknown;
+    storedResponses: Record<string, unknown>;
+    storedTransformations: Record<string, Record<string, unknown>>;
+    executionState: ExecutionState;
+    parameterValues: Record<string, unknown>;
+    flowOutputs: Record<string, unknown>;
   }) => void;
 }
 
@@ -89,10 +105,18 @@ export class FlowRunner {
       environmentVariables: this.options.environmentVariables,
       cookieStore: this.state.cookieStore,
       selectedEnvironment: this.options.selectedEnvironment,
-      get shouldStopExecution() { return state.shouldStopExecution; },
-      set shouldStopExecution(value) { state.shouldStopExecution = value; },
-      get error() { return state.error; },
-      set error(value) { state.error = value; },
+      get shouldStopExecution() {
+        return state.shouldStopExecution;
+      },
+      set shouldStopExecution(value) {
+        state.shouldStopExecution = value;
+      },
+      get error() {
+        return state.error;
+      },
+      set error(value) {
+        state.error = value;
+      },
       executionState: this.state.executionState,
       addLog: this.options.onLog,
       updateExecutionState: this.updateExecutionState.bind(this)
@@ -112,7 +136,11 @@ export class FlowRunner {
     this.outputEvaluator = new FlowOutputEvaluator(outputContext);
   }
 
-  async runFlow(): Promise<{ success: boolean; error?: unknown; parametersWithMissingValues?: FlowParameter[] }> {
+  async runFlow(): Promise<{
+    success: boolean;
+    error?: unknown;
+    parametersWithMissingValues?: FlowParameter[];
+  }> {
     this.resetExecution();
 
     const validationError = FlowValidator.getValidationErrorMessage(this.options.flowData);
@@ -122,6 +150,8 @@ export class FlowRunner {
         success: false,
         error: this.state.error,
         storedResponses: this.state.storedResponses,
+        storedTransformations: this.state.storedTransformations,
+        executionState: this.state.executionState,
         parameterValues: this.state.parameterValues,
         flowOutputs: {}
       });
@@ -130,15 +160,20 @@ export class FlowRunner {
 
     // Prepare parameters
     this.state.parameterValues = this.parameterManager.prepareParameters();
-    
+
     // Update execution context with new parameter values
     this.executionEngine.updateParameterValues(this.state.parameterValues);
-    
-    const parametersWithMissingValues = this.parameterManager.checkRequiredParameters(this.state.parameterValues);
+
+    const parametersWithMissingValues = this.parameterManager.checkRequiredParameters(
+      this.state.parameterValues
+    );
 
     if (parametersWithMissingValues.length > 0) {
-      this.options.onLog('info', 'Required parameters need input', 
-        `${parametersWithMissingValues.length} required Parameter(s) need values`);
+      this.options.onLog(
+        'info',
+        'Required parameters need input',
+        `${parametersWithMissingValues.length} required Parameter(s) need values`
+      );
       return { success: false, parametersWithMissingValues };
     }
 
@@ -169,7 +204,7 @@ export class FlowRunner {
       }
 
       this.state.progress = 100;
-      
+
       let flowOutputs: Record<string, unknown> = {};
       if (!this.state.error) {
         flowOutputs = this.outputEvaluator.evaluateOutputs();
@@ -179,20 +214,27 @@ export class FlowRunner {
         success: !this.state.error,
         error: this.state.error,
         storedResponses: this.state.storedResponses,
+        storedTransformations: this.state.storedTransformations,
+        executionState: this.state.executionState,
         parameterValues: this.state.parameterValues,
         flowOutputs
       });
 
       return { success: !this.state.error, error: this.state.error };
-
     } catch (err: unknown) {
       this.state.error = err;
-      this.options.onLog('error', 'Flow execution error', err instanceof Error ? err.message : String(err));
-      
+      this.options.onLog(
+        'error',
+        'Flow execution error',
+        err instanceof Error ? err.message : String(err)
+      );
+
       this.options.onExecutionComplete?.({
         success: false,
         error: this.state.error,
         storedResponses: this.state.storedResponses,
+        storedTransformations: this.state.storedTransformations,
+        executionState: this.state.executionState,
         parameterValues: this.state.parameterValues,
         flowOutputs: {}
       });
@@ -203,7 +245,10 @@ export class FlowRunner {
     }
   }
 
-  async executeSingleStep(step: FlowStep, stepIndex?: number): Promise<{ success: boolean; error?: unknown; parametersWithMissingValues?: FlowParameter[] }> {
+  async executeSingleStep(
+    step: FlowStep,
+    stepIndex?: number
+  ): Promise<{ success: boolean; error?: unknown; parametersWithMissingValues?: FlowParameter[] }> {
     if (!step || !step.step_id) {
       const error = new Error('Invalid step provided for execution');
       return { success: false, error };
@@ -221,15 +266,20 @@ export class FlowRunner {
       this.state.parameterValues = this.parameterManager.prepareParameters();
       this.options.onLog('debug', 'Parameters prepared for single step execution');
     }
-    
+
     // Update execution engine with parameter values
     this.executionEngine.updateParameterValues(this.state.parameterValues);
-    
+
     // Check for required parameters
-    const parametersWithMissingValues = this.parameterManager.checkRequiredParameters(this.state.parameterValues);
+    const parametersWithMissingValues = this.parameterManager.checkRequiredParameters(
+      this.state.parameterValues
+    );
     if (parametersWithMissingValues.length > 0) {
-      this.options.onLog('info', 'Required parameters need input', 
-        `${parametersWithMissingValues.length} required parameter(s) need values: ${parametersWithMissingValues.map(p => p.name).join(', ')}`);
+      this.options.onLog(
+        'info',
+        'Required parameters need input',
+        `${parametersWithMissingValues.length} required parameter(s) need values: ${parametersWithMissingValues.map((p) => p.name).join(', ')}`
+      );
       return { success: false, parametersWithMissingValues };
     }
 
@@ -240,7 +290,11 @@ export class FlowRunner {
     this.state.isRunning = true;
 
     try {
-      this.options.onLog('info', `Executing step ${step.step_id} individually`, JSON.stringify(step));
+      this.options.onLog(
+        'info',
+        `Executing step ${step.step_id} individually`,
+        JSON.stringify(step)
+      );
       await this.executionEngine.executeStep(step);
 
       this.options.onStepExecutionComplete?.({
@@ -251,7 +305,11 @@ export class FlowRunner {
 
       return { success: true };
     } catch (err: unknown) {
-      this.options.onLog('error', `Error executing step ${step.step_id}`, err instanceof Error ? err.message : String(err));
+      this.options.onLog(
+        'error',
+        `Error executing step ${step.step_id}`,
+        err instanceof Error ? err.message : String(err)
+      );
 
       this.options.onStepExecutionComplete?.({
         stepId: step.step_id,
@@ -275,31 +333,34 @@ export class FlowRunner {
       return;
     }
 
-    this.options.onLog('debug', `Resetting data for step ${step.step_id}`, 
-      `Clearing ${step.endpoints.length} endpoint(s) data`);
+    this.options.onLog(
+      'debug',
+      `Resetting data for step ${step.step_id}`,
+      `Clearing ${step.endpoints.length} endpoint(s) data`
+    );
 
     // Reset data for each endpoint in the step
     step.endpoints.forEach((endpoint, index) => {
       const endpointId = `${step.step_id}-${index}`;
-      
+
       // Clear stored response
       if (this.state.storedResponses[endpointId]) {
         delete this.state.storedResponses[endpointId];
         this.options.onLog('debug', `Cleared stored response for ${endpointId}`);
       }
-      
+
       // Clear stored transformations
       if (this.state.storedTransformations[endpointId]) {
         delete this.state.storedTransformations[endpointId];
         this.options.onLog('debug', `Cleared stored transformations for ${endpointId}`);
       }
-      
+
       // Clear execution state
       if (this.state.executionState[endpointId]) {
         delete this.state.executionState[endpointId];
         this.options.onLog('debug', `Cleared execution state for ${endpointId}`);
       }
-      
+
       // Clear cookies for this endpoint
       if (this.state.cookieStore.has(endpointId)) {
         this.state.cookieStore.delete(endpointId);
@@ -307,11 +368,38 @@ export class FlowRunner {
       }
     });
 
-    // Additionally, if the step has clearCookiesBeforeExecution flag, 
+    // Additionally, if the step has clearCookiesBeforeExecution flag,
     // we respect it by clearing all cookies (the execution engine will handle this)
     if (step.clearCookiesBeforeExecution === true) {
-      this.options.onLog('debug', `Step ${step.step_id} has clearCookiesBeforeExecution flag - all cookies will be cleared during execution`);
+      this.options.onLog(
+        'debug',
+        `Step ${step.step_id} has clearCookiesBeforeExecution flag - all cookies will be cleared during execution`
+      );
     }
+  }
+
+  hydrateExecutionSnapshot(
+    executionState: ExecutionState,
+    parameterValues: Record<string, unknown> = {}
+  ): void {
+    this.replaceRecord(this.state.executionState, executionState);
+    this.replaceRecord(
+      this.state.storedResponses,
+      this.extractResponsesFromExecutionState(executionState)
+    );
+    this.replaceRecord(
+      this.state.storedTransformations,
+      this.extractTransformationsFromExecutionState(executionState)
+    );
+    this.state.parameterValues = { ...parameterValues };
+    this.state.currentStep = executionState.currentStep || 0;
+    this.state.progress = executionState.progress || 0;
+    this.state.error = null;
+    this.state.isRunning = false;
+    this.state.shouldStopExecution = false;
+    this.state.cookieStore.clear();
+    this.setupManagers();
+    this.options.onExecutionStateUpdate(this.state.executionState);
   }
 
   stopExecution(): void {
@@ -325,21 +413,22 @@ export class FlowRunner {
     this.state.currentStep = 0;
     this.state.progress = 0;
     this.state.error = null;
-    this.state.storedResponses = {};
-    this.state.storedTransformations = {};
-    this.state.executionState = {};
+    this.clearRecord(this.state.storedResponses);
+    this.clearRecord(this.state.storedTransformations);
+    this.clearRecord(this.state.executionState);
     this.state.isRunning = false;
     this.state.parameterValues = {};
     this.state.shouldStopExecution = false;
     this.state.cookieStore.clear();
+    this.setupManagers();
   }
 
   updateParameterValues(parametersWithMissingValues: FlowParameter[]): void {
     this.state.parameterValues = this.parameterManager.updateParameterValues(
-      parametersWithMissingValues, 
+      parametersWithMissingValues,
       this.state.parameterValues
     );
-    
+
     // Update execution context with new parameter values
     this.executionEngine.updateParameterValues(this.state.parameterValues);
   }
@@ -349,28 +438,32 @@ export class FlowRunner {
    */
   setParameterValues(parameterValues: Record<string, unknown>): void {
     this.state.parameterValues = { ...parameterValues };
-    
+
     // Update execution context with new parameter values
     this.executionEngine.updateParameterValues(this.state.parameterValues);
   }
 
-  private updateExecutionState(endpointId: string, updates: Partial<any>, emitEndpointUpdate: boolean = false): void {
+  private updateExecutionState(
+    endpointId: string,
+    updates: Partial<ExecutionState[string]>,
+    emitEndpointUpdate: boolean = false
+  ): void {
     const updatedEndpointState = {
       ...this.state.executionState[endpointId],
       ...updates
     };
-    
+
     this.state.executionState = {
       ...this.state.executionState,
       [endpointId]: updatedEndpointState
     };
-    
+
     // Update progress and current step in execution state
     this.state.executionState.progress = this.state.progress;
     this.state.executionState.currentStep = this.state.currentStep;
-    
+
     this.options.onExecutionStateUpdate(this.state.executionState);
-    
+
     if (emitEndpointUpdate) {
       this.options.onEndpointStateUpdate({
         endpointId,
@@ -379,12 +472,78 @@ export class FlowRunner {
     }
   }
 
+  private clearRecord(record: Record<string, unknown>): void {
+    Object.keys(record).forEach((key) => {
+      delete record[key];
+    });
+  }
+
+  private replaceRecord<T>(target: Record<string, T>, source: Record<string, T>): void {
+    Object.keys(target).forEach((key) => {
+      delete target[key];
+    });
+    Object.assign(target, source);
+  }
+
+  private extractResponsesFromExecutionState(
+    executionState: ExecutionState
+  ): Record<string, unknown> {
+    const responses: Record<string, unknown> = {};
+    Object.entries(executionState).forEach(([endpointId, state]) => {
+      if (
+        typeof state === 'object' &&
+        state !== null &&
+        'response' in state &&
+        state.response?.body
+      ) {
+        responses[endpointId] = state.response.body;
+      }
+    });
+
+    return responses;
+  }
+
+  private extractTransformationsFromExecutionState(
+    executionState: ExecutionState
+  ): Record<string, Record<string, unknown>> {
+    const transformations: Record<string, Record<string, unknown>> = {};
+    Object.entries(executionState).forEach(([endpointId, state]) => {
+      if (
+        typeof state === 'object' &&
+        state !== null &&
+        'transformations' in state &&
+        state.transformations
+      ) {
+        transformations[endpointId] = state.transformations;
+      }
+    });
+
+    return transformations;
+  }
+
   // Getters for state access
-  get isRunning(): boolean { return this.state.isRunning; }
-  get currentStep(): number { return this.state.currentStep; }
-  get progress(): number { return this.state.progress; }
-  get error(): unknown { return this.state.error; }
-  get executionState(): ExecutionState { return this.state.executionState; }
-  get parameterValues(): Record<string, unknown> { return this.state.parameterValues; }
-  get storedResponses(): Record<string, unknown> { return this.state.storedResponses; }
+  get isRunning(): boolean {
+    return this.state.isRunning;
+  }
+  get currentStep(): number {
+    return this.state.currentStep;
+  }
+  get progress(): number {
+    return this.state.progress;
+  }
+  get error(): unknown {
+    return this.state.error;
+  }
+  get executionState(): ExecutionState {
+    return this.state.executionState;
+  }
+  get parameterValues(): Record<string, unknown> {
+    return this.state.parameterValues;
+  }
+  get storedResponses(): Record<string, unknown> {
+    return this.state.storedResponses;
+  }
+  get storedTransformations(): Record<string, Record<string, unknown>> {
+    return this.state.storedTransformations;
+  }
 }

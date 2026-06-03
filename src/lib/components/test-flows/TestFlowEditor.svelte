@@ -23,6 +23,11 @@
   import type { TemplateContext } from '$lib/template/types';
   import { buildTemplatePreviewContext, type TemplatePreviewContext } from '$lib/template/preview';
   import { projectStore } from '$lib/store/project';
+  import {
+    clearRunSnapshot,
+    loadRunSnapshot,
+    saveRunSnapshot
+  } from '$lib/store/test-flow-run-cache';
   import * as stepManagement from './step-management';
   import {
     FlowRunner,
@@ -270,6 +275,32 @@
     dispatch('log', { level, message, details });
   }
 
+  function hydrateCachedRunSnapshot(): void {
+    if (!flowRunner || isRunning) return;
+
+    const snapshot = loadRunSnapshot(testFlowId, flowData);
+    if (!snapshot) return;
+
+    flowRunner.hydrateExecutionSnapshot(snapshot.executionState, snapshot.parameterValues);
+    currentParameterValues = snapshot.parameterValues;
+    currentStep = snapshot.executionState.currentStep || 0;
+    progress = snapshot.executionState.progress || 0;
+    outputResults = snapshot.flowOutputs;
+    outputExecutionError = null;
+  }
+
+  function persistSuccessfulRunSnapshot(flowOutputs: Record<string, unknown>): void {
+    if (!flowRunner) return;
+
+    saveRunSnapshot({
+      testFlowId,
+      flowData,
+      executionState: flowRunner.executionState,
+      parameterValues: flowRunner.parameterValues,
+      flowOutputs
+    });
+  }
+
   function initializeFlowRunner() {
     const options: FlowRunnerOptions = {
       flowData,
@@ -306,6 +337,10 @@
           outputExecutionError = data.error;
         }
 
+        if (data.success) {
+          persistSuccessfulRunSnapshot(data.flowOutputs || {});
+        }
+
         // Force an update of all components that depend on the execution state
         executionStore.update((state) => ({ ...state }));
 
@@ -314,6 +349,7 @@
     };
 
     flowRunner = new FlowRunner(options);
+    hydrateCachedRunSnapshot();
 
     // Store current environment variables for comparison
     previousEnvironmentVariables = { ...environmentVariables };
@@ -419,6 +455,8 @@
       showParameterInputModal = false;
       pendingSingleStepExecution = null;
     }
+
+    clearRunSnapshot(testFlowId);
 
     // Reset the execution state store
     executionStore.set({});
