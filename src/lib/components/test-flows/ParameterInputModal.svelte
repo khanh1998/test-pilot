@@ -1,12 +1,27 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  
   import type { FlowParameter } from './types';
 
-  export let isOpen = false;
-  export let parameters: FlowParameter[] = [];
-  export let isPendingSingleStepExecution = false;
+  interface Props {
+    [key: string]: unknown;
+    isOpen?: boolean;
+    parameters?: FlowParameter[];
+    isPendingSingleStepExecution?: boolean;
+  }
 
-  const dispatch = createEventDispatcher();
+  let { isOpen = false, parameters = [], isPendingSingleStepExecution = false , ...callbackProps
+  }: Props & Record<string, unknown> = $props();
+
+  function dispatch(eventName: string, detail?: unknown) {
+    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === "function") {
+      if (arguments.length > 1) {
+        handler(detail);
+      } else {
+        handler();
+      }
+    }
+  }
 
   function handleClose() {
     dispatch('close');
@@ -24,7 +39,7 @@
         <h3 class="text-lg font-medium">Required Parameters</h3>
         <button
           class="text-gray-500 hover:text-gray-700"
-          on:click={handleClose}
+          onclick={handleClose}
           aria-label="Close modal"
         >
           <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -76,7 +91,7 @@
                   type="checkbox"
                   class="h-4 w-4 rounded border-gray-300 text-blue-600"
                   checked={Boolean(parameter.value)}
-                  on:change={(e) => (parameter.value = e.currentTarget.checked)}
+                  onchange={(e) => (parameter.value = e.currentTarget.checked)}
                 />
                 <span class="ml-2 text-sm">Enabled</span>
               </label>
@@ -87,7 +102,7 @@
                   class="block w-full rounded-md border border-gray-300 p-2 font-mono shadow-sm"
                   rows="4"
                   value={parameter.value ? JSON.stringify(parameter.value, null, 2) : ''}
-                  on:input={(e) => {
+                  oninput={(e) => {
                     const target = e.target as HTMLTextAreaElement;
                     try {
                       parameter.value = JSON.parse(target.value);
@@ -110,13 +125,13 @@
       <div class="flex justify-end space-x-3">
         <button
           class="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium hover:bg-gray-50"
-          on:click={handleClose}
+          onclick={handleClose}
         >
           Cancel
         </button>
         <button
           class="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-          on:click={handleSubmit}
+          onclick={handleSubmit}
         >
           {isPendingSingleStepExecution ? 'Run Step' : 'Run Flow'}
         </button>

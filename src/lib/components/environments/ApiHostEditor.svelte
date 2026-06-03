@@ -1,22 +1,34 @@
 <script lang="ts">
-  import { createEventDispatcher, onMount } from 'svelte';
+  import { onMount } from 'svelte';
   import { getApiList } from '$lib/http_client/apis';
   import type { SubEnvironment } from '$lib/types/environment';
   import type { Api } from '$lib/types/api';
 
-  export let subEnvironments: Record<string, SubEnvironment> = {};
-  export let linkedApis: number[] = [];
-  export let disabled: boolean = false;
+  interface Props {
+    [key: string]: unknown;
+    subEnvironments?: Record<string, SubEnvironment>;
+    linkedApis?: number[];
+    disabled?: boolean;
+  }
 
-  const dispatch = createEventDispatcher<{
-    change: { subEnvironments: Record<string, SubEnvironment> };
-    updateLinkedApis: { linkedApis: number[] };
-  }>();
+  let { subEnvironments = $bindable({}), linkedApis = [], disabled = false , ...callbackProps
+  }: Props & Record<string, unknown> = $props();
 
-  let availableApis: Api[] = [];
-  let loading = true;
-  let error: string | null = null;
-  let showApiSelector = false;
+  function dispatch(eventName: string, detail?: unknown) {
+    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === "function") {
+      if (arguments.length > 1) {
+        handler(detail);
+      } else {
+        handler();
+      }
+    }
+  }
+
+  let availableApis: Api[] = $state([]);
+  let loading = $state(true);
+  let error: string | null = $state(null);
+  let showApiSelector = $state(false);
 
   async function loadApis() {
     try {
@@ -128,9 +140,9 @@
     loadApis();
   });
 
-  $: subEnvEntries = Object.entries(subEnvironments);
-  $: linkedApisList = availableApis.filter(api => api.id && linkedApis.includes(api.id));
-  $: unlinkedApisList = availableApis.filter(api => api.id && !linkedApis.includes(api.id));
+  let subEnvEntries = $derived(Object.entries(subEnvironments));
+  let linkedApisList = $derived(availableApis.filter(api => api.id && linkedApis.includes(api.id)));
+  let unlinkedApisList = $derived(availableApis.filter(api => api.id && !linkedApis.includes(api.id)));
 </script>
 
 <div class="border border-gray-200 rounded-lg bg-white" class:opacity-60={disabled} class:pointer-events-none={disabled}>

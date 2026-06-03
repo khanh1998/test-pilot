@@ -125,45 +125,43 @@
   }
 
   // Handle changes from child components
-  function handleNameChange(event: CustomEvent<{ name: string }>) {
-    updateName(event.detail.name);
+  function handleNameChange(payload: { name: string }) {
+    updateName(payload.name);
   }
 
-  function handleDescriptionChange(event: CustomEvent<{ description: string | null }>) {
-    updateDescription(event.detail.description);
+  function handleDescriptionChange(payload: { description: string | null }) {
+    updateDescription(payload.description);
   }
 
-  function handleApiHostsChange(event: CustomEvent<{ apiHosts: any }>) {
+  function handleApiHostsChange(payload: { apiHosts: any }) {
     const currentSettings = $flowJson.settings;
     updateFlowSettings({
       ...currentSettings,
-      api_hosts: event.detail.apiHosts
+      api_hosts: payload.apiHosts
     });
   }
 
-  function handleEnvironmentChange(event: CustomEvent<{ linkedEnvironment: any }>) {
+  function handleEnvironmentChange(payload: { linkedEnvironment: any }) {
     const currentSettings = $flowJson.settings;
     updateFlowSettings({
       ...currentSettings,
-      linkedEnvironment: event.detail.linkedEnvironment
+      linkedEnvironment: payload.linkedEnvironment
     });
   }
 
-  function handleEnvironmentSubEnvironmentChange(
-    event: CustomEvent<{ environmentId: number; subEnvironment: string }>
-  ) {
+  function handleEnvironmentSubEnvironmentChange(payload: { environmentId: number; subEnvironment: string }) {
     const currentSettings = $flowJson.settings;
     updateFlowSettings({
       ...currentSettings,
       environment: {
-        environmentId: event.detail.environmentId,
-        subEnvironment: event.detail.subEnvironment
+        environmentId: payload.environmentId,
+        subEnvironment: payload.subEnvironment
       }
     });
   }
 
-  function handleTestFlowChange(event: CustomEvent) {
-    const updatedFlowData = event.detail;
+  function handleTestFlowChange(payload: any) {
+    const updatedFlowData = payload;
     if (updatedFlowData) {
       updateFlowJson(updatedFlowData);
     }
@@ -175,17 +173,21 @@
   }
 
   // Handle execution completion
-  function handleLog(event: CustomEvent) {
-    const { level, message, details } = event.detail;
+  function handleLog(payload: any) {
+    const { level, message, details } = payload;
     console.log(`[LOG] ${level.toUpperCase()}: ${message}`, details || '');
     if (level === 'error') {
       $error = message;
     }
   }
 
-  function handleExecutionComplete(event: CustomEvent) {
-    console.log('Flow execution complete:', event.detail);
-    const { success, error: executionError } = event.detail;
+  function handleError(payload: { message?: string }) {
+    $error = payload.message || 'An error occurred while running the flow';
+  }
+
+  function handleExecutionComplete(payload: any) {
+    console.log('Flow execution complete:', payload);
+    const { success, error: executionError } = payload;
 
     if (!success && executionError) {
       $error = executionError.message || 'An error occurred during flow execution';
@@ -274,10 +276,11 @@
               {endpoints}
               {environment}
               selectedSubEnvironment={$flowJson.settings.environment?.subEnvironment || null}
-              on:change={handleTestFlowChange}
-              on:reset={handleReset}
-              on:executionComplete={handleExecutionComplete}
-              on:log={handleLog}
+              onChange={handleTestFlowChange}
+              onReset={handleReset}
+              onExecutionComplete={handleExecutionComplete}
+              onLog={handleLog}
+              onError={handleError}
             />
           {/if}
 
@@ -289,11 +292,11 @@
               flowJson={$flowJson}
               {environment}
               disabled={$isSaving}
-              on:nameChange={handleNameChange}
-              on:descriptionChange={handleDescriptionChange}
-              on:apiHostsChange={handleApiHostsChange}
-              on:environmentChange={handleEnvironmentChange}
-              on:environmentSubEnvironmentChange={handleEnvironmentSubEnvironmentChange}
+              onNameChange={handleNameChange}
+              onDescriptionChange={handleDescriptionChange}
+              onApiHostsChange={handleApiHostsChange}
+              onEnvironmentChange={handleEnvironmentChange}
+              onEnvironmentSubEnvironmentChange={handleEnvironmentSubEnvironmentChange}
             />
           {/if}
         </div>

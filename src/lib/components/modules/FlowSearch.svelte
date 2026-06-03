@@ -1,26 +1,38 @@
 <!-- FlowSearch.svelte - Inline flow search and selection -->
 <script lang="ts">
-  import type { TestFlow } from '../../types/test-flow.js';
-  import { createEventDispatcher } from 'svelte';
+    import type { TestFlow } from '../../types/test-flow.js';
+  
   import { onMount } from 'svelte';
   import * as testFlowClient from '$lib/http_client/test-flow';
 
-  export let isOpen: boolean = false;
+  interface Props {
+    [key: string]: unknown;
+    isOpen?: boolean;
+  }
 
-  const dispatch = createEventDispatcher<{
-    select: { flow: TestFlow };
-    close: void;
-  }>();
+  let { isOpen = $bindable(false) , ...callbackProps
+  }: Props & Record<string, unknown> = $props();
 
-  let searchTerm = '';
-  let searchResults: TestFlow[] = [];
-  let isLoading = false;
-  let inputElement: HTMLInputElement;
-  let inputContainer: HTMLDivElement;
-  let selectedIndex = -1;
+  function dispatch(eventName: string, detail?: unknown) {
+    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === "function") {
+      if (arguments.length > 1) {
+        handler(detail);
+      } else {
+        handler();
+      }
+    }
+  }
+
+  let searchTerm = $state('');
+  let searchResults: TestFlow[] = $state([]);
+  let isLoading = $state(false);
+  let inputElement: HTMLInputElement | undefined = $state();
+  let inputContainer: HTMLDivElement | undefined = $state();
+  let selectedIndex = $state(-1);
   
   // Dropdown positioning
-  let dropdownPosition = { top: 0, left: 0, width: 0 };
+  let dropdownPosition = $state({ top: 0, left: 0, width: 0 });
 
   function updateDropdownPosition() {
     if (inputContainer) {
@@ -33,9 +45,11 @@
     }
   }
 
-  $: if (isOpen && inputElement) {
-    inputElement.focus();
-  }
+  $effect(() => {
+    if (isOpen && inputElement) {
+      inputElement.focus();
+    }
+  });
 
   async function searchFlows() {
     if (searchTerm.trim().length < 2) {
@@ -130,13 +144,13 @@
       <input
         bind:this={inputElement}
         bind:value={searchTerm}
-        on:input={handleInput}
-        on:keydown={handleKeydown}
-        on:focus={() => { 
+        oninput={handleInput}
+        onkeydown={handleKeydown}
+        onfocus={() => { 
           if (inputContainer) updateDropdownPosition(); 
           isOpen = true; 
         }}
-        on:blur={handleBlur}
+        onblur={handleBlur}
         placeholder="Search flows..."
         class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
         autocomplete="off"
@@ -160,7 +174,7 @@
             class="w-full px-3 py-2 text-left hover:bg-gray-50 focus:bg-gray-50 focus:outline-none text-sm border-b border-gray-100 last:border-b-0"
             class:bg-blue-50={index === selectedIndex}
             class:text-blue-700={index === selectedIndex}
-            on:click={() => selectFlow(flow)}
+            onclick={() => selectFlow(flow)}
           >
             <div class="font-medium truncate">{flow.name}</div>
             <div class="text-xs text-gray-500 truncate">
@@ -179,7 +193,7 @@
 {:else}
   <button
     type="button"
-    on:click={() => (isOpen = true)}
+    onclick={() => (isOpen = true)}
     class="inline-flex items-center px-3 py-2 border border-dashed border-gray-300 rounded-md text-sm text-gray-600 hover:border-gray-400 hover:text-gray-700 transition-colors"
   >
     <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">

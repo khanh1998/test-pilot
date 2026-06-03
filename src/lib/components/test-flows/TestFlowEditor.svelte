@@ -1,5 +1,5 @@
 <script lang="ts">
-  import StepList from './StepList.svelte';
+    import StepList from './StepList.svelte';
   import FlowOutputsPanel from './FlowOutputsPanel.svelte';
   import ParameterInputModal from './ParameterInputModal.svelte';
   import FlowOutputEditor from './FlowOutputEditor.svelte';
@@ -19,144 +19,55 @@
 
   import { writable } from 'svelte/store';
   import { onMount, onDestroy } from 'svelte';
-  import { createEventDispatcher } from 'svelte';
+  
   import { isDesktop } from '$lib/environment';
 
-  // flowData includes settings.api_hosts which contains multiple API host configurations
-  export let testFlowId: string | number | undefined = undefined; // Optional test flow ID for localStorage
-  export let flowData: TestFlowData;
-  export let endpoints: Endpoint[] = [];
   
-  // Environment props passed from parent
-  export let environment: Environment | null = null;
-  export let selectedSubEnvironment: string | null = null;
-
-  // Sync endpoints into flowData so FlowRunner can access them
-  $: if (flowData && endpoints) {
-    flowData.endpoints = endpoints;
+  
+  
+  interface Props {
+    [key: string]: unknown;
+    // flowData includes settings.api_hosts which contains multiple API host configurations
+    testFlowId?: string | number | undefined; // Optional test flow ID for localStorage
+    flowData: TestFlowData;
+    endpoints?: Endpoint[];
+    // Environment props passed from parent
+    environment?: Environment | null;
+    selectedSubEnvironment?: string | null;
   }
 
-  // Initialize outputs if not present
-  $: if (flowData && !flowData.outputs) {
-    flowData.outputs = [];
-  }
+  let {
+    testFlowId = undefined,
+    flowData = $bindable(),
+    endpoints = [],
+    environment = null,
+    selectedSubEnvironment = $bindable(null)
+  , ...callbackProps
+  }: Props & Record<string, unknown> = $props();
 
-  // Compute template context from current execution state
-  $: templateContext = (() => {
-    try {
-      // Extract stored responses and transformations from execution store
-      const storedResponses: Record<string, unknown> = {};
-      const storedTransformations: Record<string, Record<string, unknown>> = {};
 
-      Object.entries($executionStore).forEach(([key, state]) => {
-        // Skip non-endpoint entries (progress, currentStep)
-        if (typeof state === 'object' && state !== null && !Array.isArray(state)) {
-          if (state.response?.body) {
-            storedResponses[key] = state.response.body;
-          }
-          if (state.transformations) {
-            storedTransformations[key] = state.transformations;
-          }
-        }
-      });
 
-      // Compute parameter values - use current values from FlowRunner if available, otherwise use defaults
-      const parameterValues: Record<string, unknown> = { ...currentParameterValues };
-      
-      // Fill in any missing values with defaults from flow definition
-      (flowData.parameters || []).forEach(param => {
-        if (!(param.name in parameterValues) && param.defaultValue !== undefined && param.defaultValue !== null) {
-          parameterValues[param.name] = param.defaultValue;
-        }
-      });
 
-      // Compute environment variables from selected environment
-      const environmentVariables: Record<string, unknown> = {};
-      // Use environment prop directly
-      if (environment && selectedSubEnvironment) {
-        if (environment.config.environments[selectedSubEnvironment]) {
-          const subEnvConfig = environment.config.environments[selectedSubEnvironment];
-          
-          // Add variable values from the selected sub-environment
-          Object.entries(environment.config.variable_definitions).forEach(([varName, varDef]) => {
-            const value = subEnvConfig.variables[varName];
-            if (value !== undefined) {
-              environmentVariables[varName] = value;
-            } else if (varDef.default_value !== undefined) {
-              environmentVariables[varName] = varDef.default_value;
-            }
-          });
-
-          // Add API hosts from the sub-environment
-          if (subEnvConfig.api_hosts) {
-            Object.entries(subEnvConfig.api_hosts).forEach(([apiId, hostUrl]) => {
-              environmentVariables[`api_host_${apiId}`] = hostUrl;
-            });
-          }
-          
-          console.log('Template context computed with environment variables:', {
-            environmentId: environment.id,
-            selectedSubEnvironment,
-            environmentName: environment.name,
-            subEnvironmentName: subEnvConfig.name,
-            variableCount: Object.keys(environmentVariables).length,
-            variables: Object.keys(environmentVariables)
-          });
-        } else {
-          console.warn('Selected sub-environment not found:', {
-            selectedSubEnvironment,
-            availableSubEnvs: environment ? Object.keys(environment.config.environments) : []
-          });
-        }
-      } else {
-        console.log('Template context computed without environment variables:', {
-          hasEnvironment: !!environment,
-          selectedSubEnvironment
-        });
-      }
-
-      // Create template functions
-      const templateFunctions = createTemplateFunctions({
-        responses: storedResponses,
-        transformedData: storedTransformations,
-        parameters: parameterValues,
-        environment: environmentVariables
-      });
-
-      // Create full template context
-      return createTemplateContextFromFlowRunner(
-        storedResponses,
-        storedTransformations,
-        parameterValues,
-        templateFunctions,
-        environmentVariables
-      );
-    } catch (error) {
-      console.warn('Failed to create template context:', error);
-      return null;
-    }
-  })() as TemplateContext | null;
-
-  let isRunning = false;
-  let flowRunner: FlowRunner;
-  let isLoadingEndpointDetails = false; // Add loading state for endpoint fetching
+  let isRunning = $state(false);
+  let flowRunner: FlowRunner | undefined = $state();
+  let isLoadingEndpointDetails = $state(false); // Add loading state for endpoint fetching
   
   // Bind to FlowRunner's current parameter values to use in template context
-  let currentParameterValues: Record<string, unknown> = {};
+  let currentParameterValues: Record<string, unknown> = $state({});
 
   // Parameter input modal state
-  let showParameterInputModal = false;
-  let parametersWithMissingValues: Array<FlowParameter> = [];
+  let showParameterInputModal = $state(false);
+  let parametersWithMissingValues: Array<FlowParameter> = $state([]);
   
   // Track pending single step execution
-  let pendingSingleStepExecution: { step: FlowStep; stepIndex?: number } | null = null;
+  let pendingSingleStepExecution: { step: FlowStep; stepIndex?: number } | null = $state(null);
 
   // Local state derived from flow runner
   let currentStep = 0;
-  let totalSteps = 0;
+  let totalSteps = $state(0);
   let progress = 0;
   let error: unknown = null;
-  let previousEnvironmentVariables: Record<string, unknown> = {};
+  let previousEnvironmentVariables: Record<string, unknown> = $state({});
 
   // Loading state for environment operations
   let isLoadingEnvironment = false;
@@ -167,38 +78,36 @@
   const executionStore = writable<ExecutionState>({});
 
   // Execution options panel
-  let showExecutionOptions = false;
+  let showExecutionOptions = $state(false);
 
   // parameters panel control
-  let showParametersPanel = false;
+  let showParametersPanel = $state(false);
 
   // Flow output editor state
-  let isOutputEditorOpen = false;
-  let isOutputEditorMounted = false;
-  let outputResults: Record<string, unknown> = {};
-  let outputExecutionError: unknown = null;
+  let isOutputEditorOpen = $state(false);
+  let isOutputEditorMounted = $state(false);
+  let outputResults: Record<string, unknown> = $state({});
+  let outputExecutionError: unknown = $state(null);
 
   // Flow logs viewer state
-  let isLogsViewerOpen = false;
-  let isLogsViewerMounted = false;
+  let isLogsViewerOpen = $state(false);
+  let isLogsViewerMounted = $state(false);
   let executionLogs: Array<{
     level: 'info' | 'debug' | 'error' | 'warning';
     message: string;
     details?: string;
     timestamp: Date;
-  }> = [];
+  }> = $state([]);
 
   // Execution preferences - default values
-  let preferences: ExecutionPreferences = {
+  let preferences: ExecutionPreferences = $state({
     parallelExecution: true,
     stopOnError: true,
     serverCookieHandling: !isDesktop,
     retryCount: 0,
     timeout: 30000
-  };
+  });
 
-  // Computed environment variables for template resolution
-  $: environmentVariables = computeEnvironmentVariables(environment, selectedSubEnvironment);
 
   function computeEnvironmentVariables(env: Environment | null, subEnv: string | null): Record<string, unknown> {
     if (!env || !subEnv || !env.config.environments[subEnv]) {
@@ -227,8 +136,8 @@
   }
 
   // Function to handle endpoint selection for a specific step
-  async function handleEndpointSelected(event: CustomEvent<Endpoint & { stepIndex: number }>) {
-    const { stepIndex, ...selectedEndpoint } = event.detail;
+  async function handleEndpointSelected(payload: Endpoint & { stepIndex: number }) {
+    const { stepIndex, ...selectedEndpoint } = payload;
 
     // Set loading state
     isLoadingEndpointDetails = true;
@@ -321,7 +230,16 @@
     }
   }
 
-  const dispatch = createEventDispatcher();
+  function dispatch(eventName: string, detail?: unknown) {
+    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === "function") {
+      if (arguments.length > 1) {
+        handler(detail);
+      } else {
+        handler();
+      }
+    }
+  }
 
   // Create event handlers for external triggers
   function handleshowParametersPanel() {
@@ -333,34 +251,9 @@
     selectedProject = state.selectedProject;
   });
 
-  // Initialize when component mounts or when flowData or environment changes
-  $: if (flowData && flowData.steps) {
-    totalSteps = flowData.steps.length;
-    initializeFlowRunner();
-  }
 
-  // Re-initialize when environment variables change (but not on initial load)
-  $: if (flowRunner && environmentVariables) {
-    // Only reinitialize if environment variables actually changed
-    const envVarsChanged = JSON.stringify(previousEnvironmentVariables) !== JSON.stringify(environmentVariables);
-    
-    if (envVarsChanged && Object.keys(environmentVariables).length > 0) {
-      console.log('Environment variables changed, reinitializing FlowRunner');
-      previousEnvironmentVariables = { ...environmentVariables };
-      initializeFlowRunner();
-    }
-  }
 
-  // Ensure endpoints are available
-  $: if (!flowData.endpoints) {
-    flowData.endpoints = [];
-    console.warn('No endpoints provided in flowData. The flow may not execute correctly.');
-  }
 
-  // Ensure parameters array exists
-  $: if (!flowData.parameters) {
-    flowData.parameters = [];
-  }
 
   // Add a log entry to the execution logs
   function addLog(level: 'info' | 'debug' | 'error' | 'warning', message: string, details?: string) {
@@ -430,8 +323,8 @@
     }
   });
 
-  function handleEnvironmentSelection(event: CustomEvent<{ environmentId: number | null; subEnvironment: string | null }>) {
-    const { environmentId, subEnvironment } = event.detail;
+  function handleEnvironmentSelection(payload: { environmentId: number | null; subEnvironment: string | null }) {
+    const { environmentId, subEnvironment } = payload;
     selectedSubEnvironment = subEnvironment;
     
     // Update flowData with environment selection
@@ -448,10 +341,10 @@
     handleChange();
   }
 
-  function handleChange(event?: CustomEvent<{ flowData: TestFlowData }>) {
-    // If event has flowData in detail, use it
-    if (event && event.detail && event.detail.flowData) {
-      flowData = { ...event.detail.flowData };
+  function handleChange(payload?: { flowData: TestFlowData }) {
+    // If payload has flowData, use it
+    if (payload?.flowData) {
+      flowData = { ...payload.flowData };
     } else {
       // Otherwise update the local variable
       flowData = { ...flowData };
@@ -462,22 +355,22 @@
   }
 
   // Handle removing a step from the flow
-  function handleRemoveStep(event: CustomEvent) {
-    const { stepIndex } = event.detail;
+  function handleRemoveStep(payload: any) {
+    const { stepIndex } = payload;
     flowData = stepManagement.removeStep(flowData, stepIndex);
     handleChange();
   }
 
   // Handle removing an endpoint from a step
-  function handleRemoveEndpoint(event: CustomEvent) {
-    const { stepIndex, endpointIndex } = event.detail;
+  function handleRemoveEndpoint(payload: any) {
+    const { stepIndex, endpointIndex } = payload;
     flowData = stepManagement.removeEndpoint(flowData, stepIndex, endpointIndex);
     handleChange();
   }
 
   // Handle moving a step up or down
-  function handleMoveStep(event: CustomEvent) {
-    const { stepIndex, direction } = event.detail;
+  function handleMoveStep(payload: any) {
+    const { stepIndex, direction } = payload;
     flowData = stepManagement.moveStep(flowData, stepIndex, direction);
     handleChange();
   }
@@ -489,8 +382,8 @@
   }
 
   // Insert a new step after a specific step index
-  function insertStepAfter(event: CustomEvent) {
-    const { stepIndex } = event.detail;
+  function insertStepAfter(payload: any) {
+    const { stepIndex } = payload;
     flowData = stepManagement.insertStepAfter(flowData, stepIndex);
     handleChange();
   }
@@ -570,8 +463,8 @@
   }
 
   // Execute a single step from the UI
-  async function executeStep(event: CustomEvent) {
-    const { stepIndex } = event.detail;
+  async function executeStep(payload: any) {
+    const { stepIndex } = payload;
     const step = flowData.steps[stepIndex];
 
     if (!flowRunner) {
@@ -648,8 +541,8 @@
     }, 300);
   }
 
-  function handleOutputSave(event: CustomEvent<{ outputs: import('./types').FlowOutput[] }>) {
-    const { outputs } = event.detail;
+  function handleOutputSave(payload: { outputs: import('./types').FlowOutput[] }) {
+    const { outputs } = payload;
     
     if (!flowData.outputs) {
       flowData.outputs = [];
@@ -691,10 +584,10 @@
     pendingSingleStepExecution = null;
   }
 
-  async function handleParameterModalSubmit(event: CustomEvent<{ parameters: FlowParameter[] }>) {
+  async function handleParameterModalSubmit(payload: { parameters: FlowParameter[] }) {
     if (!flowRunner) return;
 
-    flowRunner.updateParameterValues(event.detail.parameters);
+    flowRunner.updateParameterValues(payload.parameters);
     showParameterInputModal = false;
 
     // Check if we're continuing a single step execution or full flow
@@ -726,8 +619,8 @@
   }
 
   // Flow parameter editor handlers
-  function handleParameterSave(event: CustomEvent) {
-    const parameter = event.detail;
+  function handleParameterSave(payload: any) {
+    const parameter = payload;
     if (!flowData.parameters) flowData.parameters = [];
     
     if (parameter.isNew) {
@@ -743,13 +636,13 @@
     handleChange();
   }
 
-  function handleParameterRemove(event: CustomEvent) {
-    flowData.parameters = flowData.parameters.filter(p => p.name !== event.detail.name);
+  function handleParameterRemove(payload: any) {
+    flowData.parameters = flowData.parameters.filter(p => p.name !== payload.name);
     handleChange();
   }
 
-  function handleParametersSaveAll(event: CustomEvent) {
-    flowData.parameters = [...event.detail];
+  function handleParametersSaveAll(payload: any) {
+    flowData.parameters = [...payload];
     handleChange();
   }
 
@@ -758,6 +651,148 @@
   // but those values are already available in the executionStore
   
   // No need for manual subscription anymore as we're using the $ syntax directly
+  // Sync endpoints into flowData so FlowRunner can access them
+  $effect(() => {
+    if (flowData && endpoints) {
+      flowData.endpoints = endpoints;
+    }
+  });
+  // Initialize outputs if not present
+  $effect(() => {
+    if (flowData && !flowData.outputs) {
+      flowData.outputs = [];
+    }
+  });
+  // Compute template context from current execution state
+  let templateContext = $derived((() => {
+    try {
+      // Extract stored responses and transformations from execution store
+      const storedResponses: Record<string, unknown> = {};
+      const storedTransformations: Record<string, Record<string, unknown>> = {};
+
+      Object.entries($executionStore).forEach(([key, state]) => {
+        // Skip non-endpoint entries (progress, currentStep)
+        if (typeof state === 'object' && state !== null && !Array.isArray(state)) {
+          if (state.response?.body) {
+            storedResponses[key] = state.response.body;
+          }
+          if (state.transformations) {
+            storedTransformations[key] = state.transformations;
+          }
+        }
+      });
+
+      // Compute parameter values - use current values from FlowRunner if available, otherwise use defaults
+      const parameterValues: Record<string, unknown> = { ...currentParameterValues };
+      
+      // Fill in any missing values with defaults from flow definition
+      (flowData.parameters || []).forEach(param => {
+        if (!(param.name in parameterValues) && param.defaultValue !== undefined && param.defaultValue !== null) {
+          parameterValues[param.name] = param.defaultValue;
+        }
+      });
+
+      // Compute environment variables from selected environment
+      const environmentVariables: Record<string, unknown> = {};
+      // Use environment prop directly
+      if (environment && selectedSubEnvironment) {
+        if (environment.config.environments[selectedSubEnvironment]) {
+          const subEnvConfig = environment.config.environments[selectedSubEnvironment];
+          
+          // Add variable values from the selected sub-environment
+          Object.entries(environment.config.variable_definitions).forEach(([varName, varDef]) => {
+            const value = subEnvConfig.variables[varName];
+            if (value !== undefined) {
+              environmentVariables[varName] = value;
+            } else if (varDef.default_value !== undefined) {
+              environmentVariables[varName] = varDef.default_value;
+            }
+          });
+
+          // Add API hosts from the sub-environment
+          if (subEnvConfig.api_hosts) {
+            Object.entries(subEnvConfig.api_hosts).forEach(([apiId, hostUrl]) => {
+              environmentVariables[`api_host_${apiId}`] = hostUrl;
+            });
+          }
+          
+          console.log('Template context computed with environment variables:', {
+            environmentId: environment.id,
+            selectedSubEnvironment,
+            environmentName: environment.name,
+            subEnvironmentName: subEnvConfig.name,
+            variableCount: Object.keys(environmentVariables).length,
+            variables: Object.keys(environmentVariables)
+          });
+        } else {
+          console.warn('Selected sub-environment not found:', {
+            selectedSubEnvironment,
+            availableSubEnvs: environment ? Object.keys(environment.config.environments) : []
+          });
+        }
+      } else {
+        console.log('Template context computed without environment variables:', {
+          hasEnvironment: !!environment,
+          selectedSubEnvironment
+        });
+      }
+
+      // Create template functions
+      const templateFunctions = createTemplateFunctions({
+        responses: storedResponses,
+        transformedData: storedTransformations,
+        parameters: parameterValues,
+        environment: environmentVariables
+      });
+
+      // Create full template context
+      return createTemplateContextFromFlowRunner(
+        storedResponses,
+        storedTransformations,
+        parameterValues,
+        templateFunctions,
+        environmentVariables
+      );
+    } catch (error) {
+      console.warn('Failed to create template context:', error);
+      return null;
+    }
+  })() as TemplateContext | null);
+  // Computed environment variables for template resolution
+  let environmentVariables = $derived(computeEnvironmentVariables(environment, selectedSubEnvironment));
+  // Initialize when component mounts or when flowData or environment changes
+  $effect(() => {
+    if (flowData && flowData.steps) {
+      totalSteps = flowData.steps.length;
+      initializeFlowRunner();
+    }
+  });
+  // Re-initialize when environment variables change (but not on initial load)
+  $effect(() => {
+    if (flowRunner && environmentVariables) {
+      // Only reinitialize if environment variables actually changed
+      const envVarsChanged = JSON.stringify(previousEnvironmentVariables) !== JSON.stringify(environmentVariables);
+      
+      if (envVarsChanged && Object.keys(environmentVariables).length > 0) {
+        console.log('Environment variables changed, reinitializing FlowRunner');
+        previousEnvironmentVariables = { ...environmentVariables };
+        initializeFlowRunner();
+      }
+    }
+  });
+  // Ensure endpoints are available
+  $effect(() => {
+    if (!flowData.endpoints) {
+      flowData.endpoints = [];
+      console.warn('No endpoints provided in flowData. The flow may not execute correctly.');
+    }
+  });
+  // Ensure parameters array exists
+  $effect(() => {
+    if (!flowData.parameters) {
+      flowData.parameters = [];
+    }
+  });
 </script>
 
 <div class="space-y-4">
@@ -772,15 +807,15 @@
     hasValidApiHosts={hasValidApiHosts()}
     hasSteps={flowData.steps.length > 0}
     totalSteps={flowData.steps.length}
-    on:environmentSelect={handleEnvironmentSelection}
-    on:toggleOptions={() => (showExecutionOptions = !showExecutionOptions)}
-    on:reset={() => {
+    onEnvironmentSelect={handleEnvironmentSelection}
+    onToggleOptions={() => (showExecutionOptions = !showExecutionOptions)}
+    onReset={() => {
       handleReset();
     }}
-    on:toggleParameters={() => (showParametersPanel = !showParametersPanel)}
-    on:openLogs={openLogsViewer}
-    on:runFlow={runFlow}
-    on:stop={handleStop}
+    onToggleParameters={() => (showParametersPanel = !showParametersPanel)}
+    onOpenLogs={openLogsViewer}
+    onRunFlow={runFlow}
+    onStop={handleStop}
   />
 
   <!-- Execution Options Panel (Sliding) -->
@@ -797,15 +832,15 @@
       {isLoadingEndpointDetails}
       executionStore={$executionStore}
       {templateContext}
-      on:removeStep={handleRemoveStep}
-      on:removeEndpoint={handleRemoveEndpoint}
-      on:moveStep={handleMoveStep}
-      on:change={handleChange}
-      on:runStep={executeStep}
-      on:endpointSelected={handleEndpointSelected}
-      on:insertStepAtBeginning={insertStepAtBeginning}
-      on:insertStepAfter={insertStepAfter}
-      on:addNewStep={addNewStep}
+      onRemoveStep={handleRemoveStep}
+      onRemoveEndpoint={handleRemoveEndpoint}
+      onMoveStep={handleMoveStep}
+      onChange={handleChange}
+      onRunStep={executeStep}
+      onEndpointSelected={handleEndpointSelected}
+      onInsertStepAtBeginning={insertStepAtBeginning}
+      onInsertStepAfter={insertStepAfter}
+      onAddNewStep={addNewStep}
     />
   {:else}
     <div class="rounded-lg border border-gray-200 bg-gray-50 p-4 text-center text-sm text-gray-500">
@@ -817,7 +852,7 @@
   <FlowOutputsPanel
     outputs={flowData.outputs || []}
     {isRunning}
-    on:openOutputEditor={openOutputEditor}
+    onOpenOutputEditor={openOutputEditor}
   />
 </div>
 
@@ -830,8 +865,8 @@
     {outputResults}
     executionError={outputExecutionError}
     hasExecutionData={Object.keys(outputResults).length > 0 || outputExecutionError !== null}
-    on:close={closeOutputEditor}
-    on:save={handleOutputSave}
+    onClose={closeOutputEditor}
+    onSave={handleOutputSave}
   />
 {/if}
 
@@ -840,7 +875,7 @@
   <FlowLogsViewer
     isOpen={isLogsViewerOpen}
     logs={executionLogs}
-    on:close={closeLogsViewer}
+    onClose={closeLogsViewer}
   />
 {/if}
 
@@ -850,10 +885,10 @@
     isOpen={showParametersPanel}
     parameters={flowData.parameters || []}
     currentValues={currentParameterValues}
-    on:save={handleParameterSave}
-    on:remove={handleParameterRemove}
-    on:saveAll={handleParametersSaveAll}
-    on:close={() => (showParametersPanel = false)}
+    onSave={handleParameterSave}
+    onRemove={handleParameterRemove}
+    onSaveAll={handleParametersSaveAll}
+    onClose={() => (showParametersPanel = false)}
   />
 {/if}
 
@@ -862,6 +897,6 @@
   isOpen={showParameterInputModal}
   parameters={parametersWithMissingValues}
   isPendingSingleStepExecution={pendingSingleStepExecution !== null}
-  on:close={handleParameterModalClose}
-  on:submit={handleParameterModalSubmit}
+  onClose={handleParameterModalClose}
+  onSubmit={handleParameterModalSubmit}
 />

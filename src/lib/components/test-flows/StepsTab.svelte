@@ -1,38 +1,63 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  
   import TestFlowEditor from './TestFlowEditor.svelte';
   import type { TestFlowData, Endpoint } from './types';
   import type { Environment } from '$lib/types/environment';
 
-  export let testFlowId: string | number | undefined = undefined; // Pass through test flow ID
-  export let flowData: TestFlowData;
-  export let endpoints: Endpoint[] = [];
-  export let environment: Environment | null = null;
-  export let selectedSubEnvironment: string | null = null;
+  interface Props {
+    [key: string]: unknown;
+    testFlowId?: string | number | undefined; // Pass through test flow ID
+    flowData: TestFlowData;
+    endpoints?: Endpoint[];
+    environment?: Environment | null;
+    selectedSubEnvironment?: string | null;
+  }
 
-  const dispatch = createEventDispatcher();
+  let {
+    testFlowId = undefined,
+    flowData,
+    endpoints = [],
+    environment = null,
+    selectedSubEnvironment = null
+  , ...callbackProps
+  }: Props & Record<string, unknown> = $props();
+
+  function dispatch(eventName: string, detail?: unknown) {
+    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === "function") {
+      if (arguments.length > 1) {
+        handler(detail);
+      } else {
+        handler();
+      }
+    }
+  }
 
   // Check if there are valid API hosts configured
-  $: hasValidApiHosts = flowData.settings.api_hosts && 
+  let hasValidApiHosts = $derived(flowData.settings.api_hosts && 
     Object.keys(flowData.settings.api_hosts).length > 0 &&
     Object.values(flowData.settings.api_hosts).some(
       (hostInfo) => hostInfo && hostInfo.url && hostInfo.url.trim() !== ''
-    );
+    ));
 
-  function handleTestFlowChange(event: CustomEvent) {
-    dispatch('change', event.detail);
+  function handleTestFlowChange(payload: any) {
+    dispatch('change', payload);
   }
 
-  function handleReset(event: CustomEvent) {
-    dispatch('reset', event.detail);
+  function handleReset(payload: any) {
+    dispatch('reset', payload);
   }
 
-  function handleExecutionComplete(event: CustomEvent) {
-    dispatch('executionComplete', event.detail);
+  function handleExecutionComplete(payload: any) {
+    dispatch('executionComplete', payload);
   }
 
-  function handleLog(event: CustomEvent) {
-    dispatch('log', event.detail);
+  function handleLog(payload: any) {
+    dispatch('log', payload);
+  }
+
+  function handleError(payload: any) {
+    dispatch('error', payload);
   }
 </script>
 
@@ -53,10 +78,11 @@
     {endpoints}
     {environment}
     {selectedSubEnvironment}
-    on:change={handleTestFlowChange}
-    on:reset={handleReset}
-    on:executionComplete={handleExecutionComplete}
-    on:log={handleLog}
+    onChange={handleTestFlowChange}
+    onReset={handleReset}
+    onExecutionComplete={handleExecutionComplete}
+    onLog={handleLog}
+    onError={handleError}
   />
 
   <!-- Empty state when there are no steps -->

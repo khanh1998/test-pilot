@@ -1,39 +1,58 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  
   import FlowInfoEditor from './FlowInfoEditor.svelte';
   import ApiHostManager from './ApiHostManager.svelte';
   import EnvironmentLinkingManager from '../environments/EnvironmentLinkingManager.svelte';
   import type { TestFlowData } from './types';
   import type { Environment } from '$lib/types/environment';
 
-  export let name: string;
-  export let description: string | null;
-  export let flowJson: TestFlowData;
-  export let environment: Environment | null = null;
-  export let disabled: boolean = false;
-
-  const dispatch = createEventDispatcher();
-
-  function handleNameChange(event: CustomEvent<{ name: string }>) {
-    dispatch('nameChange', event.detail);
+  interface Props {
+    [key: string]: unknown;
+    name: string;
+    description: string | null;
+    flowJson: TestFlowData;
+    environment?: Environment | null;
+    disabled?: boolean;
   }
 
-  function handleDescriptionChange(event: CustomEvent<{ description: string | null }>) {
-    dispatch('descriptionChange', event.detail);
+  let {
+    name,
+    description,
+    flowJson,
+    environment = null,
+    disabled = false
+  , ...callbackProps
+  }: Props & Record<string, unknown> = $props();
+
+  function dispatch(eventName: string, detail?: unknown) {
+    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === "function") {
+      if (arguments.length > 1) {
+        handler(detail);
+      } else {
+        handler();
+      }
+    }
   }
 
-  function handleApiHostsChange(event: CustomEvent<{ apiHosts: TestFlowData['settings']['api_hosts'] }>) {
-    dispatch('apiHostsChange', event.detail);
+  function handleNameChange(payload: { name: string }) {
+    dispatch('nameChange', payload);
   }
 
-  function handleEnvironmentChange(event: CustomEvent<{ linkedEnvironment: any }>) {
-    dispatch('environmentChange', event.detail);
+  function handleDescriptionChange(payload: { description: string | null }) {
+    dispatch('descriptionChange', payload);
   }
 
-  function handleSubEnvironmentChange(
-    event: CustomEvent<{ environmentId: number; subEnvironment: string }>
-  ) {
-    dispatch('environmentSubEnvironmentChange', event.detail);
+  function handleApiHostsChange(payload: { apiHosts: TestFlowData['settings']['api_hosts'] }) {
+    dispatch('apiHostsChange', payload);
+  }
+
+  function handleEnvironmentChange(payload: { linkedEnvironment: any }) {
+    dispatch('environmentChange', payload);
+  }
+
+  function handleSubEnvironmentChange(payload: { environmentId: number; subEnvironment: string }) {
+    dispatch('environmentSubEnvironmentChange', payload);
   }
 </script>
 
@@ -46,8 +65,8 @@
         {name}
         {description}
         {disabled}
-        on:nameChange={handleNameChange}
-        on:descriptionChange={handleDescriptionChange}
+        onNameChange={handleNameChange}
+        onDescriptionChange={handleDescriptionChange}
       />
     </div>
 
@@ -56,7 +75,7 @@
       <ApiHostManager
         apiHosts={flowJson.settings.api_hosts || {}}
         {disabled}
-        on:change={handleApiHostsChange}
+        onChange={handleApiHostsChange}
       />
     </div>
   </div>
@@ -69,8 +88,8 @@
       flowParameters={flowJson.parameters || []}
       selectedSubEnvironment={flowJson.settings.environment?.subEnvironment || null}
       {disabled}
-      on:change={handleEnvironmentChange}
-      on:subEnvironmentChange={handleSubEnvironmentChange}
+      onChange={handleEnvironmentChange}
+      onSubEnvironmentChange={handleSubEnvironmentChange}
     />
   </div>
 </div>

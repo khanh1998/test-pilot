@@ -1,7 +1,7 @@
 import { ProjectRepository } from '../../repository/db/project.js';
-import type { 
-  Project, 
-  CreateProjectRequest, 
+import type {
+  Project,
+  CreateProjectRequest,
   UpdateProjectRequest,
   ProjectListResponse,
   ProjectDetailResponse
@@ -26,7 +26,7 @@ export class ProjectService {
    */
   async getProjectDetail(projectId: number, userId: number): Promise<ProjectDetailResponse> {
     const projectDetail = await this.projectRepo.getProjectDetail(projectId, userId);
-    
+
     if (!projectDetail) {
       throw new Error('Project not found or access denied');
     }
@@ -65,7 +65,11 @@ export class ProjectService {
   /**
    * Update project
    */
-  async updateProject(projectId: number, userId: number, data: UpdateProjectRequest): Promise<Project> {
+  async updateProject(
+    projectId: number,
+    userId: number,
+    data: UpdateProjectRequest
+  ): Promise<Project> {
     // Validate name if provided
     if (data.name !== undefined) {
       if (!data.name || data.name.trim().length === 0) {
@@ -82,8 +86,17 @@ export class ProjectService {
       data.description = data.description?.trim();
     }
 
+    if (data.agentContext !== undefined && data.agentContext !== null) {
+      if (typeof data.agentContext !== 'string') {
+        throw new Error('Agent context must be a string');
+      }
+      if (data.agentContext.length > 50000) {
+        throw new Error('Agent context cannot exceed 50000 characters');
+      }
+    }
+
     const updatedProject = await this.projectRepo.updateProject(projectId, userId, data);
-    
+
     if (!updatedProject) {
       throw new Error('Project not found or access denied');
     }
@@ -96,7 +109,7 @@ export class ProjectService {
    */
   async deleteProject(projectId: number, userId: number): Promise<void> {
     const deleted = await this.projectRepo.deleteProject(projectId, userId);
-    
+
     if (!deleted) {
       throw new Error('Project not found or access denied');
     }
@@ -118,7 +131,8 @@ export class ProjectService {
     try {
       await this.projectRepo.linkApisToProject(projectId, [apiId]);
     } catch (error: any) {
-      if (error.code === '23505') { // Unique constraint violation
+      if (error.code === '23505') {
+        // Unique constraint violation
         throw new Error('API is already linked to this project');
       }
       throw error;
@@ -136,7 +150,7 @@ export class ProjectService {
     }
 
     const unlinked = await this.projectRepo.unlinkApiFromProject(projectId, apiId);
-    
+
     if (!unlinked) {
       throw new Error('API link not found');
     }

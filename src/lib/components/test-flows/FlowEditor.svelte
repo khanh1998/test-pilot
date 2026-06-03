@@ -1,10 +1,23 @@
 <script lang="ts">
-  import { createEventDispatcher, onMount, afterUpdate, onDestroy } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
 
-  // Props
-  export let description = '';
+  interface Props {
+    [key: string]: unknown;
+    description?: string;
+  }
 
-  const dispatch = createEventDispatcher();
+  let { description = $bindable(''), ...callbackProps }: Props = $props();
+
+  function dispatch(eventName: string, detail?: unknown) {
+    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === "function") {
+      if (arguments.length > 1) {
+        handler(detail);
+      } else {
+        handler();
+      }
+    }
+  }
 
   // Step color themes
   const stepColors = [
@@ -82,15 +95,15 @@
   }
 
   // Pre-computed annotation data to avoid recalculation
-  $: lines = description.split('\n');
-  $: annotationData = lines.map((line, i) => ({
+  const lines = $derived(description.split('\n'));
+  const annotationData = $derived(lines.map((line, i) => ({
     line,
     isEmptyLine: !line.trim(),
     stepIndex: calculateStepIndex(lines, i),
     endpointIndex: calculateEndpointIndex(lines, i),
     isFirstLineOfStep: calculateIsFirstLineOfStep(lines, i),
     stepColor: getStepColor(calculateStepIndex(lines, i))
-  })) satisfies AnnotationData[];
+  })) satisfies AnnotationData[]);
 
   // Functions to handle line annotations
   function updateAnnotations() {
@@ -215,15 +228,10 @@
   }
   
   // Track when description changes to update annotations
-  $: {
+  $effect(() => {
+    description;
     setTimeout(updateAnnotations, 0);
     setTimeout(setupHoverEffects, 10); // Small delay to ensure DOM is updated
-  }
-  
-  // Update annotations after component renders
-  afterUpdate(() => {
-    updateAnnotations();
-    setupHoverEffects();
   });
   
   onMount(() => {
@@ -361,8 +369,8 @@ Verify the updated profile information
 
 (Use empty lines to separate steps as shown above)"
       bind:value={description}
-      on:input={updateAnnotations}
-      on:keydown={(e) => {
+      oninput={updateAnnotations}
+      onkeydown={(e: KeyboardEvent) => {
         // Auto-indent when user presses Enter
         if (e.key === 'Enter' && e.ctrlKey) {
           e.preventDefault();

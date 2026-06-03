@@ -1,9 +1,14 @@
 <script lang="ts">
-  export let data: unknown;
-  export let maxHeight: string = '400px';
-  export let title: string = '';
+  interface Props {
+    [key: string]: unknown;
+    data: unknown;
+    maxHeight?: string;
+    title?: string;
+  }
+
+  let { data, maxHeight = '400px', title = '' }: Props = $props();
   
-  let isCollapsed = false;
+  let isCollapsed = $state(false);
   
   function formatJson(value: unknown): string {
     try {
@@ -38,7 +43,7 @@
     </div>
     <button
       type="button"
-      on:click={toggleCollapse}
+      onclick={toggleCollapse}
       class="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 transition-colors"
     >
       {isCollapsed ? 'Expand' : 'Collapse'}

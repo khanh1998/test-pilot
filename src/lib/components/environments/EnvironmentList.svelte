@@ -6,10 +6,10 @@
   import EnvironmentCard from './EnvironmentCard.svelte';
   import type { Environment } from '$lib/types/environment';
 
-  let environments: Environment[] = [];
-  let loading = true;
-  let error: string | null = null;
-  let showCreator = false;
+  let environments: Environment[] = $state([]);
+  let loading = $state(true);
+  let error: string | null = $state(null);
+  let showCreator = $state(false);
   let isDeleting = false;
 
   async function loadEnvironments() {
@@ -41,18 +41,18 @@
     showCreator = false;
   }
 
-  function handleEnvironmentView(event: CustomEvent<{ environment: Environment }>) {
-    const { environment } = event.detail;
+  function handleEnvironmentView(payload: { environment: Environment }) {
+    const { environment } = payload;
     goto(`/projects/environment/${environment.id}`);
   }
 
-  function handleEnvironmentEdit(event: CustomEvent<{ environment: Environment }>) {
-    const { environment } = event.detail;
+  function handleEnvironmentEdit(payload: { environment: Environment }) {
+    const { environment } = payload;
     goto(`/projects/environment/${environment.id}/edit`);
   }
 
-  async function handleEnvironmentDelete(event: CustomEvent<{ environment: Environment }>) {
-    const { environment } = event.detail;
+  async function handleEnvironmentDelete(payload: { environment: Environment }) {
+    const { environment } = payload;
     
     try {
       isDeleting = true;
@@ -114,9 +114,9 @@
       {#each environments as environment}
         <EnvironmentCard 
           {environment} 
-          on:view={handleEnvironmentView}
-          on:edit={handleEnvironmentEdit}
-          on:delete={handleEnvironmentDelete}
+          onView={handleEnvironmentView}
+          onEdit={handleEnvironmentEdit}
+          onDelete={handleEnvironmentDelete}
         />
       {/each}
     </div>
@@ -125,8 +125,8 @@
 
 {#if showCreator}
   <EnvironmentCreator 
-    on:created={handleEnvironmentCreated} 
-    on:close={handleCreatorClose} 
+    onCreated={handleEnvironmentCreated} 
+    onClose={handleCreatorClose} 
   />
 {/if}
 

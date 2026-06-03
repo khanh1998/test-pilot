@@ -1,28 +1,53 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  
   import SimplifiedEnvironmentSelector from '../environments/SimplifiedEnvironmentSelector.svelte';
   import type { Environment } from '$lib/types/environment';
   import type { ExecutionState } from './types';
 
-  export let environment: Environment | null = null;
-  export let selectedSubEnvironment: string | null = null;
-  export let isRunning: boolean = false;
-  export let isLoadingEnvironment: boolean = false;
-  export let executionStore: ExecutionState;
-  export let executionLogs: Array<{
+  interface Props {
+    [key: string]: unknown;
+    environment?: Environment | null;
+    selectedSubEnvironment?: string | null;
+    isRunning?: boolean;
+    isLoadingEnvironment?: boolean;
+    executionStore: ExecutionState;
+    executionLogs?: Array<{
     level: 'info' | 'debug' | 'error' | 'warning';
     message: string;
     details?: string;
     timestamp: Date;
-  }> = [];
-  export let hasValidApiHosts: boolean = false;
-  export let hasSteps: boolean = false;
-  export let totalSteps: number = 0;
+  }>;
+    hasValidApiHosts?: boolean;
+    hasSteps?: boolean;
+    totalSteps?: number;
+  }
 
-  const dispatch = createEventDispatcher();
+  let {
+    environment = null,
+    selectedSubEnvironment = null,
+    isRunning = false,
+    isLoadingEnvironment = false,
+    executionStore,
+    executionLogs = [],
+    hasValidApiHosts = false,
+    hasSteps = false,
+    totalSteps = 0
+  , ...callbackProps
+  }: Props & Record<string, unknown> = $props();
 
-  function handleEnvironmentSelection(event: CustomEvent<{ environmentId: number | null; subEnvironment: string | null }>) {
-    dispatch('environmentSelect', event.detail);
+  function dispatch(eventName: string, detail?: unknown) {
+    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === "function") {
+      if (arguments.length > 1) {
+        handler(detail);
+      } else {
+        handler();
+      }
+    }
+  }
+
+  function handleEnvironmentSelection(payload: { environmentId: number | null; subEnvironment: string | null }) {
+    dispatch('environmentSelect', payload);
   }
 
   function handleToggleOptions() {
@@ -66,7 +91,7 @@
             {selectedSubEnvironment}
             placeholder={isLoadingEnvironment ? "Loading environment..." : "Select sub-environment..."}
             disabled={isRunning || isLoadingEnvironment}
-            on:select={handleEnvironmentSelection}
+            onSelect={handleEnvironmentSelection}
           />
         </div>
       </div>
@@ -75,7 +100,7 @@
         <!-- Run Options Button -->
         <button
           class="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          on:click={handleToggleOptions}
+          onclick={handleToggleOptions}
           disabled={isRunning}
         >
           <svg class="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -92,7 +117,7 @@
         <!-- Reset Button -->
         <button
           class="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          on:click={handleReset}
+          onclick={handleReset}
           disabled={isRunning || Object.keys(executionStore).length === 0}
         >
           <svg class="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -109,7 +134,7 @@
         <!-- Parameters Button -->
         <button
           class="mr-2 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
-          on:click={handleToggleParameters}
+          onclick={handleToggleParameters}
           disabled={isRunning}
         >
           <svg class="mr-1.5 h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
@@ -126,7 +151,7 @@
         {#if executionLogs.length > 0}
           <button
             class="mr-2 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
-            on:click={handleOpenLogs}
+            onclick={handleOpenLogs}
             disabled={isRunning}
           >
             <svg class="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -151,7 +176,7 @@
             : !hasValidApiHosts || !hasSteps
             ? 'bg-gray-400 cursor-not-allowed'
             : 'bg-blue-600 hover:bg-blue-700'}"
-          on:click={isRunning ? handleStop : handleRunFlow}
+          onclick={isRunning ? handleStop : handleRunFlow}
           disabled={isRunning || !hasValidApiHosts || !hasSteps}
         >
           {#if isRunning}

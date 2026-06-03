@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  
   import VariableDefinitionEditor from './VariableDefinitionEditor.svelte';
   import SubEnvironmentEditor from './SubEnvironmentEditor.svelte';
   import ApiHostEditor from './ApiHostEditor.svelte';
@@ -9,30 +9,42 @@
     EnvironmentConfig
   } from '$lib/types/environment';
 
-  export let environment: Environment | null = null;
-  export let isEditing: boolean = false;
-  export let disabled: boolean = false;
+  interface Props {
+    [key: string]: unknown;
+    environment?: Environment | null;
+    isEditing?: boolean;
+    disabled?: boolean;
+  }
 
-  const dispatch = createEventDispatcher<{
-    save: { environmentData: CreateEnvironmentData };
-    cancel: void;
-  }>();
+  let { environment = null, isEditing = false, disabled = false , ...callbackProps
+  }: Props & Record<string, unknown> = $props();
+
+  function dispatch(eventName: string, detail?: unknown) {
+    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === "function") {
+      if (arguments.length > 1) {
+        handler(detail);
+      } else {
+        handler();
+      }
+    }
+  }
 
   // Form data
-  let name = environment?.name || '';
-  let description = environment?.description || '';
+  let name = $state(environment?.name || '');
+  let description = $state(environment?.description || '');
   let environmentType: 'environment_set' | 'single_environment' =
-    environment?.config.type || 'environment_set';
+    $state(environment?.config.type || 'environment_set');
 
   // Configuration data
-  let variableDefinitions = environment?.config.variable_definitions || {};
-  let subEnvironments = environment?.config.environments || {};
-  let linkedApis = environment?.config.linked_apis || [];
+  let variableDefinitions = $state(environment?.config.variable_definitions || {});
+  let subEnvironments = $state(environment?.config.environments || {});
+  let linkedApis = $state(environment?.config.linked_apis || []);
 
   // Form state
-  let activeTab: 'basic' | 'variables' | 'environments' | 'hosts' = 'basic';
-  let isSubmitting = false;
-  let validationErrors: string[] = [];
+  let activeTab: 'basic' | 'variables' | 'environments' | 'hosts' = $state('basic');
+  let isSubmitting = $state(false);
+  let validationErrors: string[] = $state([]);
 
   function validateForm(): boolean {
     validationErrors = [];
@@ -94,16 +106,16 @@
     dispatch('cancel');
   }
 
-  function handleVariableDefinitionsChange(event: CustomEvent<{ variableDefinitions: any }>) {
-    variableDefinitions = event.detail.variableDefinitions;
+  function handleVariableDefinitionsChange(payload: { variableDefinitions: any }) {
+    variableDefinitions = payload.variableDefinitions;
   }
 
-  function handleSubEnvironmentsChange(event: CustomEvent<{ subEnvironments: any }>) {
-    subEnvironments = event.detail.subEnvironments;
+  function handleSubEnvironmentsChange(payload: { subEnvironments: any }) {
+    subEnvironments = payload.subEnvironments;
   }
 
-  function handleLinkedApisChange(event: CustomEvent<{ linkedApis: number[] }>) {
-    linkedApis = event.detail.linkedApis;
+  function handleLinkedApisChange(payload: { linkedApis: number[] }) {
+    linkedApis = payload.linkedApis;
   }
 
   function setActiveTab(tab: typeof activeTab) {
@@ -130,10 +142,15 @@
     }
   }
 
+  let hasInitializedDefaultSubEnvironments = $state(false);
+
   // Initialize default sub-environments if creating new environment
-  if (!isEditing && Object.keys(subEnvironments).length === 0) {
-    createDefaultSubEnvironments();
-  }
+  $effect(() => {
+    if (!hasInitializedDefaultSubEnvironments && !isEditing && Object.keys(subEnvironments).length === 0) {
+      hasInitializedDefaultSubEnvironments = true;
+      createDefaultSubEnvironments();
+    }
+  });
 </script>
 
 <div
@@ -150,7 +167,7 @@
     <div class="flex gap-4">
       <button
         class="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-6 py-3 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-        on:click={handleCancel}
+        onclick={handleCancel}
         {disabled}
         type="button"
       >
@@ -158,7 +175,7 @@
       </button>
       <button
         class="inline-flex items-center gap-2 rounded-md bg-blue-600 px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-        on:click={handleSubmit}
+        onclick={handleSubmit}
         disabled={disabled || isSubmitting}
         type="button"
       >
@@ -191,7 +208,7 @@
         'basic'
           ? 'border-blue-500 text-blue-600'
           : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}"
-        on:click={() => setActiveTab('basic')}
+        onclick={() => setActiveTab('basic')}
         type="button"
       >
         <svg
@@ -215,7 +232,7 @@
         'variables'
           ? 'border-blue-500 text-blue-600'
           : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}"
-        on:click={() => setActiveTab('variables')}
+        onclick={() => setActiveTab('variables')}
         type="button"
       >
         <svg
@@ -240,7 +257,7 @@
         'environments'
           ? 'border-blue-500 text-blue-600'
           : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}"
-        on:click={() => setActiveTab('environments')}
+        onclick={() => setActiveTab('environments')}
         type="button"
       >
         <svg
@@ -267,7 +284,7 @@
         'hosts'
           ? 'border-blue-500 text-blue-600'
           : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}"
-        on:click={() => setActiveTab('hosts')}
+        onclick={() => setActiveTab('hosts')}
         type="button"
       >
         <svg
@@ -356,7 +373,7 @@
       <div>
         <VariableDefinitionEditor
           bind:variableDefinitions
-          on:change={handleVariableDefinitionsChange}
+          onChange={handleVariableDefinitionsChange}
           {disabled}
         />
       </div>
@@ -365,7 +382,7 @@
         <SubEnvironmentEditor
           bind:subEnvironments
           {variableDefinitions}
-          on:change={handleSubEnvironmentsChange}
+          onChange={handleSubEnvironmentsChange}
           {disabled}
         />
       </div>
@@ -374,8 +391,8 @@
         <ApiHostEditor
           bind:subEnvironments
           {linkedApis}
-          on:change={handleSubEnvironmentsChange}
-          on:updateLinkedApis={handleLinkedApisChange}
+          onChange={handleSubEnvironmentsChange}
+          onUpdateLinkedApis={handleLinkedApisChange}
           {disabled}
         />
       </div>

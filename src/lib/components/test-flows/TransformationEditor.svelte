@@ -1,23 +1,50 @@
 <script lang="ts">
-  import { createEventDispatcher, tick } from 'svelte';
+    import { tick } from 'svelte';
   import type { Endpoint, StepEndpoint } from './types';
   import { transformResponse } from '$lib/transform';
   import type { TemplateContext } from '$lib/template/types';
 
-  export let isOpen = false;
-  export let isMounted = false;
-  export let endpoint: Endpoint;
-  export let stepEndpoint: StepEndpoint;
-  export let duplicateCount: number = 1;
-  export let instanceIndex: number = 1;
   
-  // Add props for displaying transformation results
-  export let transformationResults: Record<string, unknown> = {}; // Results from last execution
-  export let rawResponse: unknown = null; // Raw response data for preview
-  export let hasExecutionData: boolean = false; // Whether we have execution data to show
-  export let templateContext: TemplateContext | null = null; // Template context for resolving template expressions
+  
+  interface Props {
+    [key: string]: unknown;
+    isOpen?: boolean;
+    isMounted?: boolean;
+    endpoint: Endpoint;
+    stepEndpoint: StepEndpoint;
+    duplicateCount?: number;
+    instanceIndex?: number;
+    // Add props for displaying transformation results
+    transformationResults?: Record<string, unknown>; // Results from last execution
+    rawResponse?: unknown; // Raw response data for preview
+    hasExecutionData?: boolean; // Whether we have execution data to show
+    templateContext?: TemplateContext | null; // Template context for resolving template expressions
+  }
 
-  const dispatch = createEventDispatcher();
+  let {
+    isOpen = false,
+    isMounted = false,
+    endpoint,
+    stepEndpoint = $bindable(),
+    duplicateCount = 1,
+    instanceIndex = 1,
+    transformationResults = {},
+    rawResponse = null,
+    hasExecutionData = false,
+    templateContext = null
+  , ...callbackProps
+  }: Props & Record<string, unknown> = $props();
+
+  function dispatch(eventName: string, detail?: unknown) {
+    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === "function") {
+      if (arguments.length > 1) {
+        handler(detail);
+      } else {
+        handler();
+      }
+    }
+  }
 
   // Transformation editor state
   type Transformation = {
@@ -25,29 +52,33 @@
     expression: string;
   };
 
-  let transformations: Transformation[] = [];
-  let editingTransformationIndex: number | null = null;
-  let newTransformation: Transformation = { alias: '', expression: '' };
+  let transformations: Transformation[] = $state([]);
+  let editingTransformationIndex: number | null = $state(null);
+  let newTransformation: Transformation = $state({ alias: '', expression: '' });
   
   // UI state for showing/hiding results
-  let showResults = false;
+  let showResults = $state(false);
   
   // Live evaluation state
   let liveResults: Record<string, { result: unknown; error: string | null; type: string }> = {};
 
   // Initialize state when component mounts
-  $: if (isMounted && endpoint && stepEndpoint) {
-    // Initialize transformations if needed
-    if (!stepEndpoint.transformations) {
-      stepEndpoint.transformations = [];
+  $effect(() => {
+    if (isMounted && endpoint && stepEndpoint) {
+      // Initialize transformations if needed
+      if (!stepEndpoint.transformations) {
+        stepEndpoint.transformations = [];
+      }
+      transformations = [...(stepEndpoint.transformations || [])];
     }
-    transformations = [...(stepEndpoint.transformations || [])];
-  }
+  });
 
   // Auto-show results if we have execution data
-  $: if (hasExecutionData && Object.keys(transformationResults).length > 0) {
-    showResults = true;
-  }
+  $effect(() => {
+    if (hasExecutionData && Object.keys(transformationResults).length > 0) {
+      showResults = true;
+    }
+  });
 
   // Save changes from transformation editor
   function saveTransformationChanges() {
@@ -232,18 +263,22 @@
   }
 
   // Reactive evaluation for existing transformations when they change
-  $: if (hasExecutionData) {
-    transformations.forEach((transformation, index) => {
-      if (transformation.expression && transformation.alias) {
-        evaluateExpression(transformation.expression, `existing-${index}-${transformation.alias}`);
-      }
-    });
-  }
+  $effect(() => {
+    if (hasExecutionData) {
+      transformations.forEach((transformation, index) => {
+        if (transformation.expression && transformation.alias) {
+          evaluateExpression(transformation.expression, `existing-${index}-${transformation.alias}`);
+        }
+      });
+    }
+  });
 
   // Reactive evaluation for new transformation when execution data becomes available
-  $: if (hasExecutionData && newTransformation.alias && newTransformation.expression) {
-    evaluateExpression(newTransformation.expression, `new-${newTransformation.alias}`);
-  }
+  $effect(() => {
+    if (hasExecutionData && newTransformation.alias && newTransformation.expression) {
+      evaluateExpression(newTransformation.expression, `new-${newTransformation.alias}`);
+    }
+  });
 
   // Get live result for a transformation
   function getLiveResult(alias: string, index?: number): { result: unknown; error: string | null; type: string } | null {
@@ -267,7 +302,7 @@
   class="fixed inset-0 z-40 flex justify-end transition-opacity duration-200 ease-in-out {isOpen
     ? 'opacity-100'
     : 'opacity-0'}"
-  on:keydown={(e) => e.key === 'Escape' && closeTransformationEditor()}
+  onkeydown={(e) => e.key === 'Escape' && closeTransformationEditor()}
   role="dialog"
   aria-modal="true"
   tabindex="-1"
@@ -275,7 +310,7 @@
   <!-- Completely transparent clickable overlay for the left side -->
   <div
     class="absolute inset-y-0 right-0 left-0 bg-transparent transition-opacity duration-300 ease-in-out sm:right-[75%] md:right-[600px] lg:right-[500px]"
-    on:click={closeTransformationEditor}
+    onclick={closeTransformationEditor}
     role="presentation"
     aria-hidden="true"
   ></div>
@@ -316,20 +351,20 @@
             class="rounded px-3 py-1 text-sm transition-colors {showResults
               ? 'bg-gray-600 text-white hover:bg-gray-700'
               : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}"
-            on:click={() => (showResults = !showResults)}
+            onclick={() => (showResults = !showResults)}
           >
             {showResults ? 'Hide Results' : 'Show Results'}
           </button>
         {/if}
         <button
           class="rounded bg-blue-600 px-3 py-1 text-sm text-white transition-colors hover:bg-blue-700"
-          on:click={saveTransformationChanges}
+          onclick={saveTransformationChanges}
         >
           Save
         </button>
         <button
           class="rounded-full p-1 text-gray-600 transition-colors hover:bg-gray-200 hover:text-gray-800"
-          on:click={closeTransformationEditor}
+          onclick={closeTransformationEditor}
           aria-label="Close"
         >
           <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -385,7 +420,7 @@
             class="w-full rounded border border-gray-300 px-3 py-2 text-sm"
             placeholder="e.g., userId, totalAmount"
             bind:value={newTransformation.alias}
-            on:input={handleAliasInput}
+            oninput={handleAliasInput}
           />
         </div>
         
@@ -400,7 +435,7 @@
             class="w-full rounded border border-gray-300 px-3 py-2 text-sm font-mono"
             placeholder="e.g., $.data[*].id or $.users | where($.active == true) | map($.name)"
             bind:value={newTransformation.expression}
-            on:input={handleExpressionInput}
+            oninput={handleExpressionInput}
           ></textarea>
           <p class="mt-1 text-xs text-gray-500">
             Use JSONPath ($.field.path) or functional pipeline syntax (data | filter | transform)
@@ -443,20 +478,20 @@
           {#if editingTransformationIndex !== null}
             <button
               class="rounded border border-gray-300 bg-white px-3 py-1 text-sm text-gray-700 hover:bg-gray-50"
-              on:click={cancelEdit}
+              onclick={cancelEdit}
             >
               Cancel
             </button>
             <button
               class="rounded bg-blue-600 px-3 py-1 text-sm text-white hover:bg-blue-700"
-              on:click={updateTransformation}
+              onclick={updateTransformation}
             >
               Update
             </button>
           {:else}
             <button
               class="rounded bg-blue-600 px-3 py-1 text-sm text-white hover:bg-blue-700"
-              on:click={addTransformation}
+              onclick={addTransformation}
             >
               Add
             </button>
@@ -488,7 +523,7 @@
                   <div class="flex items-center gap-1">
                     <button
                       class="rounded p-1 text-blue-600 hover:bg-blue-50"
-                      on:click={() => editTransformation(i)}
+                      onclick={() => editTransformation(i)}
                       title="Edit transformation"
                       aria-label="Edit transformation"
                     >
@@ -503,7 +538,7 @@
                     </button>
                     <button
                       class="rounded p-1 text-red-600 hover:bg-red-50"
-                      on:click={() => removeTransformation(i)}
+                      onclick={() => removeTransformation(i)}
                       title="Remove transformation"
                       aria-label="Remove transformation"
                     >
@@ -582,7 +617,7 @@
       <div class="mt-6 flex justify-end">
         <button
           class="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
-          on:click={saveTransformationChanges}
+          onclick={saveTransformationChanges}
         >
           Save All Transformations
         </button>

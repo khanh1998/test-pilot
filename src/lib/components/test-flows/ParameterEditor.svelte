@@ -1,91 +1,124 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  function stopPropagation<T extends Event>(handler: (event: T) => unknown) {
+    return (event: T) => {
+      event.stopPropagation();
+      return handler(event);
+    };
+  }
+
+    
   import type { Endpoint, StepEndpoint, Parameter } from './types';
   import { generateSampleBody } from './utils';
 
-  export let isOpen = false;
-  export let isMounted = false;
-  export let endpoint: Endpoint;
-  export let stepEndpoint: StepEndpoint;
-  export let stepIndex: number;
-  export let endpointIndex: number;
-  export let duplicateCount: number = 1;
-  export let instanceIndex: number = 1;
+  interface Props {
+    [key: string]: unknown;
+    isOpen?: boolean;
+    isMounted?: boolean;
+    endpoint: Endpoint;
+    stepEndpoint: StepEndpoint;
+    stepIndex: number;
+    endpointIndex: number;
+    duplicateCount?: number;
+    instanceIndex?: number;
+  }
 
-  const dispatch = createEventDispatcher();
+  let {
+    isOpen = false,
+    isMounted = false,
+    endpoint,
+    stepEndpoint = $bindable(),
+    stepIndex,
+    endpointIndex,
+    duplicateCount = 1,
+    instanceIndex = 1
+  , ...callbackProps
+  }: Props & Record<string, unknown> = $props();
 
-  // Parameter editor state
-  let activeTab: 'path' | 'query' | 'body' | 'headers' = 'path';
-  let jsonBodyContent: string = '{}';
-  let headers: { name: string; value: string; enabled: boolean }[] = [];
-  let initialized = false; // Add a flag to track if we've already initialized
-  
-  // Local copies to prevent cross-component interference
-  let localQueryParams: Record<string, string | string[]> = {};
-  let localPathParams: Record<string, string | string[]> = {};
-
-  // Initialize state when component mounts
-  $: if (isMounted && endpoint && !initialized) {
-    initialized = true; // Set the flag to true so this block runs only once
-
-    // Initialize and copy queryParams to local state
-    if (!stepEndpoint.queryParams) {
-      stepEndpoint.queryParams = {};
-    }
-    // Copy to local state for simplified editing
-    localQueryParams = { ...stepEndpoint.queryParams };
-
-    // Initialize and copy pathParams to local state
-    if (!stepEndpoint.pathParams) {
-      stepEndpoint.pathParams = {};
-    }
-    // Copy to local state for simplified editing
-    localPathParams = { ...stepEndpoint.pathParams };
-
-    // Initialize headers if needed
-    if (!stepEndpoint.headers) {
-      stepEndpoint.headers = [];
-    }
-    headers = [...(stepEndpoint.headers || [])];
-
-    // Add Content-Type header if not present and has body
-    if (endpoint?.requestSchema && !headers.some((h) => h.name.toLowerCase() === 'content-type')) {
-      headers.push({
-        name: 'Content-Type',
-        value: 'application/json',
-        enabled: true
-      });
-    }
-
-    // Initialize JSON body if needed
-    if (endpoint?.requestSchema) {
-      try {
-        if (stepEndpoint.body) {
-          // Use existing body if available
-          jsonBodyContent = JSON.stringify(stepEndpoint.body, null, 2);
-        } else {
-          // Generate sample body from schema
-          const sampleBody = generateSampleBody(endpoint.requestSchema);
-          jsonBodyContent = JSON.stringify(sampleBody, null, 2);
-        }
-      } catch (e: unknown) {
-        jsonBodyContent = '{}';
+  function dispatch(eventName: string, detail?: unknown) {
+    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === "function") {
+      if (arguments.length > 1) {
+        handler(detail);
+      } else {
+        handler();
       }
-    } else {
-      jsonBodyContent = '{}';
-    }
-
-    // Set the active tab to the first one that has content
-    if (endpoint?.parameters?.some((p) => p.in === 'path')) {
-      activeTab = 'path';
-    } else if (endpoint?.parameters?.some((p) => p.in === 'query')) {
-      activeTab = 'query';
-    } else if (endpoint?.requestSchema) {
-      activeTab = 'body';
-    } else {
-      activeTab = 'headers';
     }
   }
+
+  // Parameter editor state
+  let activeTab: 'path' | 'query' | 'body' | 'headers' = $state('path');
+  let jsonBodyContent: string = $state('{}');
+  let headers: { name: string; value: string; enabled: boolean }[] = $state([]);
+  let initialized = $state(false); // Add a flag to track if we've already initialized
+  
+  // Local copies to prevent cross-component interference
+  let localQueryParams: Record<string, string | string[]> = $state({});
+  let localPathParams: Record<string, string | string[]> = $state({});
+
+  // Initialize state when component mounts
+  $effect(() => {
+    if (isMounted && endpoint && !initialized) {
+      initialized = true; // Set the flag to true so this block runs only once
+
+      // Initialize and copy queryParams to local state
+      if (!stepEndpoint.queryParams) {
+        stepEndpoint.queryParams = {};
+      }
+      // Copy to local state for simplified editing
+      localQueryParams = { ...stepEndpoint.queryParams };
+
+      // Initialize and copy pathParams to local state
+      if (!stepEndpoint.pathParams) {
+        stepEndpoint.pathParams = {};
+      }
+      // Copy to local state for simplified editing
+      localPathParams = { ...stepEndpoint.pathParams };
+
+      // Initialize headers if needed
+      if (!stepEndpoint.headers) {
+        stepEndpoint.headers = [];
+      }
+      headers = [...(stepEndpoint.headers || [])];
+
+      // Add Content-Type header if not present and has body
+      if (endpoint?.requestSchema && !headers.some((h) => h.name.toLowerCase() === 'content-type')) {
+        headers.push({
+          name: 'Content-Type',
+          value: 'application/json',
+          enabled: true
+        });
+      }
+
+      // Initialize JSON body if needed
+      if (endpoint?.requestSchema) {
+        try {
+          if (stepEndpoint.body) {
+            // Use existing body if available
+            jsonBodyContent = JSON.stringify(stepEndpoint.body, null, 2);
+          } else {
+            // Generate sample body from schema
+            const sampleBody = generateSampleBody(endpoint.requestSchema);
+            jsonBodyContent = JSON.stringify(sampleBody, null, 2);
+          }
+        } catch (e: unknown) {
+          jsonBodyContent = '{}';
+        }
+      } else {
+        jsonBodyContent = '{}';
+      }
+
+      // Set the active tab to the first one that has content
+      if (endpoint?.parameters?.some((p) => p.in === 'path')) {
+        activeTab = 'path';
+      } else if (endpoint?.parameters?.some((p) => p.in === 'query')) {
+        activeTab = 'query';
+      } else if (endpoint?.requestSchema) {
+        activeTab = 'body';
+      } else {
+        activeTab = 'headers';
+      }
+    }
+  });
 
   // Save changes from parameter editor
   function saveParamChanges() {
@@ -206,7 +239,7 @@
   class="fixed inset-0 z-40 flex justify-end transition-opacity duration-200 ease-in-out {isOpen
     ? 'opacity-100'
     : 'opacity-0'}"
-  on:keydown={(e) => e.key === 'Escape' && closeParamEditor()}
+  onkeydown={(e) => e.key === 'Escape' && closeParamEditor()}
   role="dialog"
   aria-modal="true"
   tabindex="-1"
@@ -214,7 +247,7 @@
   <!-- Completely transparent clickable overlay for the left side -->
   <div
     class="absolute inset-y-0 right-0 left-0 bg-transparent transition-opacity duration-300 ease-in-out sm:right-[75%] md:right-[600px] lg:right-[500px]"
-    on:click={closeParamEditor}
+    onclick={closeParamEditor}
     role="presentation"
     aria-hidden="true"
   ></div>
@@ -247,13 +280,13 @@
       <div class="flex items-center gap-2">
         <button
           class="rounded bg-blue-600 px-3 py-1 text-sm text-white transition-colors hover:bg-blue-700"
-          on:click={saveParamChanges}
+          onclick={saveParamChanges}
         >
           Save
         </button>
         <button
           class="rounded-full p-1 text-gray-600 transition-colors hover:bg-gray-200 hover:text-gray-800"
-          on:click={closeParamEditor}
+          onclick={closeParamEditor}
           aria-label="Close"
         >
           <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -300,7 +333,7 @@
             class="border-b-2 px-4 py-2 text-sm font-medium transition-colors {activeTab === 'path'
               ? 'border-blue-500 text-blue-600'
               : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}"
-            on:click={() => (activeTab = 'path')}
+            onclick={() => (activeTab = 'path')}
           >
             <div class="flex items-center">
               <span class="mr-1.5 text-purple-600">
@@ -329,7 +362,7 @@
             class="border-b-2 px-4 py-2 text-sm font-medium transition-colors {activeTab === 'query'
               ? 'border-blue-500 text-blue-600'
               : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}"
-            on:click={() => (activeTab = 'query')}
+            onclick={() => (activeTab = 'query')}
           >
             <div class="flex items-center">
               <span class="mr-1.5 text-blue-600">
@@ -358,7 +391,7 @@
             class="border-b-2 px-4 py-2 text-sm font-medium transition-colors {activeTab === 'body'
               ? 'border-blue-500 text-blue-600'
               : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}"
-            on:click={() => (activeTab = 'body')}
+            onclick={() => (activeTab = 'body')}
           >
             <div class="flex items-center">
               <span class="mr-1.5 text-green-600">
@@ -386,7 +419,7 @@
           class="border-b-2 px-4 py-2 text-sm font-medium transition-colors {activeTab === 'headers'
             ? 'border-blue-500 text-blue-600'
             : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}"
-          on:click={() => (activeTab = 'headers')}
+          onclick={() => (activeTab = 'headers')}
         >
           <div class="flex items-center">
             <span class="mr-1.5 text-yellow-600">
@@ -440,7 +473,7 @@
                   class="rounded-md border px-3 py-2 text-sm"
                   placeholder={param.example || `${param.name} values (comma-separated or template expression)`}
                   value={getSimplifiedArrayValue(localPathParams, param.name)}
-                  on:input={(e) => {
+                  oninput={(e) => {
                     setSimplifiedArrayValue(localPathParams, param.name, (e.currentTarget as HTMLInputElement).value);
                   }}
                 />
@@ -455,7 +488,7 @@
                   class="rounded-md border px-3 py-2 text-sm"
                   placeholder={param.example || param.name}
                   value={localPathParams[param.name] || ''}
-                  on:input={(e) => {
+                  oninput={(e) => {
                     localPathParams[param.name] = (e.currentTarget as HTMLInputElement).value;
                   }}
                 />
@@ -489,7 +522,7 @@
                   id="query-param-checkbox-{stepIndex}-{endpointIndex}-{param.name}-{instanceIndex}"
                   type="checkbox"
                   checked={localQueryParams[param.name] !== undefined}
-                  on:change={(e) => {
+                  onchange={(e) => {
                     if ((e.currentTarget as HTMLInputElement).checked) {
                       if (isArrayParameter(param)) {
                         localQueryParams[param.name] = param.example || '';
@@ -512,7 +545,7 @@
                     class="rounded-md border px-3 py-2 text-sm"
                     placeholder={param.example || `${param.name} values (comma-separated or template expression)`}
                     value={getSimplifiedArrayValue(localQueryParams, param.name)}
-                    on:input={(e) => {
+                    oninput={(e) => {
                       setSimplifiedArrayValue(localQueryParams, param.name, (e.currentTarget as HTMLInputElement).value);
                     }}
                   />
@@ -527,7 +560,7 @@
                     class="rounded-md border px-3 py-2 text-sm"
                     placeholder={param.example || param.name}
                     value={localQueryParams[param.name] || ''}
-                    on:input={(e) => {
+                    oninput={(e) => {
                       localQueryParams[param.name] = (e.currentTarget as HTMLInputElement).value;
                     }}
                   />
@@ -550,7 +583,7 @@
               <div class="flex items-center space-x-2">
                 <button
                   class="rounded px-1.5 py-0.5 text-xs text-blue-600 transition-colors hover:bg-blue-50 hover:text-blue-800"
-                  on:click={() => {
+                  onclick={() => {
                     try {
                       const parsed = JSON.parse(jsonBodyContent);
                       const formatted = JSON.stringify(parsed, null, 2);
@@ -586,7 +619,7 @@
             <h4 class="text-sm font-medium text-gray-700">Headers</h4>
             <button
               class="flex items-center rounded bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700"
-              on:click|stopPropagation={(e) => addHeader(e)}
+              onclick={stopPropagation((e) => addHeader(e))}
             >
               <svg class="mr-1 h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
@@ -610,7 +643,7 @@
                 <p class="mt-1 text-xs text-gray-400">HTTP headers allow you to send additional information with your request</p>
                 <button
                   class="mt-3 flex items-center rounded bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700"
-                  on:click|stopPropagation={(e) => addHeader(e)}
+                  onclick={stopPropagation((e) => addHeader(e))}
                 >
                   <svg class="mr-1 h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path
@@ -644,7 +677,7 @@
                             class="h-4 w-4 cursor-pointer rounded accent-blue-600"
                             id="header-checkbox-{stepIndex}-{endpointIndex}-{index}-{instanceIndex}"
                             aria-label="Enable header"
-                            on:click|stopPropagation
+                            onclick={(event) => event.stopPropagation()}
                           />
                         </td>
                         <td class="px-3 py-2">
@@ -654,10 +687,10 @@
                             bind:value={header.name}
                             class="w-full rounded-md border-0 bg-transparent px-0 py-0 text-sm transition-colors focus:border-b-2 focus:border-blue-500 focus:outline-none focus:ring-0 {!header.enabled ? 'text-gray-400' : ''}"
                             aria-label="Header name"
-                            on:click|stopPropagation
-                            on:keydown|stopPropagation
-                            on:input|stopPropagation
-                            on:focus={() => { activeTab = 'headers'; }}
+                            onclick={(event) => event.stopPropagation()}
+                            onkeydown={(event) => event.stopPropagation()}
+                            oninput={(event) => event.stopPropagation()}
+                            onfocus={() => { activeTab = 'headers'; }}
                           />
                         </td>
                         <td class="px-3 py-2">
@@ -667,16 +700,16 @@
                             bind:value={header.value}
                             class="w-full rounded-md border-0 bg-transparent px-0 py-0 text-sm transition-colors focus:border-b-2 focus:border-blue-500 focus:outline-none focus:ring-0 {!header.enabled ? 'text-gray-400' : ''}"
                             aria-label="Header value"
-                            on:click|stopPropagation
-                            on:keydown|stopPropagation
-                            on:input|stopPropagation
-                            on:focus={() => { activeTab = 'headers'; }}
+                            onclick={(event) => event.stopPropagation()}
+                            onkeydown={(event) => event.stopPropagation()}
+                            oninput={(event) => event.stopPropagation()}
+                            onfocus={() => { activeTab = 'headers'; }}
                           />
                         </td>
                         <td class="px-3 py-2 text-right">
                           <button
                             class="text-gray-400 opacity-30 transition-all hover:text-red-600 group-hover:opacity-100 focus:opacity-100"
-                            on:click|stopPropagation={(e) => removeHeader(index, e)}
+                            onclick={stopPropagation((e) => removeHeader(index, e))}
                             aria-label="Remove Header"
                           >
                             <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
@@ -696,7 +729,7 @@
               <div class="mt-2 text-right">
                 <button
                   class="inline-flex items-center rounded bg-gray-100 px-3 py-1.5 text-xs hover:bg-gray-200"
-                  on:click|stopPropagation={(e) => addHeader(e)}
+                  onclick={stopPropagation((e) => addHeader(e))}
                 >
                   <svg class="mr-1 h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path

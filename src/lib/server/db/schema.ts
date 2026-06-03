@@ -1,10 +1,21 @@
-import { pgTable, text, serial, varchar, integer, timestamp, jsonb, index, uniqueIndex, customType } from 'drizzle-orm/pg-core';
+import {
+  pgTable,
+  text,
+  serial,
+  varchar,
+  integer,
+  timestamp,
+  jsonb,
+  index,
+  uniqueIndex,
+  customType
+} from 'drizzle-orm/pg-core';
 
 // Define a custom tsvector type
 const tsvector = customType<{ data: string }>({
   dataType() {
     return 'tsvector';
-  },
+  }
 });
 
 // Example users table
@@ -15,6 +26,29 @@ export const users = pgTable('users', {
   supabaseAuthId: text('supabase_auth_id').unique(), // Add this field to link with Supabase auth
   createdAt: timestamp('created_at').defaultNow().notNull()
 });
+
+// Agent tokens - long-lived credentials for MCP clients and AI agents
+export const agentTokens = pgTable(
+  'agent_tokens',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    tokenHash: text('token_hash').notNull(),
+    tokenPrefix: varchar('token_prefix', { length: 32 }).notNull(),
+    expiresAt: timestamp('expires_at'),
+    revokedAt: timestamp('revoked_at'),
+    lastUsedAt: timestamp('last_used_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull()
+  },
+  (table) => [
+    uniqueIndex('agent_tokens_token_hash_unique_idx').on(table.tokenHash),
+    index('agent_tokens_user_id_idx').on(table.userId)
+  ]
+);
 
 // APIs table - stores uploaded Swagger/OpenAPI specifications
 export const apis = pgTable(
@@ -177,6 +211,7 @@ export const projects = pgTable('projects', {
   id: serial('id').primaryKey(),
   name: text('name').notNull(),
   description: text('description'),
+  agentContext: text('agent_context'),
   userId: integer('user_id')
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' }),
@@ -199,9 +234,7 @@ export const projectApis = pgTable(
     defaultHost: text('default_host'), // Default host for this API in this project
     createdAt: timestamp('created_at').defaultNow().notNull()
   },
-  (table) => [
-    uniqueIndex('project_apis_unique_idx').on(table.projectId, table.apiId)
-  ]
+  (table) => [uniqueIndex('project_apis_unique_idx').on(table.projectId, table.apiId)]
 );
 
 // Project modules (categorization of related sequences)

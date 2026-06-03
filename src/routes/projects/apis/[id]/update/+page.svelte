@@ -7,14 +7,14 @@
 
   const apiId = parseInt($page.params.id);
 
-  let loading = true;
-  let error: string | null = null;
+  let loading = $state(true);
+  let error: string | null = $state(null);
   let api: {
     id: number;
     name: string;
     description: string | null;
     host?: string | null;
-  } | null = null;
+  } | null = $state(null);
 
   onMount(async () => {
     try {

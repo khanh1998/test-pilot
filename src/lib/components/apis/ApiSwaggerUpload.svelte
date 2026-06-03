@@ -1,22 +1,39 @@
 <script lang="ts">
-  import { goto } from '$app/navigation';
+  function stopPropagation<T extends Event>(handler: (event: T) => unknown) {
+    return (event: T) => {
+      event.stopPropagation();
+      return handler(event);
+    };
+  }
+
+    import { goto } from '$app/navigation';
   import { uploadSwaggerFile, updateSwaggerFile } from '$lib/http_client/apis';
 
-  export let apiId: number | null = null; // If provided, we're in update mode
-  export let apiName: string = '';
-  export let apiDescription: string = '';
-  export let apiHost: string = '';
+  interface Props {
+    [key: string]: unknown;
+    apiId?: number | null; // If provided, we're in update mode
+    apiName?: string;
+    apiDescription?: string;
+    apiHost?: string;
+  }
+
+  let {
+    apiId = null,
+    apiName = '',
+    apiDescription = '',
+    apiHost = ''
+  }: Props = $props();
 
   // HTMLInputElement reference for the file input
-  let fileInput: HTMLInputElement | null = null;
-  let nameInput: string = apiName;
-  let descriptionInput: string = apiDescription;
-  let hostInput: string = apiHost;
-  let file: File | null = null;
-  let uploading = false;
-  let error: string | null = null;
-  let fileError: string | null = null;
-  let isDragging = false;
+  let fileInput: HTMLInputElement | null = $state(null);
+  let nameInput: string = $state(apiName);
+  let descriptionInput: string = $state(apiDescription);
+  let hostInput: string = $state(apiHost);
+  let file: File | null = $state(null);
+  let uploading = $state(false);
+  let error: string | null = $state(null);
+  let fileError: string | null = $state(null);
+  let isDragging = $state(false);
 
   const isUpdateMode = apiId !== null;
 
@@ -126,7 +143,7 @@
     </p>
   </div>
 
-  <form on:submit|preventDefault={handleSubmit} class="space-y-6">
+  <form onsubmit={(event) => { event.preventDefault(); handleSubmit(); }} class="space-y-6">
     <div class="space-y-4">
       <!-- File Upload -->
       <div>
@@ -139,12 +156,12 @@
             : 'border-gray-300'} cursor-pointer rounded-md border-dashed px-6 py-8 text-center transition-colors hover:border-blue-500"
           role="button"
           tabindex="0"
-          on:click={openFileSelector}
-          on:keydown={(e) => e.key === 'Enter' && openFileSelector()}
-          on:dragenter={handleDragEnter}
-          on:dragleave={handleDragLeave}
-          on:dragover={handleDragOver}
-          on:drop={handleDrop}
+          onclick={openFileSelector}
+          onkeydown={(e) => e.key === 'Enter' && openFileSelector()}
+          ondragenter={handleDragEnter}
+          ondragleave={handleDragLeave}
+          ondragover={handleDragOver}
+          ondrop={handleDrop}
         >
           {#if file}
             <div class="space-y-1">
@@ -208,7 +225,7 @@
             name="file"
             accept=".yaml,.yml,.json"
             class="hidden"
-            on:change={handleFileChange}
+            onchange={handleFileChange}
           />
         </div>
 

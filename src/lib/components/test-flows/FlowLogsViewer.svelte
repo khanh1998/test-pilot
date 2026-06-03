@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  
 
   interface LogEntry {
     level: 'info' | 'debug' | 'error' | 'warning';
@@ -8,30 +8,45 @@
     timestamp?: Date;
   }
 
-  export let isOpen = false;
-  export let logs: LogEntry[] = [];
+  interface Props {
+    [key: string]: unknown;
+    isOpen?: boolean;
+    logs?: LogEntry[];
+  }
 
-  const dispatch = createEventDispatcher();
+  let { isOpen = false, logs = $bindable([]) , ...callbackProps
+  }: Props & Record<string, unknown> = $props();
+
+  function dispatch(eventName: string, detail?: unknown) {
+    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === "function") {
+      if (arguments.length > 1) {
+        handler(detail);
+      } else {
+        handler();
+      }
+    }
+  }
 
   // UI state for filtering logs
-  let selectedLevels: Set<string> = new Set(['info', 'debug', 'error', 'warning']);
-  let searchFilter = '';
+  let selectedLevels: Set<string> = $state(new Set(['info', 'debug', 'error', 'warning']));
+  let searchFilter = $state('');
 
   // Filter logs based on selected levels and search filter
-  $: filteredLogs = logs.filter(log => {
+  let filteredLogs = $derived(logs.filter(log => {
     const levelMatch = selectedLevels.has(log.level);
     const searchMatch = searchFilter === '' || 
       log.message.toLowerCase().includes(searchFilter.toLowerCase()) ||
       (log.details && log.details.toLowerCase().includes(searchFilter.toLowerCase()));
     
     return levelMatch && searchMatch;
-  });
+  }));
 
   // Get log counts for each level
-  $: logCounts = logs.reduce((counts, log) => {
+  let logCounts = $derived(logs.reduce((counts, log) => {
     counts[log.level] = (counts[log.level] || 0) + 1;
     return counts;
-  }, {} as Record<string, number>);
+  }, {} as Record<string, number>));
 
   function toggleLevel(level: string) {
     if (selectedLevels.has(level)) {

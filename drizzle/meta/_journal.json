@@ -134,6 +134,13 @@
       "when": 1780293824968,
       "tag": "0018_soft_gravity",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1780413875682,
+      "tag": "0019_groovy_kree",
+      "breakpoints": true
     }
   ]
 }

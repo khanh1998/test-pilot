@@ -7,9 +7,14 @@
     updatedAt: string;
   }
 
-  export let flow: FlowData;
-  export let onDelete: (id: number, name: string) => void;
-  export let onClone: (flow: FlowData) => void;
+  interface Props {
+    [key: string]: unknown;
+    flow: FlowData;
+    onDelete: (id: number, name: string) => void;
+    onClone: (flow: FlowData) => void;
+  }
+
+  let { flow, onDelete, onClone }: Props = $props();
 </script>
 
 <div class="overflow-hidden rounded-lg bg-white shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
@@ -31,7 +36,7 @@
       <div class="flex gap-1">
         <button
           class="inline-flex items-center rounded bg-red-50 px-2 py-1 text-xs text-red-700 transition hover:bg-red-100"
-          on:click={() => onDelete(flow.id, flow.name)}
+          onclick={() => onDelete(flow.id, flow.name)}
         >
           <svg class="mr-1 h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
@@ -40,7 +45,7 @@
         </button>
         <button
           class="inline-flex items-center rounded bg-green-50 px-2 py-1 text-xs text-green-700 transition hover:bg-green-100"
-          on:click={() => onClone(flow)}
+          onclick={() => onClone(flow)}
         >
           <svg class="mr-1 h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>

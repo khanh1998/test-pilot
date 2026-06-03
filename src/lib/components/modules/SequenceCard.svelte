@@ -3,14 +3,28 @@
   import type { FlowSequence } from '../../types/flow_sequence.js';
   import { formatDate } from '../../utils/date.js';
 
-  export let sequence: FlowSequence;
-  export let href: string = `/projects/sequences/${sequence.id}`;
-  export let showActions: boolean = true;
-  export let showFlows: boolean = false; // New prop to show detailed flows
-  export let onEdit: ((sequence: FlowSequence) => void) | null = null;
-  export let onDelete: ((sequence: FlowSequence) => void) | null = null;
-  export let onExecute: ((sequence: FlowSequence) => void) | null = null;
-  export let isDragging: boolean = false;
+  interface Props {
+    [key: string]: unknown;
+    sequence: FlowSequence;
+    href?: string;
+    showActions?: boolean;
+    showFlows?: boolean; // New prop to show detailed flows
+    onEdit?: ((sequence: FlowSequence) => void) | null;
+    onDelete?: ((sequence: FlowSequence) => void) | null;
+    onExecute?: ((sequence: FlowSequence) => void) | null;
+    isDragging?: boolean;
+  }
+
+  let {
+    sequence,
+    href = `/projects/sequences/${sequence.id}`,
+    showActions = true,
+    showFlows = false,
+    onEdit = null,
+    onDelete = null,
+    onExecute = null,
+    isDragging = false
+  }: Props = $props();
 
   function handleEdit() {
     if (onEdit) {
@@ -36,8 +50,8 @@
     return { color: 'text-gray-600 bg-gray-100', text: 'Not Run' };
   }
 
-  $: statusInfo = getStatusInfo();
-  $: flowCount = sequence.sequenceConfig?.steps?.length || 0;
+  let statusInfo = $derived(getStatusInfo());
+  let flowCount = $derived(sequence.sequenceConfig?.steps?.length || 0);
 </script>
 
 <div 
@@ -151,7 +165,7 @@
       <!-- Execute Button -->
       {#if onExecute && flowCount > 0}
         <button
-          on:click={handleExecute}
+          onclick={handleExecute}
           class="p-2 text-green-600 hover:text-green-700 hover:bg-green-50 rounded-md transition-colors"
           aria-label="Execute sequence"
         >
@@ -171,7 +185,7 @@
       {#if showActions && (onEdit || onDelete)}
         {#if onEdit}
           <button
-            on:click={handleEdit}
+            onclick={handleEdit}
             class="p-1 text-gray-400 hover:text-gray-600 transition-colors"
             aria-label="Edit sequence"
           >
@@ -182,7 +196,7 @@
         {/if}
         {#if onDelete}
           <button
-            on:click={handleDelete}
+            onclick={handleDelete}
             class="p-1 text-gray-400 hover:text-red-600 transition-colors"
             aria-label="Delete sequence"
           >

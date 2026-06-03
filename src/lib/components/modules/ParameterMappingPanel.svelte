@@ -1,24 +1,41 @@
 <!-- ParameterMappingPanel.svelte - Sliding panel for flow parameter configuration -->
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+    
   import type { TestFlow } from '../../types/test-flow.js';
   import type { Environment } from '$lib/types/environment.js';
 
-  export let isOpen: boolean = false;
-  export let flow: TestFlow | null = null;
-  export let sequence: any = null; // Using any for now since FlowSequence type doesn't exist
-  export let stepOrder: number = 1;
-  export let previousFlowOutputs: FlowOutput[] = [];
-  export let selectedEnvironment: Environment | null = null; // Environment with variables
-  export let selectedSubEnvironment: string | null = null;
+  interface Props {
+    [key: string]: unknown;
+    isOpen?: boolean;
+    flow?: TestFlow | null;
+    sequence?: any; // Using any for now since FlowSequence type doesn't exist
+    stepOrder?: number;
+    previousFlowOutputs?: FlowOutput[];
+    selectedEnvironment?: Environment | null; // Environment with variables
+    selectedSubEnvironment?: string | null;
+  }
 
-  const dispatch = createEventDispatcher<{
-    close: void;
-    save: { 
-      stepOrder: number; 
-      parameterMappings: ParameterMapping[];
-    };
-  }>();
+  let {
+    isOpen = false,
+    flow = null,
+    sequence = null,
+    stepOrder = 1,
+    previousFlowOutputs = [],
+    selectedEnvironment = null,
+    selectedSubEnvironment = null
+  , ...callbackProps
+  }: Props & Record<string, unknown> = $props();
+
+  function dispatch(eventName: string, detail?: unknown) {
+    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === "function") {
+      if (arguments.length > 1) {
+        handler(detail);
+      } else {
+        handler();
+      }
+    }
+  }
 
   interface FlowOutput {
     flowName: string;
@@ -39,22 +56,12 @@
     source_output_field?: string; // Only used for previous_output
   }
 
-  // Extract flow parameters from the actual flow JSON
-  $: flowParameters = flow ? getFlowParameters(flow) : [];
   
   // Initialize parameter mappings
-  let parameterMappings: ParameterMapping[] = [];
+  let parameterMappings: ParameterMapping[] = $state([]);
   
-  $: availableFlowOutputs = previousFlowOutputs.filter(output => {
-    return output.stepOrder < stepOrder;
-  });
 
-  // Get environment variables from the selected environment and sub-environment
-  $: environmentVariables = getEnvironmentVariables(selectedEnvironment, selectedSubEnvironment);
   
-  $: if (flow && isOpen) {
-    initializeParameterMappings();
-  }
 
   function getFlowParameters(flow: TestFlow) {
     if (!flow.flowJson?.parameters) {
@@ -186,16 +193,28 @@
   function handleClose() {
     dispatch('close');
   }
+  // Extract flow parameters from the actual flow JSON
+  let flowParameters = $derived(flow ? getFlowParameters(flow) : []);
+  let availableFlowOutputs = $derived(previousFlowOutputs.filter(output => {
+    return output.stepOrder < stepOrder;
+  }));
+  // Get environment variables from the selected environment and sub-environment
+  let environmentVariables = $derived(getEnvironmentVariables(selectedEnvironment, selectedSubEnvironment));
+  $effect(() => {
+    if (flow && isOpen) {
+      initializeParameterMappings();
+    }
+  });
 </script>
 
 <!-- Backdrop -->
 {#if isOpen}
   <div 
     class="fixed inset-0 bg-transparent z-40 transition-opacity"
-    on:click={handleClose}
+    onclick={handleClose}
     role="button"
     tabindex="0"
-    on:keydown={(e) => e.key === 'Escape' && handleClose()}
+    onkeydown={(e) => e.key === 'Escape' && handleClose()}
   ></div>
 {/if}
 
@@ -215,7 +234,7 @@
         </div>
         <button
           type="button"
-          on:click={handleClose}
+          onclick={handleClose}
           class="text-gray-400 hover:text-gray-600 focus:outline-none"
           aria-label="Close parameter configuration panel"
         >
@@ -253,7 +272,7 @@
                   <select
                     id="sourceType-{index}"
                     bind:value={parameterMappings[index].source_type}
-                    on:change={(e) => handleSelectChange(e, index, 'source_type')}
+                    onchange={(e) => handleSelectChange(e, index, 'source_type')}
                     class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                   >
                     <option value="static_value">Fixed Value</option>
@@ -272,7 +291,7 @@
                     <select
                       id="dataType-{index}"
                       bind:value={parameterMappings[index].data_type}
-                      on:change={(e) => handleSelectChange(e, index, 'data_type')}
+                      onchange={(e) => handleSelectChange(e, index, 'data_type')}
                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                     >
                       <option value="string">String</option>
@@ -288,7 +307,7 @@
                       <select
                         id="value-{index}"
                         bind:value={parameterMappings[index].source_value}
-                        on:change={(e) => handleSelectChange(e, index, 'source_value')}
+                        onchange={(e) => handleSelectChange(e, index, 'source_value')}
                         class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                       >
                         <option value="">Select...</option>
@@ -300,7 +319,7 @@
                         id="value-{index}"
                         type="number"
                         bind:value={parameterMappings[index].source_value}
-                        on:input={(e) => handleInputChange(e, index, 'source_value')}
+                        oninput={(e) => handleInputChange(e, index, 'source_value')}
                         placeholder="Enter number..."
                         class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                       />
@@ -308,7 +327,7 @@
                       <textarea
                         id="value-{index}"
                         bind:value={parameterMappings[index].source_value}
-                        on:input={(e) => handleInputChange(e, index, 'source_value')}
+                        oninput={(e) => handleInputChange(e, index, 'source_value')}
                         placeholder='Enter JSON array: [1, 2, 3] or ["item1", "item2"] or [true, false]'
                         rows="3"
                         class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
@@ -327,7 +346,7 @@
                         id="value-{index}"
                         type="text"
                         bind:value={parameterMappings[index].source_value}
-                        on:input={(e) => handleInputChange(e, index, 'source_value')}
+                        oninput={(e) => handleInputChange(e, index, 'source_value')}
                         placeholder="Enter text..."
                         class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                       />
@@ -340,7 +359,7 @@
                     <select
                       id="envVar-{index}"
                       bind:value={parameterMappings[index].source_value}
-                      on:change={(e) => handleSelectChange(e, index, 'source_value')}
+                      onchange={(e) => handleSelectChange(e, index, 'source_value')}
                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                     >
                       <option value="">Select variable...</option>
@@ -372,7 +391,7 @@
                       id="functionCall-{index}"
                       type="text"
                       bind:value={parameterMappings[index].source_value}
-                      on:input={(e) => handleInputChange(e, index, 'source_value')}
+                      oninput={(e) => handleInputChange(e, index, 'source_value')}
                       placeholder="e.g., uuid(), dateISO(), randomString(10), dateFormat(1, 'yyyy-MM-dd')"
                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-mono"
                     />
@@ -393,7 +412,7 @@
                     <select
                       id="sourceFlow-{index}"
                       bind:value={parameterMappings[index].source_flow_step}
-                      on:change={(e) => handleSelectChange(e, index, 'source_flow_step')}
+                      onchange={(e) => handleSelectChange(e, index, 'source_flow_step')}
                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                     >
                       <option value="">Select flow...</option>
@@ -411,7 +430,7 @@
                         <select
                           id="outputField-{index}"
                           bind:value={parameterMappings[index].source_output_field}
-                          on:change={(e) => handleSelectChange(e, index, 'source_output_field')}
+                          onchange={(e) => handleSelectChange(e, index, 'source_output_field')}
                           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                         >
                           <option value="">Select output field...</option>
@@ -494,14 +513,14 @@
       <div class="flex justify-end space-x-3 mt-8 pt-6 border-t border-gray-200">
         <button
           type="button"
-          on:click={handleClose}
+          onclick={handleClose}
           class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
         >
           Cancel
         </button>
         <button
           type="button"
-          on:click={handleSave}
+          onclick={handleSave}
           class="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
         >
           Save Parameters

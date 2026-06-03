@@ -1,10 +1,10 @@
 <!-- SequenceRow.svelte - Horizontal row displaying a sequence with flow cards -->
 <script lang="ts">
-  import type { FlowSequence } from '../../types/flow_sequence.js';
+    import type { FlowSequence } from '../../types/flow_sequence.js';
   import type { TestFlow } from '../../types/test-flow.js';
   import type { Environment } from '../../types/environment.js';
   import type { SequenceFlowResult } from '$lib/sequence-runner/types';
-  import { createEventDispatcher } from 'svelte';
+  
   import { flip } from 'svelte/animate';
   import { quintOut } from 'svelte/easing';
   import FlowCard from './FlowCard.svelte';
@@ -13,51 +13,67 @@
   import ConfirmDialog from '../ConfirmDialog.svelte';
   import CloneDialog from '../test-flows/CloneDialog.svelte';
 
-  export let sequence: FlowSequence;
-  export let sequenceFlows: TestFlow[] = []; // Populated flows from sequence steps
-  export let isEditing: boolean = false;
-  export let selectedEnvironment: Environment | null = null;
-  export let selectedSubEnvironment: string | null = null;
-  export let isRunning: boolean = false;
-  export let executionResults: SequenceFlowResult[] = []; // New prop for execution results
+  interface Props {
+    [key: string]: unknown;
+    sequence: FlowSequence;
+    sequenceFlows?: TestFlow[]; // Populated flows from sequence steps
+    isEditing?: boolean;
+    selectedEnvironment?: Environment | null;
+    selectedSubEnvironment?: string | null;
+    isRunning?: boolean;
+    executionResults?: SequenceFlowResult[]; // New prop for execution results
+  }
+
+  let {
+    sequence,
+    sequenceFlows = [],
+    isEditing: initialIsEditing = false,
+    selectedEnvironment = null,
+    selectedSubEnvironment = null,
+    isRunning = false,
+    executionResults = []
+  , ...callbackProps
+  }: Props & Record<string, unknown> = $props();
 
   // Debug executionResults
-  $: if (executionResults.length > 0) {
-    console.log(`SequenceRow ${sequence.name} received execution results:`, executionResults);
-  }
+  $effect(() => {
+    if (executionResults.length > 0) {
+      console.log(`SequenceRow ${sequence.name} received execution results:`, executionResults);
+    }
+  });
   
   // Debug when component renders
-  $: {
+  $effect(() => {
     console.log(`SequenceRow ${sequence.name} rendering with:`, {
       sequenceFlows: sequenceFlows.length,
       executionResults: executionResults.length,
       sequenceId: sequence.id
     });
+  });
+
+  function dispatch(eventName: string, detail?: unknown) {
+    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === "function") {
+      if (arguments.length > 1) {
+        handler(detail);
+      } else {
+        handler();
+      }
+    }
   }
 
-  const dispatch = createEventDispatcher<{
-    editName: { sequence: FlowSequence; newName: string };
-    addFlow: { sequence: FlowSequence; flow: TestFlow };
-    removeFlow: { sequence: FlowSequence; stepOrder: number };
-    reorderFlow: { sequence: FlowSequence; fromIndex: number; toIndex: number };
-    deleteSequence: { sequence: FlowSequence };
-    clickFlow: { sequence: FlowSequence; flow: TestFlow; stepOrder: number };
-    runSequence: { sequence: FlowSequence };
-    cloneSequence: { sequence: FlowSequence; name: string; description?: string };
-    toggleExpectsError: { sequence: FlowSequence; stepOrder: number; expectsError: boolean };
-  }>();
-
-  let editingName = sequence.name;
-  let draggedIndex = -1;
-  let dropTargetIndex = -1;
-  let showFlowSearch = false;
-  let showDeleteConfirm = false;
-  let showCloneDialog = false;
-  let showResultsPanel = false;
-  let selectedFlowResult: SequenceFlowResult | null = null;
-  let selectedFlowName = '';
-  let movingIndex = -1;
-  let targetIndex = -1;
+  let isEditing = $state(initialIsEditing);
+  let editingName = $state(sequence.name);
+  let draggedIndex = $state(-1);
+  let dropTargetIndex = $state(-1);
+  let showFlowSearch = $state(false);
+  let showDeleteConfirm = $state(false);
+  let showCloneDialog = $state(false);
+  let showResultsPanel = $state(false);
+  let selectedFlowResult: SequenceFlowResult | null = $state(null);
+  let selectedFlowName = $state('');
+  let movingIndex = $state(-1);
+  let targetIndex = $state(-1);
 
   function handleNameEdit() {
     if (editingName.trim() && editingName !== sequence.name) {
@@ -75,22 +91,22 @@
     }
   }
 
-  function handleAddFlow(event: CustomEvent<{ flow: TestFlow }>) {
-    dispatch('addFlow', { sequence, flow: event.detail.flow });
+  function handleAddFlow(payload: { flow: TestFlow }) {
+    dispatch('addFlow', { sequence, flow: payload.flow });
     showFlowSearch = false;
   }
 
-  function handleFlowClick(event: CustomEvent<{ flow: TestFlow; stepOrder: number }>) {
-    dispatch('clickFlow', { sequence, flow: event.detail.flow, stepOrder: event.detail.stepOrder });
+  function handleFlowClick(payload: { flow: TestFlow; stepOrder: number }) {
+    dispatch('clickFlow', { sequence, flow: payload.flow, stepOrder: payload.stepOrder });
   }
 
-  function handleFlowRemove(event: CustomEvent<{ stepOrder: number }>) {
-    dispatch('removeFlow', { sequence, stepOrder: event.detail.stepOrder });
+  function handleFlowRemove(payload: { stepOrder: number }) {
+    dispatch('removeFlow', { sequence, stepOrder: payload.stepOrder });
   }
 
-  function handleDragStart(event: CustomEvent<{ flow: TestFlow; stepOrder: number }>) {
-    draggedIndex = event.detail.stepOrder - 1; // Convert to 0-based index
-    console.log('Drag started:', { draggedIndex, stepOrder: event.detail.stepOrder });
+  function handleDragStart(payload: { flow: TestFlow; stepOrder: number }) {
+    draggedIndex = payload.stepOrder - 1; // Convert to 0-based index
+    console.log('Drag started:', { draggedIndex, stepOrder: payload.stepOrder });
   }
 
   function handleDragEnd() {
@@ -126,11 +142,11 @@
     showCloneDialog = true;
   }
 
-  function handleConfirmClone(event: CustomEvent<{ name: string; description: string }>) {
+  function handleConfirmClone(payload: { name: string; description: string }) {
     dispatch('cloneSequence', { 
       sequence, 
-      name: event.detail.name, 
-      description: event.detail.description 
+      name: payload.name, 
+      description: payload.description 
     });
     showCloneDialog = false;
   }
@@ -152,14 +168,14 @@
     dispatch('runSequence', { sequence });
   }
 
-  function handleShowResults(event: CustomEvent<{ flow: TestFlow; stepOrder: number; executionResult: SequenceFlowResult }>) {
-    selectedFlowResult = event.detail.executionResult;
-    selectedFlowName = event.detail.flow.name;
+  function handleShowResults(payload: { flow: TestFlow; stepOrder: number; executionResult: SequenceFlowResult }) {
+    selectedFlowResult = payload.executionResult;
+    selectedFlowName = payload.flow.name;
     showResultsPanel = true;
   }
 
-  function handleMoveLeft(event: CustomEvent<{ stepOrder: number }>) {
-    const currentIndex = steps.findIndex(s => s.step_order === event.detail.stepOrder);
+  function handleMoveLeft(payload: { stepOrder: number }) {
+    const currentIndex = steps.findIndex(s => s.step_order === payload.stepOrder);
     if (currentIndex > 0) {
       movingIndex = currentIndex;
       targetIndex = currentIndex - 1;
@@ -173,8 +189,8 @@
     }
   }
 
-  function handleMoveRight(event: CustomEvent<{ stepOrder: number }>) {
-    const currentIndex = steps.findIndex(s => s.step_order === event.detail.stepOrder);
+  function handleMoveRight(payload: { stepOrder: number }) {
+    const currentIndex = steps.findIndex(s => s.step_order === payload.stepOrder);
     if (currentIndex < steps.length - 1) {
       movingIndex = currentIndex;
       targetIndex = currentIndex + 1;
@@ -188,11 +204,11 @@
     }
   }
 
-  function handleToggleExpectsError(event: CustomEvent<{ stepOrder: number; expectsError: boolean }>) {
+  function handleToggleExpectsError(payload: { stepOrder: number; expectsError: boolean }) {
     dispatch('toggleExpectsError', { 
       sequence, 
-      stepOrder: event.detail.stepOrder, 
-      expectsError: event.detail.expectsError 
+      stepOrder: payload.stepOrder, 
+      expectsError: payload.expectsError 
     });
   }
 
@@ -202,11 +218,11 @@
     selectedFlowName = '';
   }
 
-  $: steps = sequence.sequenceConfig?.steps || [];
-  $: canRun = sequenceFlows.length > 0 && selectedEnvironment && selectedSubEnvironment;
+  let steps = $derived(sequence.sequenceConfig?.steps || []);
+  let canRun = $derived(sequenceFlows.length > 0 && selectedEnvironment && selectedSubEnvironment);
   
   // Pre-compute flow data for animation
-  $: flowsWithData = steps.map((step, index) => {
+  let flowsWithData = $derived(steps.map((step, index) => {
     const flow = sequenceFlows.find(f => parseInt(f.id) === step.test_flow_id);
     return {
       sequenceStep: step,
@@ -223,7 +239,7 @@
     index: number;
     isFirst: boolean;
     isLast: boolean;
-  }>;
+  }>);
 </script>
 
 <div class="sequence-row bg-white border border-gray-200 rounded-lg p-4 mb-4 {isRunning ? 'ring-2 ring-green-500 ring-opacity-50 bg-green-50' : ''}" class:animate-pulse={isRunning}>
@@ -233,15 +249,15 @@
       {#if isEditing}
         <input
           bind:value={editingName}
-          on:blur={handleNameEdit}
-          on:keydown={handleNameKeydown}
+          onblur={handleNameEdit}
+          onkeydown={handleNameKeydown}
           class="text-lg font-semibold bg-transparent border-b border-blue-500 focus:outline-none focus:border-blue-600 px-1"
         />
       {:else}
         <button
           type="button"
           class="text-lg font-semibold text-gray-900 hover:text-blue-600 text-left"
-          on:click={() => (isEditing = true)}
+          onclick={() => (isEditing = true)}
         >
           {sequence.name}
         </button>
@@ -266,7 +282,7 @@
       <!-- Run Sequence Button -->
       <button
         type="button"
-        on:click={handleRunSequence}
+        onclick={handleRunSequence}
         disabled={!canRun || isRunning}
         class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
         title={!canRun ? 'Select an environment to run this sequence' : 'Run this sequence'}
@@ -287,7 +303,7 @@
       <!-- Clone Sequence Button -->
       <button
         type="button"
-        on:click={handleCloneSequence}
+        onclick={handleCloneSequence}
         class="p-2 text-gray-400 hover:text-blue-600 rounded-md hover:bg-blue-50 transition-colors"
         aria-label="Clone sequence"
         title="Clone this sequence"
@@ -299,7 +315,7 @@
       
       <button
         type="button"
-        on:click={handleDeleteSequence}
+        onclick={handleDeleteSequence}
         class="p-2 text-gray-400 hover:text-red-600 rounded-md hover:bg-red-50 transition-colors"
         aria-label="Delete sequence"
       >
@@ -321,8 +337,8 @@
           class:bg-blue-50={dropTargetIndex === index}
           class:rounded-lg={dropTargetIndex === index}
           class:p-1={dropTargetIndex === index}
-          on:dragover={(e) => handleDragOver(e, index)}
-          on:drop={(e) => handleDrop(e, index)}
+          ondragover={(e) => handleDragOver(e, index)}
+          ondrop={(e) => handleDrop(e, index)}
           role="button"
           tabindex="0"
           animate:flip={{ duration: 800, easing: quintOut }}
@@ -337,22 +353,22 @@
             {isFirst}
             {isLast}
             {executionResults}
-            on:click={handleFlowClick}
-            on:dragstart={handleDragStart}
-            on:dragend={handleDragEnd}
-            on:remove={handleFlowRemove}
-            on:showResults={handleShowResults}
-            on:moveLeft={handleMoveLeft}
-            on:moveRight={handleMoveRight}
-            on:toggleExpectsError={handleToggleExpectsError}
+            onClick={handleFlowClick}
+            onDragstart={handleDragStart}
+            onDragend={handleDragEnd}
+            onRemove={handleFlowRemove}
+            onShowResults={handleShowResults}
+            onMoveLeft={handleMoveLeft}
+            onMoveRight={handleMoveRight}
+            onToggleExpectsError={handleToggleExpectsError}
           />
         </div>
       {/each}    <!-- Add Flow Search -->
     <div class="flex-shrink-0">
       <FlowSearch
         bind:isOpen={showFlowSearch}
-        on:select={handleAddFlow}
-        on:close={() => (showFlowSearch = false)}
+        onSelect={handleAddFlow}
+        onClose={() => (showFlowSearch = false)}
       />
     </div>
   </div>
@@ -373,8 +389,8 @@
   confirmText="Delete"
   cancelText="Cancel"
   confirmVariant="danger"
-  on:confirm={handleConfirmDelete}
-  on:cancel={handleCancelDelete}
+  onConfirm={handleConfirmDelete}
+  onCancel={handleCancelDelete}
 />
 
 <!-- Clone Dialog -->
@@ -382,8 +398,8 @@
   bind:isOpen={showCloneDialog}
   originalName={sequence.name}
   originalDescription={sequence.description || ''}
-  on:confirm={handleConfirmClone}
-  on:cancel={handleCancelClone}
+  onConfirm={handleConfirmClone}
+  onCancel={handleCancelClone}
 />
 
 <!-- Flow Results Panel -->
@@ -391,7 +407,7 @@
   isOpen={showResultsPanel}
   flowResult={selectedFlowResult}
   flowName={selectedFlowName}
-  on:close={handleCloseResultsPanel}
+  onClose={handleCloseResultsPanel}
 />
 
 <style>

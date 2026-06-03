@@ -1,14 +1,36 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+    
 
-  export let isOpen = false;
-  export let title = 'Confirm Action';
-  export let message = 'Are you sure you want to proceed?';
-  export let confirmText = 'Confirm';
-  export let cancelText = 'Cancel';
-  export let confirmVariant: 'primary' | 'danger' = 'primary';
+  interface Props {
+    [key: string]: unknown;
+    isOpen?: boolean;
+    title?: string;
+    message?: string;
+    confirmText?: string;
+    cancelText?: string;
+    confirmVariant?: 'primary' | 'danger';
+  }
 
-  const dispatch = createEventDispatcher();
+  let {
+    isOpen = $bindable(false),
+    title = 'Confirm Action',
+    message = 'Are you sure you want to proceed?',
+    confirmText = 'Confirm',
+    cancelText = 'Cancel',
+    confirmVariant = 'primary'
+  , ...callbackProps
+  }: Props & Record<string, unknown> = $props();
+
+  function dispatch(eventName: string, detail?: unknown) {
+    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === "function") {
+      if (arguments.length > 1) {
+        handler(detail);
+      } else {
+        handler();
+      }
+    }
+  }
 
   function handleConfirm() {
     dispatch('confirm');
@@ -31,25 +53,30 @@
   }
 
   // Focus management and animation
-  let dialogElement: HTMLDivElement;
-  let confirmButton: HTMLButtonElement;
-  let mounted = false;
+  let dialogElement: HTMLDivElement | undefined = $state();
+  let confirmButton: HTMLButtonElement | undefined = $state();
+  let mounted = $state(false);
 
-  $: if (isOpen && confirmButton) {
-    setTimeout(() => confirmButton.focus(), 100);
-  }
+  $effect(() => {
+    if (isOpen && confirmButton) {
+      const button = confirmButton;
+      setTimeout(() => button?.focus(), 100);
+    }
+  });
 
-  $: if (isOpen) {
-    setTimeout(() => mounted = true, 10);
-  } else {
-    mounted = false;
-  }
+  $effect(() => {
+    if (isOpen) {
+      setTimeout(() => mounted = true, 10);
+    } else {
+      mounted = false;
+    }
+  });
 </script>
 
 {#if isOpen}
   <div
     class="fixed inset-0 z-50 flex items-center justify-center transition-all duration-300 ease-out {mounted ? 'opacity-100' : 'opacity-0'}"
-    on:keydown={handleKeydown}
+    onkeydown={handleKeydown}
     role="dialog"
     aria-modal="true"
     aria-labelledby="dialog-title"
@@ -60,7 +87,7 @@
     <!-- Backdrop -->
     <div
       class="absolute inset-0 bg-gradient-to-br from-gray-900/20 via-gray-800/30 to-gray-900/20 backdrop-blur-sm transition-all duration-300 ease-in-out {mounted ? 'opacity-100' : 'opacity-0'}"
-      on:click={handleBackdropClick}
+      onclick={handleBackdropClick}
       role="presentation"
       aria-hidden="true"
     ></div>
@@ -88,7 +115,7 @@
         <button
           type="button"
           class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
-          on:click={handleCancel}
+          onclick={handleCancel}
         >
           {cancelText}
         </button>
@@ -98,7 +125,7 @@
           class="px-4 py-2 text-sm font-medium text-white rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors {confirmVariant === 'danger'
             ? 'bg-red-600 hover:bg-red-700 focus:ring-red-500'
             : 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500'}"
-          on:click={handleConfirm}
+          onclick={handleConfirm}
         >
           {confirmText}
         </button>

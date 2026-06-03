@@ -1,18 +1,18 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+    import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { authStore } from '$lib/store/auth';
   import { projectStore } from '$lib/store/project';
 
   // Form state
-  let email = '';
-  let password = '';
-  let name = '';
-  let isSignUp = false;
-  let error = '';
+  let email = $state('');
+  let password = $state('');
+  let name = $state('');
+  let isSignUp = $state(false);
+  let error = $state('');
 
   // Subscribe to the auth store to get loading state
-  let loading = false;
+  let loading = $state(false);
 
   authStore.subscribe((state) => {
     loading = state.loading;
@@ -108,7 +108,7 @@
         </div>
       {/if}
 
-      <form class="space-y-6" on:submit|preventDefault={isSignUp ? handleSignUp : handleSignIn}>
+      <form class="space-y-6" onsubmit={(event) => { event.preventDefault(); (isSignUp ? handleSignUp : handleSignIn)(); }}>
         {#if isSignUp}
           <div>
             <label for="name" class="block text-sm font-medium text-gray-700">Full name</label>
@@ -201,7 +201,7 @@
         <div class="mt-6">
           <button
             type="button"
-            on:click={toggleAuthMode}
+            onclick={toggleAuthMode}
             class="flex w-full justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none"
           >
             {isSignUp ? 'Sign in instead' : 'Create a new account'}

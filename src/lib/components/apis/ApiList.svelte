@@ -1,4 +1,11 @@
 <script lang="ts">
+  function stopPropagation<T extends Event>(handler: (event: T) => unknown) {
+    return (event: T) => {
+      event.stopPropagation();
+      return handler(event);
+    };
+  }
+
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { getApiList, deleteApi as deleteApiStore } from '$lib/http_client/apis';
@@ -7,6 +14,7 @@
   import type { Api } from '$lib/types/api';
 
   interface Props {
+    [key: string]: unknown;
     selectedProject: Project | null;
   }
 
@@ -252,6 +260,6 @@
   confirmText="Delete"
   cancelText="Cancel"
   confirmVariant="danger"
-  on:confirm={confirmDelete}
-  on:cancel={cancelDelete}
+  onConfirm={confirmDelete}
+  onCancel={cancelDelete}
 />

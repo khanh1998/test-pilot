@@ -1,24 +1,37 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  
   import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
   import type { VariableDefinition } from '$lib/types/environment';
 
-  export let variableDefinitions: Record<string, VariableDefinition> = {};
-  export let disabled: boolean = false;
+  interface Props {
+    [key: string]: unknown;
+    variableDefinitions?: Record<string, VariableDefinition>;
+    disabled?: boolean;
+  }
 
-  const dispatch = createEventDispatcher<{
-    change: { variableDefinitions: Record<string, VariableDefinition> };
-  }>();
+  let { variableDefinitions = $bindable({}), disabled = false , ...callbackProps
+  }: Props & Record<string, unknown> = $props();
 
-  let showAddRow = false;
-  let newVariableName = '';
-  let newVariableType: VariableDefinition['type'] = 'string';
-  let newVariableDescription = '';
-  let newVariableRequired = false;
-  let newVariableDefaultValue: unknown = '';
+  function dispatch(eventName: string, detail?: unknown) {
+    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === "function") {
+      if (arguments.length > 1) {
+        handler(detail);
+      } else {
+        handler();
+      }
+    }
+  }
 
-  let showConfirmDialog = false;
-  let pendingDeleteVariable: string | null = null;
+  let showAddRow = $state(false);
+  let newVariableName = $state('');
+  let newVariableType: VariableDefinition['type'] = $state('string');
+  let newVariableDescription = $state('');
+  let newVariableRequired = $state(false);
+  let newVariableDefaultValue: unknown = $state('');
+
+  let showConfirmDialog = $state(false);
+  let pendingDeleteVariable: string | null = $state(null);
 
   function addVariable() {
     if (!newVariableName.trim()) return;
@@ -86,7 +99,7 @@
     newVariableDefaultValue = newVariableType === 'boolean' ? false : '';
   }
 
-  $: variableEntries = Object.entries(variableDefinitions);
+  let variableEntries = $derived(Object.entries(variableDefinitions));
 </script>
 
 <div
@@ -104,7 +117,7 @@
     </div>
     <button
       class="inline-flex cursor-pointer items-center gap-2 rounded-md border-0 bg-blue-600 px-3 py-2 text-sm font-medium whitespace-nowrap text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-      on:click={toggleAddRow}
+      onclick={toggleAddRow}
       {disabled}
       type="button"
     >
@@ -150,7 +163,7 @@
                 <select
                   id="type-{name}"
                   bind:value={definition.type}
-                  on:change={updateVariableDefinitions}
+                  onchange={updateVariableDefinitions}
                   class="w-full rounded border border-gray-300 px-2 py-1.5 text-sm transition-colors focus:border-blue-500 focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)] focus:outline-none"
                   {disabled}
                 >
@@ -166,7 +179,7 @@
                   <input
                     type="checkbox"
                     bind:checked={definition.required}
-                    on:change={updateVariableDefinitions}
+                    onchange={updateVariableDefinitions}
                     class="m-0"
                     {disabled}
                   />
@@ -178,7 +191,7 @@
                   <select
                     id="default-{name}"
                     bind:value={definition.default_value}
-                    on:change={updateVariableDefinitions}
+                    onchange={updateVariableDefinitions}
                     class="w-full rounded border border-gray-300 px-2 py-1.5 text-sm transition-colors focus:border-blue-500 focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)] focus:outline-none"
                     {disabled}
                   >
@@ -190,7 +203,7 @@
                     id="default-{name}"
                     type="number"
                     bind:value={definition.default_value}
-                    on:input={updateVariableDefinitions}
+                    oninput={updateVariableDefinitions}
                     placeholder="0"
                     class="w-full rounded border border-gray-300 px-2 py-1.5 text-sm transition-colors focus:border-blue-500 focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)] focus:outline-none"
                     {disabled}
@@ -200,7 +213,7 @@
                     id="default-{name}"
                     type="text"
                     bind:value={definition.default_value}
-                    on:input={updateVariableDefinitions}
+                    oninput={updateVariableDefinitions}
                     placeholder={definition.type === 'object'
                       ? '{}'
                       : definition.type === 'array'
@@ -219,7 +232,7 @@
                   id="description-{name}"
                   type="text"
                   bind:value={definition.description}
-                  on:input={updateVariableDefinitions}
+                  oninput={updateVariableDefinitions}
                   placeholder="Describe this variable..."
                   class="w-full rounded border border-gray-300 px-2 py-1.5 text-sm transition-colors focus:border-blue-500 focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)] focus:outline-none"
                   {disabled}
@@ -228,7 +241,7 @@
               <td class="px-3 py-2 text-right align-middle">
                 <button
                   class="inline-flex h-8 w-8 items-center justify-center rounded border-0 bg-red-50 text-red-600 transition-all hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
-                  on:click={() => removeVariable(name)}
+                  onclick={() => removeVariable(name)}
                   {disabled}
                   type="button"
                   aria-label="Remove variable {name}"
@@ -266,7 +279,7 @@
               <td class="px-3 py-2 align-middle">
                 <select
                   bind:value={newVariableType}
-                  on:change={handleNewVariableTypeChange}
+                  onchange={handleNewVariableTypeChange}
                   class="w-full rounded border border-blue-200 px-2 py-1.5 text-sm transition-colors focus:border-blue-500 focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)] focus:outline-none"
                   {disabled}
                 >
@@ -337,7 +350,7 @@
                   <button
                     type="button"
                     class="rounded bg-green-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
-                    on:click={addVariable}
+                    onclick={addVariable}
                     disabled={disabled || !newVariableName.trim()}
                   >
                     Add
@@ -345,7 +358,7 @@
                   <button
                     type="button"
                     class="rounded border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-                    on:click={resetAddRow}
+                    onclick={resetAddRow}
                     {disabled}
                   >
                     Cancel
@@ -377,6 +390,6 @@
   confirmText="Remove"
   cancelText="Cancel"
   confirmVariant="danger"
-  on:confirm={confirmDeleteVariable}
-  on:cancel={cancelDeleteVariable}
+  onConfirm={confirmDeleteVariable}
+  onCancel={cancelDeleteVariable}
 />

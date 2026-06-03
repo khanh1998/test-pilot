@@ -44,14 +44,14 @@
     clearBreadcrumbOverride('edit');
   });
 
-  async function handleSave(event: CustomEvent<{ environmentData: any }>) {
+  async function handleSave(payload: { environmentData: any }) {
     if (!environment) return;
 
     try {
       isSubmitting = true;
       error = null;
 
-      const { environmentData } = event.detail;
+      const { environmentData } = payload;
       await updateEnvironment(environment.id, environmentData);
 
       // Navigate back to environment detail page
@@ -145,8 +145,8 @@
         {environment}
         isEditing={true}
         disabled={isSubmitting}
-        on:save={handleSave}
-        on:cancel={handleCancel}
+        onSave={handleSave}
+        onCancel={handleCancel}
       />
     </div>
   {/if}

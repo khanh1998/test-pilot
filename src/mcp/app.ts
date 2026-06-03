@@ -47,6 +47,7 @@ import type { TestFlow } from '$lib/types/test-flow';
 
 export interface McpAuthContext {
   userId: number;
+  agentTokenId?: number;
   email?: string;
   name?: string;
 }
@@ -511,7 +512,8 @@ async function buildProjectContext(
     project: {
       id: detail.project.id,
       name: detail.project.name,
-      description: detail.project.description ?? null
+      description: detail.project.description ?? null,
+      agentContext: detail.project.agentContext ?? null
     },
     apis: detail.apis.map((apiLink) => ({
       id: apiLink.apiId,
@@ -534,6 +536,7 @@ async function buildProjectContext(
         ...(environments.length > 1 ? ['multiple_environments'] : [])
       ],
       notes: guidanceNotes,
+      markdown: detail.project.agentContext ?? null,
       codebaseFirstRecommendation: {
         recommended: true,
         summary:

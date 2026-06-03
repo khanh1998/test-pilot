@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+    import { onMount, onDestroy } from 'svelte';
   import { page } from '$app/stores';
   import { fade } from 'svelte/transition';
   import { setBreadcrumbOverride, clearBreadcrumbOverride } from '$lib/store/breadcrumb';
@@ -19,17 +19,17 @@
   import type { ExecutionPreferences } from '$lib/flow-runner/execution-engine';
   import { isDesktop } from '$lib/environment';
 
-  let projectId: number | null = null;
-  let moduleId: number;
-  let selectedProject: any = null;
-  let module: ProjectModule | null = null;
-  let sequences: FlowSequence[] = [];
-  let sequenceFlowsMap: Map<number, TestFlow[]> = new Map(); // Map sequence ID to flows
-  let sequenceResultsMap: Map<number, SequenceFlowResult[]> = new Map(); // Map sequence ID to execution results
-  let projectEnvironment: Environment | null = null;
+  let projectId: number | null = $state(null);
+  const moduleId = $derived(parseInt($page.params.moduleId));
+  let selectedProject: any = $state(null);
+  let module: ProjectModule | null = $state(null);
+  let sequences: FlowSequence[] = $state([]);
+  let sequenceFlowsMap: Map<number, TestFlow[]> = $state(new Map()); // Map sequence ID to flows
+  let sequenceResultsMap: Map<number, SequenceFlowResult[]> = $state(new Map()); // Map sequence ID to execution results
+  let projectEnvironment: Environment | null = $state(null);
   
-  let loading = true;
-  let error: string | null = null;
+  let loading = $state(true);
+  let error: string | null = $state(null);
   
   // Execution results state
   let executionResults: {
@@ -38,18 +38,16 @@
     title: string;
     message: string;
     details?: string;
-  } | null = null;
+  } | null = $state(null);
 
   // Modal states
-  let isSubmitting = false;
+  let isSubmitting = $state(false);
 
   // Environment and execution states
-  let selectedSubEnvironment: string | null = null;
-  let isRunningAll = false;
-  let runningSequences = new Set<number>(); // Track which sequences are running
+  let selectedSubEnvironment: string | null = $state(null);
+  let isRunningAll = $state(false);
+  let runningSequences = $state(new Set<number>()); // Track which sequences are running
   
-  // Local storage key for selected sub-environment per module
-  $: localStorageKey = `selectedSubEnvironment_module_${moduleId}`;
   
   // Save selected sub-environment to local storage
   function saveSelectedSubEnvironment(moduleId: number, subEnv: string | null) {
@@ -72,46 +70,26 @@
     return null;
   }
   
-  // Reactive statement to save to local storage when selectedSubEnvironment changes
-  $: {
-    if (moduleId && selectedSubEnvironment !== null) {
-      saveSelectedSubEnvironment(moduleId, selectedSubEnvironment);
-    }
-  }
   
   // Execution options state
-  let showExecutionOptions = false;
-  let executionPreferences: ExecutionPreferences = {
+  let showExecutionOptions = $state(false);
+  let executionPreferences: ExecutionPreferences = $state({
     parallelExecution: true,
     stopOnError: true,
     serverCookieHandling: !isDesktop,
     retryCount: 0,
     timeout: 30000
-  };
+  });
 
   // Parameter mapping panel state
-  let showParameterPanel = false;
-  let selectedFlow: TestFlow | null = null;
-  let selectedSequence: any = null;
-  let selectedStepOrder = 1;
+  let showParameterPanel = $state(false);
+  let selectedFlow: TestFlow | null = $state(null);
+  let selectedSequence: any = $state(null);
+  let selectedStepOrder = $state(1);
 
-  // Reactive statement to calculate previous flow outputs
-  $: previousFlowOutputs = getPreviousFlowOutputs(selectedSequence, selectedStepOrder, sequenceFlowsMap);
 
-  // Reactive statement to check if we can run all sequences
-  $: canRunAll = sequences.length > 0 && projectEnvironment && selectedSubEnvironment;
   
-  // Debug execution results
-  $: {
-    if (sequenceResultsMap.size > 0) {
-      console.log('Main page sequenceResultsMap updated:', sequenceResultsMap);
-      for (const [sequenceId, results] of sequenceResultsMap.entries()) {
-        console.log(`Sequence ${sequenceId} has ${results.length} execution results:`, results);
-      }
-    }
-  }
 
-  $: moduleId = parseInt($page.params.moduleId);
 
   // Subscribe to project store to get the selected project
   const unsubscribeProject = projectStore.subscribe((state) => {
@@ -131,12 +109,6 @@
     }
   });
 
-  // Use reactive statement to load data when projectId changes
-  $: {
-    if (projectId && moduleId) {
-      loadData();
-    }
-  }
 
   async function loadData() {
     if (!projectId || !moduleId) return;
@@ -315,7 +287,7 @@
   }
 
   // New event handlers for the redesigned interface
-  async function handleCreateSequence(event: CustomEvent<{ name: string }>) {
+  async function handleCreateSequence(payload: { name: string }) {
     if (!projectId) {
       showExecutionResults('error', 'No Project Selected', 'Please select a project first');
       return;
@@ -324,7 +296,7 @@
     try {
       isSubmitting = true;
       const response = await projectClient.createSequence(projectId, moduleId, {
-        name: event.detail.name,
+        name: payload.name,
         sequenceConfig: {
           steps: [],
           global_settings: {
@@ -346,21 +318,21 @@
     }
   }
 
-  async function handleEditSequenceName(event: CustomEvent<{ sequence: FlowSequence; newName: string }>) {
+  async function handleEditSequenceName(payload: { sequence: FlowSequence; newName: string }) {
     if (!projectId) {
       showExecutionResults('error', 'No Project Selected', 'Please select a project first');
       return;
     }
     
     try {
-      await projectClient.updateSequence(projectId, moduleId, event.detail.sequence.id, {
-        name: event.detail.newName
+      await projectClient.updateSequence(projectId, moduleId, payload.sequence.id, {
+        name: payload.newName
       });
       
       // Update local state
       sequences = sequences.map(seq => 
-        seq.id === event.detail.sequence.id 
-          ? { ...seq, name: event.detail.newName }
+        seq.id === payload.sequence.id 
+          ? { ...seq, name: payload.newName }
           : seq
       );
     } catch (err) {
@@ -370,14 +342,14 @@
     }
   }
 
-  async function handleAddFlowToSequence(event: CustomEvent<{ sequence: FlowSequence; flow: TestFlow }>) {
+  async function handleAddFlowToSequence(payload: { sequence: FlowSequence; flow: TestFlow }) {
     if (!projectId) {
       showExecutionResults('error', 'No Project Selected', 'Please select a project first');
       return;
     }
     
     try {
-      const { sequence, flow } = event.detail;
+      const { sequence, flow } = payload;
       const currentFlows = sequenceFlowsMap.get(sequence.id) || [];
       const nextStepOrder = currentFlows.length + 1;
       
@@ -411,14 +383,14 @@
     }
   }
 
-  async function handleRemoveFlowFromSequence(event: CustomEvent<{ sequence: FlowSequence; stepOrder: number }>) {
+  async function handleRemoveFlowFromSequence(payload: { sequence: FlowSequence; stepOrder: number }) {
     if (!projectId) {
       showExecutionResults('error', 'No Project Selected', 'Please select a project first');
       return;
     }
     
     try {
-      const { sequence, stepOrder } = event.detail;
+      const { sequence, stepOrder } = payload;
       const steps = sequence.sequenceConfig?.steps || [];
       const stepToRemove = steps.find(s => s.step_order === stepOrder);
       
@@ -457,22 +429,22 @@
     }
   }
 
-  function handleFlowClick(event: CustomEvent<{ sequence: FlowSequence; flow: TestFlow; stepOrder: number }>) {
-    const { sequence, flow, stepOrder } = event.detail;
+  function handleFlowClick(payload: { sequence: FlowSequence; flow: TestFlow; stepOrder: number }) {
+    const { sequence, flow, stepOrder } = payload;
     selectedFlow = flow;
     selectedSequence = sequence;
     selectedStepOrder = stepOrder;
     showParameterPanel = true;
   }
 
-  async function handleReorderFlow(event: CustomEvent<{ sequence: FlowSequence; fromIndex: number; toIndex: number }>) {
+  async function handleReorderFlow(payload: { sequence: FlowSequence; fromIndex: number; toIndex: number }) {
     if (!projectId) {
       showExecutionResults('error', 'No Project Selected', 'Please select a project first');
       return;
     }
     
     try {
-      const { sequence, fromIndex, toIndex } = event.detail;
+      const { sequence, fromIndex, toIndex } = payload;
       
       if (fromIndex === toIndex) return;
       
@@ -525,15 +497,15 @@
     }
   }
 
-  async function handleDeleteSequence(event: CustomEvent<{ sequence: FlowSequence }>) {
+  async function handleDeleteSequence(payload: { sequence: FlowSequence }) {
     if (!projectId) {
       showExecutionResults('error', 'No Project Selected', 'Please select a project first');
       return;
     }
     
     try {
-      await projectClient.deleteSequence(projectId, moduleId, event.detail.sequence.id);
-      sequences = Array.isArray(sequences) ? sequences.filter(s => s.id !== event.detail.sequence.id) : [];
+      await projectClient.deleteSequence(projectId, moduleId, payload.sequence.id);
+      sequences = Array.isArray(sequences) ? sequences.filter(s => s.id !== payload.sequence.id) : [];
     } catch (err) {
       console.error('Failed to delete sequence:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to delete sequence';
@@ -541,14 +513,14 @@
     }
   }
 
-  async function handleCloneSequence(event: CustomEvent<{ sequence: FlowSequence; name: string; description?: string }>) {
+  async function handleCloneSequence(payload: { sequence: FlowSequence; name: string; description?: string }) {
     if (!projectId) {
       showExecutionResults('error', 'No Project Selected', 'Please select a project first');
       return;
     }
     
     try {
-      const { sequence, name, description } = event.detail;
+      const { sequence, name, description } = payload;
       const response = await projectClient.cloneSequence(projectId, moduleId, sequence.id, {
         name,
         description
@@ -572,14 +544,14 @@
     }
   }
 
-  async function handleToggleExpectsError(event: CustomEvent<{ sequence: FlowSequence; stepOrder: number; expectsError: boolean }>) {
+  async function handleToggleExpectsError(payload: { sequence: FlowSequence; stepOrder: number; expectsError: boolean }) {
     if (!projectId) {
       showExecutionResults('error', 'No Project Selected', 'Please select a project first');
       return;
     }
     
     try {
-      const { sequence, stepOrder, expectsError } = event.detail;
+      const { sequence, stepOrder, expectsError } = payload;
       const steps = sequence.sequenceConfig?.steps || [];
       
       // Find the step to update
@@ -623,8 +595,8 @@
     }
   }
 
-  function handleEnvironmentSelect(event: CustomEvent<{ environmentId: number | null; subEnvironment: string | null }>) {
-    selectedSubEnvironment = event.detail.subEnvironment;
+  function handleEnvironmentSelect(payload: { environmentId: number | null; subEnvironment: string | null }) {
+    selectedSubEnvironment = payload.subEnvironment;
     // The reactive statement will handle saving to localStorage automatically
   }
 
@@ -745,8 +717,8 @@
     }
   }
 
-  async function handleRunSequence(event: CustomEvent<{ sequence: FlowSequence }>) {
-    const sequence = event.detail.sequence;
+  async function handleRunSequence(payload: { sequence: FlowSequence }) {
+    const sequence = payload.sequence;
     
     if (!projectEnvironment || !selectedSubEnvironment) {
       alert('Please select a sub-environment first');
@@ -849,14 +821,14 @@
     selectedStepOrder = 1;
   }
 
-  async function handleParameterPanelSave(event: CustomEvent<{ stepOrder: number; parameterMappings: any[] }>) {
+  async function handleParameterPanelSave(payload: { stepOrder: number; parameterMappings: any[] }) {
     if (!projectId) {
       showExecutionResults('error', 'No Project Selected', 'Please select a project first');
       return;
     }
     
     try {
-      const { stepOrder, parameterMappings } = event.detail;
+      const { stepOrder, parameterMappings } = payload;
       
       if (!selectedSequence) return;
       
@@ -939,6 +911,33 @@
 
     return outputs;
   }
+  // Local storage key for selected sub-environment per module
+  let localStorageKey = $derived(`selectedSubEnvironment_module_${moduleId}`);
+  // Reactive statement to save to local storage when selectedSubEnvironment changes
+  $effect(() => {
+    if (moduleId && selectedSubEnvironment !== null) {
+      saveSelectedSubEnvironment(moduleId, selectedSubEnvironment);
+    }
+  });
+  // Reactive statement to calculate previous flow outputs
+  let previousFlowOutputs = $derived(getPreviousFlowOutputs(selectedSequence, selectedStepOrder, sequenceFlowsMap));
+  // Reactive statement to check if we can run all sequences
+  let canRunAll = $derived(sequences.length > 0 && projectEnvironment && selectedSubEnvironment);
+  // Debug execution results
+  $effect(() => {
+    if (sequenceResultsMap.size > 0) {
+      console.log('Main page sequenceResultsMap updated:', sequenceResultsMap);
+      for (const [sequenceId, results] of sequenceResultsMap.entries()) {
+        console.log(`Sequence ${sequenceId} has ${results.length} execution results:`, results);
+      }
+    }
+  });
+  // Use reactive statement to load data when projectId changes
+  $effect(() => {
+    if (projectId && moduleId) {
+      loadData();
+    }
+  });
 </script>
 
 <svelte:head>
@@ -1011,7 +1010,7 @@
           <div class="ml-4 flex-shrink-0">
             <button
               type="button"
-              on:click={hideExecutionResults}
+              onclick={hideExecutionResults}
               aria-label="Close notification"
               class="inline-flex {executionResults.type === 'success' ? 'text-green-400 hover:text-green-500' : executionResults.type === 'error' ? 'text-red-400 hover:text-red-500' : 'text-yellow-400 hover:text-yellow-500'}"
             >
@@ -1036,7 +1035,7 @@
               environment={projectEnvironment}
               {selectedSubEnvironment}
               placeholder="Select sub-environment..."
-              on:select={handleEnvironmentSelect}
+              onSelect={handleEnvironmentSelect}
             />
           </div>
           
@@ -1044,7 +1043,7 @@
             <!-- Execution Options Button -->
             <button
               type="button"
-              on:click={() => (showExecutionOptions = !showExecutionOptions)}
+              onclick={() => (showExecutionOptions = !showExecutionOptions)}
               disabled={isRunningAll || runningSequences.size > 0}
               class="inline-flex items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
             >
@@ -1057,7 +1056,7 @@
             <!-- Run All Button -->
             <button
               type="button"
-              on:click={handleRunAllSequences}
+              onclick={handleRunAllSequences}
               disabled={!canRunAll || isRunningAll}
               class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
               title={!canRunAll ? 'Ensure project environment is configured and sequences have flows' : 'Run all sequences in this module'}
@@ -1192,7 +1191,7 @@
         <div class="bg-white shadow rounded-lg p-6">
           <h3 class="text-lg font-medium text-gray-900 mb-4">Create New Sequence</h3>
           <SequenceCreator 
-            on:create={handleCreateSequence}
+            onCreate={handleCreateSequence}
             isCreating={isSubmitting}
           />
         </div>
@@ -1210,15 +1209,15 @@
                   selectedEnvironment={projectEnvironment}
                   {selectedSubEnvironment}
                   isRunning={runningSequences.has(sequence.id)}
-                  on:editName={handleEditSequenceName}
-                  on:addFlow={handleAddFlowToSequence}
-                  on:removeFlow={handleRemoveFlowFromSequence}
-                  on:clickFlow={handleFlowClick}
-                  on:reorderFlow={handleReorderFlow}
-                  on:deleteSequence={handleDeleteSequence}
-                  on:cloneSequence={handleCloneSequence}
-                  on:runSequence={handleRunSequence}
-                  on:toggleExpectsError={handleToggleExpectsError}
+                  onEditName={handleEditSequenceName}
+                  onAddFlow={handleAddFlowToSequence}
+                  onRemoveFlow={handleRemoveFlowFromSequence}
+                  onClickFlow={handleFlowClick}
+                  onReorderFlow={handleReorderFlow}
+                  onDeleteSequence={handleDeleteSequence}
+                  onCloneSequence={handleCloneSequence}
+                  onRunSequence={handleRunSequence}
+                  onToggleExpectsError={handleToggleExpectsError}
                 />
               {/each}
             </div>
@@ -1248,6 +1247,6 @@
   previousFlowOutputs={previousFlowOutputs}
   selectedEnvironment={projectEnvironment}
   selectedSubEnvironment={selectedSubEnvironment}
-  on:close={handleParameterPanelClose}
-  on:save={handleParameterPanelSave}
+  onClose={handleParameterPanelClose}
+  onSave={handleParameterPanelSave}
 />

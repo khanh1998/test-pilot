@@ -3,6 +3,7 @@
   import type { Project } from '$lib/store/project';
 
   interface Props {
+    [key: string]: unknown;
     onClose: () => void;
     onProjectCreated: (project: Project) => void;
   }

@@ -1,19 +1,34 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+    
   import type { ApiEndpoint } from '$lib/types/api';
   import { generateSampleBody } from '../test-flows/utils';
 
-  export let isOpen = false;
-  export let endpoint: ApiEndpoint | null = null;
+  interface Props {
+    [key: string]: unknown;
+    isOpen?: boolean;
+    endpoint?: ApiEndpoint | null;
+  }
 
-  const dispatch = createEventDispatcher();
+  let { isOpen = $bindable(false), endpoint = null , ...callbackProps
+  }: Props & Record<string, unknown> = $props();
+
+  function dispatch(eventName: string, detail?: unknown) {
+    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === "function") {
+      if (arguments.length > 1) {
+        handler(detail);
+      } else {
+        handler();
+      }
+    }
+  }
 
   // Active tab state
-  let activeTab: 'overview' | 'parameters' | 'request' | 'response' = 'overview';
+  let activeTab: 'overview' | 'parameters' | 'request' | 'response' = $state('overview');
   
   // Toggle between schema and sample for request/response tabs
-  let requestView: 'schema' | 'sample' = 'schema';
-  let responseView: 'schema' | 'sample' = 'schema';
+  let requestView: 'schema' | 'sample' = $state('schema');
+  let responseView: 'schema' | 'sample' = $state('schema');
 
   function closeDetails() {
     dispatch('close');
@@ -59,30 +74,32 @@
   }
 
   // Set the active tab based on available data when endpoint changes
-  $: if (endpoint) {
-    // Reset view states when endpoint changes
-    requestView = 'schema';
-    responseView = 'schema';
-    
-    // Set default tab based on what data is available
-    if (endpoint.summary || endpoint.description) {
-      activeTab = 'overview';
-    } else if (endpoint.parameters && Array.isArray(endpoint.parameters) && endpoint.parameters.length > 0) {
-      activeTab = 'parameters';
-    } else if (endpoint.requestSchema) {
-      activeTab = 'request';
-    } else if (endpoint.responseSchema) {
-      activeTab = 'response';
-    } else {
-      activeTab = 'overview';
+  $effect(() => {
+    if (endpoint) {
+      // Reset view states when endpoint changes
+      requestView = 'schema';
+      responseView = 'schema';
+      
+      // Set default tab based on what data is available
+      if (endpoint.summary || endpoint.description) {
+        activeTab = 'overview';
+      } else if (endpoint.parameters && Array.isArray(endpoint.parameters) && endpoint.parameters.length > 0) {
+        activeTab = 'parameters';
+      } else if (endpoint.requestSchema) {
+        activeTab = 'request';
+      } else if (endpoint.responseSchema) {
+        activeTab = 'response';
+      } else {
+        activeTab = 'overview';
+      }
     }
-  }
+  });
 </script>
 
 {#if isOpen}
 <div
   class="fixed inset-0 z-40 flex justify-end transition-opacity duration-200 ease-in-out opacity-100"
-  on:keydown={(e) => e.key === 'Escape' && closeDetails()}
+  onkeydown={(e) => e.key === 'Escape' && closeDetails()}
   role="dialog"
   aria-modal="true"
   tabindex="-1"
@@ -90,7 +107,7 @@
   <!-- Transparent overlay for the left side -->
   <div
     class="absolute inset-y-0 right-0 left-0 bg-transparent transition-opacity duration-300 ease-in-out sm:right-[75%] md:right-[700px] lg:right-[600px]"
-    on:click={closeDetails}
+    onclick={closeDetails}
     role="presentation"
     aria-hidden="true"
   ></div>
@@ -120,7 +137,7 @@
         </div>
         <button
           class="rounded-full p-2 text-gray-400 transition-colors hover:bg-gray-200 hover:text-gray-600"
-          on:click={closeDetails}
+          onclick={closeDetails}
           aria-label="Close"
         >
           <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -136,7 +153,7 @@
             class="border-b-2 px-4 py-3 text-sm font-medium transition-colors {activeTab === 'overview'
               ? 'border-blue-500 text-blue-600'
               : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}"
-            on:click={() => (activeTab = 'overview')}
+            onclick={() => (activeTab = 'overview')}
           >
             <div class="flex items-center">
               <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -151,7 +168,7 @@
               class="border-b-2 px-4 py-3 text-sm font-medium transition-colors {activeTab === 'parameters'
                 ? 'border-blue-500 text-blue-600'
                 : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}"
-              on:click={() => (activeTab = 'parameters')}
+              onclick={() => (activeTab = 'parameters')}
             >
               <div class="flex items-center">
                 <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -167,7 +184,7 @@
               class="border-b-2 px-4 py-3 text-sm font-medium transition-colors {activeTab === 'request'
                 ? 'border-blue-500 text-blue-600'
                 : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}"
-              on:click={() => (activeTab = 'request')}
+              onclick={() => (activeTab = 'request')}
             >
               <div class="flex items-center">
                 <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -183,7 +200,7 @@
               class="border-b-2 px-4 py-3 text-sm font-medium transition-colors {activeTab === 'response'
                 ? 'border-blue-500 text-blue-600'
                 : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}"
-              on:click={() => (activeTab = 'response')}
+              onclick={() => (activeTab = 'response')}
             >
               <div class="flex items-center">
                 <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -322,7 +339,7 @@
                     class="px-3 py-1 text-xs font-medium transition-colors {requestView === 'schema'
                       ? 'bg-blue-600 text-white'
                       : 'text-gray-700 hover:bg-gray-50'} rounded-l-md"
-                    on:click={() => (requestView = 'schema')}
+                    onclick={() => (requestView = 'schema')}
                   >
                     Schema
                   </button>
@@ -330,14 +347,14 @@
                     class="px-3 py-1 text-xs font-medium transition-colors {requestView === 'sample'
                       ? 'bg-blue-600 text-white'
                       : 'text-gray-700 hover:bg-gray-50'} rounded-r-md border-l border-gray-300"
-                    on:click={() => (requestView = 'sample')}
+                    onclick={() => (requestView = 'sample')}
                   >
                     Sample
                   </button>
                 </div>
                 <button
                   class="rounded bg-gray-100 px-3 py-1 text-xs text-gray-600 hover:bg-gray-200"
-                  on:click={() => copyToClipboard(requestView === 'schema' ? formatJson(endpoint.requestSchema) : generateSamplePayload(endpoint.requestSchema))}
+                  onclick={() => copyToClipboard(requestView === 'schema' ? formatJson(endpoint.requestSchema) : generateSamplePayload(endpoint.requestSchema))}
                 >
                   Copy JSON
                 </button>
@@ -368,7 +385,7 @@
                     class="px-3 py-1 text-xs font-medium transition-colors {responseView === 'schema'
                       ? 'bg-blue-600 text-white'
                       : 'text-gray-700 hover:bg-gray-50'} rounded-l-md"
-                    on:click={() => (responseView = 'schema')}
+                    onclick={() => (responseView = 'schema')}
                   >
                     Schema
                   </button>
@@ -376,14 +393,14 @@
                     class="px-3 py-1 text-xs font-medium transition-colors {responseView === 'sample'
                       ? 'bg-blue-600 text-white'
                       : 'text-gray-700 hover:bg-gray-50'} rounded-r-md border-l border-gray-300"
-                    on:click={() => (responseView = 'sample')}
+                    onclick={() => (responseView = 'sample')}
                   >
                     Sample
                   </button>
                 </div>
                 <button
                   class="rounded bg-gray-100 px-3 py-1 text-xs text-gray-600 hover:bg-gray-200"
-                  on:click={() => copyToClipboard(responseView === 'schema' ? formatJson(endpoint.responseSchema) : generateSamplePayload(endpoint.responseSchema))}
+                  onclick={() => copyToClipboard(responseView === 'schema' ? formatJson(endpoint.responseSchema) : generateSamplePayload(endpoint.responseSchema))}
                 >
                   Copy JSON
                 </button>

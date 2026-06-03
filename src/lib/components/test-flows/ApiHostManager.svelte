@@ -1,19 +1,34 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  
   import { getApiList } from '$lib/http_client/apis';
   import { projectStore } from '$lib/store/project';
   import { onMount } from 'svelte';
 
-  export let apiHosts: Record<string | number, { url: string; name?: string; description?: string }> = {};
-  export let disabled: boolean = false;
+  interface Props {
+    [key: string]: unknown;
+    apiHosts?: Record<string | number, { url: string; name?: string; description?: string }>;
+    disabled?: boolean;
+  }
 
-  const dispatch = createEventDispatcher();
+  let { apiHosts = {}, disabled = false , ...callbackProps
+  }: Props & Record<string, unknown> = $props();
+
+  function dispatch(eventName: string, detail?: unknown) {
+    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === "function") {
+      if (arguments.length > 1) {
+        handler(detail);
+      } else {
+        handler();
+      }
+    }
+  }
 
   // Modal state
-  let showAddApiModal = false;
-  let availableApis: any[] = [];
-  let loadingApis = false;
-  let error: string | null = null;
+  let showAddApiModal = $state(false);
+  let availableApis: any[] = $state([]);
+  let loadingApis = $state(false);
+  let error: string | null = $state(null);
 
   onMount(async () => {
     await loadAvailableApis();
@@ -108,7 +123,7 @@
     <h3 class="text-lg font-medium text-gray-800">API Hosts</h3>
     <button
       class="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700 flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
-      on:click={() => (showAddApiModal = true)}
+      onclick={() => (showAddApiModal = true)}
       {disabled}
     >
       <svg class="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -125,7 +140,7 @@
   {#if error}
     <div class="relative mb-4 rounded border border-red-400 bg-red-100 px-4 py-3 text-red-700">
       <span class="block sm:inline">{error}</span>
-      <button class="absolute top-0 right-0 bottom-0 px-4" on:click={clearError}>×</button>
+      <button class="absolute top-0 right-0 bottom-0 px-4" onclick={clearError}>×</button>
     </div>
   {/if}
   
@@ -148,7 +163,7 @@
                   <input
                     type="text"
                     value={apiInfo.name}
-                    on:input={(e) => updateApiHost(apiId, 'name', e.currentTarget.value)}
+                    oninput={(e) => updateApiHost(apiId, 'name', e.currentTarget.value)}
                     {disabled}
                     class="rounded border border-gray-300 px-3 py-1.5 text-sm flex-1 disabled:bg-gray-100 disabled:cursor-not-allowed"
                     placeholder="API Name"
@@ -160,7 +175,7 @@
                 <input
                   type="text"
                   value={apiInfo.url}
-                  on:input={(e) => updateApiHost(apiId, 'url', e.currentTarget.value)}
+                  oninput={(e) => updateApiHost(apiId, 'url', e.currentTarget.value)}
                   {disabled}
                   class="w-full rounded border border-gray-300 px-3 py-1.5 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                   placeholder="https://api.example.com"
@@ -169,7 +184,7 @@
               <td class="px-4 py-3 whitespace-nowrap text-right">
                 <button
                   class="inline-flex items-center justify-center p-1.5 rounded-full text-red-600 hover:text-white hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  on:click={() => removeApiHost(apiId)}
+                  onclick={() => removeApiHost(apiId)}
                   aria-label="Delete API host"
                   title="Delete this API host"
                   {disabled}
@@ -192,7 +207,7 @@
       <p class="mb-4 text-gray-600">No API hosts configured yet</p>
       <button
         class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md flex items-center text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-        on:click={() => (showAddApiModal = true)}
+        onclick={() => (showAddApiModal = true)}
         {disabled}
       >
         <svg class="mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -233,7 +248,7 @@
                              ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
                              : 'bg-blue-600 text-white hover:bg-blue-700'}"
                     disabled={isAlreadyAdded}
-                    on:click={() => addApiFromList(api)}
+                    onclick={() => addApiFromList(api)}
                   >
                     {isAlreadyAdded ? 'Already Added' : 'Add'}
                   </button>
@@ -247,7 +262,7 @@
           <h3 class="mb-3 text-lg font-medium">Or Create Custom API Host</h3>
           <button
             class="w-full rounded-md bg-gray-100 border-2 border-dashed border-gray-300 px-4 py-3 text-gray-600 hover:bg-gray-50 hover:border-gray-400 transition"
-            on:click={addCustomApiHost}
+            onclick={addCustomApiHost}
           >
             <svg class="mx-auto h-6 w-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
@@ -260,7 +275,7 @@
           <p class="text-gray-600 mb-4">No APIs found in your workspace.</p>
           <button
             class="w-full rounded-md bg-blue-600 px-4 py-3 text-white hover:bg-blue-700 transition"
-            on:click={addCustomApiHost}
+            onclick={addCustomApiHost}
           >
             <svg class="mx-auto h-6 w-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
@@ -273,7 +288,7 @@
       <div class="flex justify-end">
         <button
           class="rounded-md bg-gray-200 px-4 py-2 text-gray-800 transition hover:bg-gray-300"
-          on:click={() => {
+          onclick={() => {
             showAddApiModal = false;
             error = null;
           }}

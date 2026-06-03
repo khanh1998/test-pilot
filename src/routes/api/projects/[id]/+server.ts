@@ -18,15 +18,15 @@ export async function GET({ params, locals }: RequestEvent) {
     }
 
     const result = await projectService.getProjectDetail(projectId, locals.user.userId);
-    
+
     return json(result);
   } catch (error: any) {
     console.error('Error getting project:', error);
-    
+
     if (error.message.includes('not found') || error.message.includes('access denied')) {
       return json({ error: 'Project not found' }, { status: 404 });
     }
-    
+
     return json({ error: 'Internal server error' }, { status: 500 });
   }
 }
@@ -55,20 +55,32 @@ export async function PUT({ params, request, locals }: RequestEvent) {
       return json({ error: 'Description must be a string' }, { status: 400 });
     }
 
+    if (
+      data.agentContext !== undefined &&
+      data.agentContext !== null &&
+      typeof data.agentContext !== 'string'
+    ) {
+      return json({ error: 'Agent context must be a string' }, { status: 400 });
+    }
+
     const project = await projectService.updateProject(projectId, locals.user.userId, data);
 
     return json({ project });
   } catch (error: any) {
     console.error('Error updating project:', error);
-    
+
     if (error.message.includes('not found') || error.message.includes('access denied')) {
       return json({ error: 'Project not found' }, { status: 404 });
     }
-    
-    if (error.message.includes('required') || error.message.includes('exceed') || error.message.includes('empty')) {
+
+    if (
+      error.message.includes('required') ||
+      error.message.includes('exceed') ||
+      error.message.includes('empty')
+    ) {
       return json({ error: error.message }, { status: 400 });
     }
-    
+
     return json({ error: 'Internal server error' }, { status: 500 });
   }
 }
@@ -91,11 +103,11 @@ export async function DELETE({ params, locals }: RequestEvent) {
     return json({ message: 'Project deleted successfully' });
   } catch (error: any) {
     console.error('Error deleting project:', error);
-    
+
     if (error.message.includes('not found') || error.message.includes('access denied')) {
       return json({ error: 'Project not found' }, { status: 404 });
     }
-    
+
     return json({ error: 'Internal server error' }, { status: 500 });
   }
 }

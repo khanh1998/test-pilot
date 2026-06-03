@@ -3,12 +3,24 @@
   import type { ProjectModule } from '../../types/project.js';
   import { formatDate } from '../../utils/date.js';
 
-  export let module: ProjectModule;
-  export let href: string = `/projects/modules/${module.id}`;
-  export let showActions: boolean = true;
-  export let onEdit: ((module: ProjectModule) => void) | null = null;
-  export let onDelete: ((module: ProjectModule) => void) | null = null;
-  export let isDragging: boolean = false;
+  interface Props {
+    [key: string]: unknown;
+    module: ProjectModule;
+    href?: string;
+    showActions?: boolean;
+    onEdit?: ((module: ProjectModule) => void) | null;
+    onDelete?: ((module: ProjectModule) => void) | null;
+    isDragging?: boolean;
+  }
+
+  let {
+    module,
+    href = `/projects/modules/${module.id}`,
+    showActions = true,
+    onEdit = null,
+    onDelete = null,
+    isDragging = false
+  }: Props = $props();
 
   function handleEdit() {
     if (onEdit) {
@@ -76,7 +88,7 @@
       {#if showActions && (onEdit || onDelete)}
         {#if onEdit}
           <button
-            on:click={handleEdit}
+            onclick={handleEdit}
             class="p-1 text-gray-400 hover:text-gray-600 transition-colors"
             aria-label="Edit module"
           >
@@ -87,7 +99,7 @@
         {/if}
         {#if onDelete}
           <button
-            on:click={handleDelete}
+            onclick={handleDelete}
             class="p-1 text-gray-400 hover:text-red-600 transition-colors"
             aria-label="Delete module"
           >

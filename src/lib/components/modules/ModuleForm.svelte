@@ -1,21 +1,33 @@
 <!-- ModuleForm.svelte - Form for creating/editing project modules -->
 <script lang="ts">
-  import type { ProjectModule } from '../../types/project.js';
-  import { createEventDispatcher } from 'svelte';
+    import type { ProjectModule } from '../../types/project.js';
+  
 
-  export let module: Partial<ProjectModule> = {};
-  export let isLoading: boolean = false;
-  export let mode: 'create' | 'edit' = 'create';
+  interface Props {
+    [key: string]: unknown;
+    module?: Partial<ProjectModule>;
+    isLoading?: boolean;
+    mode?: 'create' | 'edit';
+  }
 
-  const dispatch = createEventDispatcher<{
-    submit: { module: Partial<ProjectModule> };
-    cancel: void;
-  }>();
+  let { module = {}, isLoading = false, mode = 'create' , ...callbackProps
+  }: Props & Record<string, unknown> = $props();
 
-  let name = module.name || '';
-  let description = module.description || '';
+  function dispatch(eventName: string, detail?: unknown) {
+    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === "function") {
+      if (arguments.length > 1) {
+        handler(detail);
+      } else {
+        handler();
+      }
+    }
+  }
 
-  $: isValid = name.trim().length > 0;
+  let name = $state(module.name || '');
+  let description = $state(module.description || '');
+
+  let isValid = $derived(name.trim().length > 0);
 
   function handleSubmit() {
     if (!isValid) return;
@@ -34,7 +46,7 @@
   }
 </script>
 
-<form on:submit|preventDefault={handleSubmit} class="space-y-6">
+<form onsubmit={(event) => { event.preventDefault(); handleSubmit(); }} class="space-y-6">
   <!-- Module Name -->
   <div>
     <label for="module-name" class="block text-sm font-medium text-gray-700 mb-2">
@@ -76,7 +88,7 @@
   <div class="flex justify-end space-x-3 pt-4 border-t border-gray-200">
     <button
       type="button"
-      on:click={handleCancel}
+      onclick={handleCancel}
       class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
       disabled={isLoading}
     >

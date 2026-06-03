@@ -1,20 +1,32 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  function stopPropagation<T extends Event>(handler: (event: T) => unknown) {
+    return (event: T) => {
+      event.stopPropagation();
+      return handler(event);
+    };
+  }
+
+    import { onMount } from 'svelte';
   import { getApiDetails, getApiEndpoints } from '$lib/http_client/apis';
   import type { Api, ApiEndpoint } from '$lib/types/api';
   import EndpointDetails from './EndpointDetails.svelte';
 
-  export let apiId: number;
+  interface Props {
+    [key: string]: unknown;
+    apiId: number;
+  }
 
-  let api: Api | null = null;
+  let { apiId }: Props = $props();
 
-  let endpoints: ApiEndpoint[] = [];
+  let api: Api | null = $state(null);
 
-  let loading = true;
-  let error: string | null = null;
+  let endpoints: ApiEndpoint[] = $state([]);
+
+  let loading = $state(true);
+  let error: string | null = $state(null);
 
   // Group endpoints by path for better organization
-  $: groupedEndpoints = endpoints.reduce(
+  let groupedEndpoints = $derived(endpoints.reduce(
     (acc, endpoint) => {
       if (!acc[endpoint.path]) {
         acc[endpoint.path] = [];
@@ -23,21 +35,21 @@
       return acc;
     },
     {} as Record<string, typeof endpoints>
-  );
+  ));
 
   // Get unique tags across all endpoints
-  $: allTags = [...new Set(endpoints.flatMap((e) => e.tags || []))].sort();
+  let allTags = $derived([...new Set(endpoints.flatMap((e) => e.tags || []))].sort());
 
   // Filter state
-  let selectedTag: string = '';
-  let searchQuery = '';
+  let selectedTag: string = $state('');
+  let searchQuery = $state('');
 
   // Endpoint details state
-  let showEndpointDetails = false;
-  let selectedEndpoint: ApiEndpoint | null = null;
+  let showEndpointDetails = $state(false);
+  let selectedEndpoint: ApiEndpoint | null = $state(null);
 
   // Filter endpoints by tag and search query
-  $: filteredEndpointPaths = Object.keys(groupedEndpoints).filter((path) => {
+  let filteredEndpointPaths = $derived(Object.keys(groupedEndpoints).filter((path) => {
     const endpointsForPath = groupedEndpoints[path];
 
     // If tag filter is active, check if any endpoint has the tag
@@ -55,7 +67,7 @@
       );
 
     return matchesTag && matchesSearch;
-  });
+  }));
 
   onMount(async () => {
     try {
@@ -166,7 +178,7 @@
         {/if}
 
         <button
-          on:click={resetFilters}
+          onclick={resetFilters}
           class="flex-shrink-0 rounded-md border border-gray-300 px-3 py-2 shadow-sm hover:bg-gray-50"
         >
           Reset
@@ -189,8 +201,8 @@
                 <div class="border-t border-gray-200 first:border-t-0">
                   <div 
                     class="cursor-pointer px-4 py-4 transition-colors hover:bg-blue-50"
-                    on:click={() => showEndpointDetail(endpoint)}
-                    on:keydown={(e) => e.key === 'Enter' && showEndpointDetail(endpoint)}
+                    onclick={() => showEndpointDetail(endpoint)}
+                    onkeydown={(e) => e.key === 'Enter' && showEndpointDetail(endpoint)}
                     role="button"
                     tabindex="0"
                   >
@@ -219,8 +231,8 @@
                             {#each endpoint.tags as tag (tag)}
                               <span
                                 class="inline-flex cursor-pointer items-center rounded bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 hover:bg-blue-200"
-                                on:click|stopPropagation={() => (selectedTag = tag)}
-                                on:keydown|stopPropagation={(e) => e.key === 'Enter' && (selectedTag = tag)}
+                                onclick={stopPropagation(() => (selectedTag = tag))}
+                                onkeydown={stopPropagation((e) => e.key === 'Enter' && (selectedTag = tag))}
                                 tabindex="0"
                                 role="button"
                               >
@@ -251,5 +263,5 @@
 <EndpointDetails
   bind:isOpen={showEndpointDetails}
   endpoint={selectedEndpoint}
-  on:close={closeEndpointDetails}
+  onClose={closeEndpointDetails}
 />

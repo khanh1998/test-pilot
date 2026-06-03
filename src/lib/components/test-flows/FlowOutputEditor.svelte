@@ -1,39 +1,66 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+    
   import type { FlowOutput } from './types';
 
-  export let isOpen = false;
-  export let isMounted = false;
-  export let outputs: FlowOutput[] = [];
   
-  // Add props for displaying output results
-  export let outputResults: Record<string, unknown> = {}; // Results from last execution
-  export let executionError: unknown = null; // Error from last execution
-  export let hasExecutionData: boolean = false; // Whether we have execution data to show
+  
+  interface Props {
+    [key: string]: unknown;
+    isOpen?: boolean;
+    isMounted?: boolean;
+    outputs?: FlowOutput[];
+    // Add props for displaying output results
+    outputResults?: Record<string, unknown>; // Results from last execution
+    executionError?: unknown; // Error from last execution
+    hasExecutionData?: boolean; // Whether we have execution data to show
+  }
 
-  const dispatch = createEventDispatcher();
+  let {
+    isOpen = false,
+    isMounted = false,
+    outputs = [],
+    outputResults = {},
+    executionError = null,
+    hasExecutionData = false
+  , ...callbackProps
+  }: Props & Record<string, unknown> = $props();
+
+  function dispatch(eventName: string, detail?: unknown) {
+    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === "function") {
+      if (arguments.length > 1) {
+        handler(detail);
+      } else {
+        handler();
+      }
+    }
+  }
 
   // Output editor state
-  let localOutputs: FlowOutput[] = [];
-  let editingOutputIndex: number | null = null;
-  let newOutput: FlowOutput = { name: '', description: '', value: '', isTemplate: false, type: 'string', castToType: false };
+  let localOutputs: FlowOutput[] = $state([]);
+  let editingOutputIndex: number | null = $state(null);
+  let newOutput: FlowOutput = $state({ name: '', description: '', value: '', isTemplate: false, type: 'string', castToType: false });
   
   // UI state for showing/hiding results
-  let showResults = false;
+  let showResults = $state(false);
 
   // Initialize state when component mounts
-  $: if (isMounted) {
-    localOutputs = [...(outputs || [])].map(output => ({
-      ...output,
-      type: output.type || 'string',
-      castToType: output.castToType || false
-    }));
-  }
+  $effect(() => {
+    if (isMounted) {
+      localOutputs = [...(outputs || [])].map(output => ({
+        ...output,
+        type: output.type || 'string',
+        castToType: output.castToType || false
+      }));
+    }
+  });
 
   // Auto-show results if we have execution data
-  $: if (hasExecutionData && (Object.keys(outputResults).length > 0 || executionError)) {
-    showResults = true;
-  }
+  $effect(() => {
+    if (hasExecutionData && (Object.keys(outputResults).length > 0 || executionError)) {
+      showResults = true;
+    }
+  });
 
   // Save changes from output editor
   function saveOutputChanges() {
@@ -153,7 +180,7 @@
   class="fixed inset-0 z-40 flex justify-end transition-opacity duration-200 ease-in-out {isOpen
     ? 'opacity-100'
     : 'pointer-events-none opacity-0'}"
-  on:keydown={(e) => e.key === 'Escape' && closeOutputEditor()}
+  onkeydown={(e) => e.key === 'Escape' && closeOutputEditor()}
   role="dialog"
   aria-modal="true"
   tabindex="-1"
@@ -161,7 +188,7 @@
   <!-- Transparent overlay for the left side -->
   <div
     class="absolute inset-y-0 right-0 left-0 bg-transparent transition-opacity duration-300 ease-in-out sm:right-[75%] md:right-[700px] lg:right-[600px]"
-    on:click={closeOutputEditor}
+    onclick={closeOutputEditor}
     role="presentation"
     aria-hidden="true"
   ></div>
@@ -183,7 +210,7 @@
       </div>
       <button
         class="rounded-full p-2 text-gray-400 transition-colors hover:bg-gray-200 hover:text-gray-600"
-        on:click={closeOutputEditor}
+        onclick={closeOutputEditor}
         aria-label="Close"
       >
         <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -199,7 +226,7 @@
           class="border-b-2 px-4 py-3 text-sm font-medium transition-colors {!showResults
             ? 'border-blue-500 text-blue-600'
             : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}"
-          on:click={() => (showResults = false)}
+          onclick={() => (showResults = false)}
         >
           <div class="flex items-center">
             <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -214,7 +241,7 @@
             class="border-b-2 px-4 py-3 text-sm font-medium transition-colors {showResults
               ? 'border-blue-500 text-blue-600'
               : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}"
-            on:click={() => (showResults = true)}
+            onclick={() => (showResults = true)}
           >
             <div class="flex items-center">
               <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -335,14 +362,14 @@
                   <button
                     type="button"
                     class="inline-flex items-center rounded-md border border-transparent bg-blue-600 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                    on:click={updateOutput}
+                    onclick={updateOutput}
                   >
                     Update Output
                   </button>
                   <button
                     type="button"
                     class="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                    on:click={cancelEdit}
+                    onclick={cancelEdit}
                   >
                     Cancel
                   </button>
@@ -350,7 +377,7 @@
                   <button
                     type="button"
                     class="inline-flex items-center rounded-md border border-transparent bg-blue-600 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                    on:click={addOutput}
+                    onclick={addOutput}
                   >
                     Add Output
                   </button>
@@ -418,7 +445,7 @@
                       <div class="ml-4 flex gap-2">
                         <button
                           class="text-blue-600 hover:text-blue-800"
-                          on:click={() => editOutput(index)}
+                          onclick={() => editOutput(index)}
                           aria-label="Edit output"
                         >
                           <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -427,7 +454,7 @@
                         </button>
                         <button
                           class="text-red-600 hover:text-red-800"
-                          on:click={() => removeOutput(index)}
+                          onclick={() => removeOutput(index)}
                           aria-label="Remove output"
                         >
                           <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -511,13 +538,13 @@
       <div class="flex justify-end gap-3">
         <button
           class="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-          on:click={closeOutputEditor}
+          onclick={closeOutputEditor}
         >
           Cancel
         </button>
         <button
           class="inline-flex items-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-          on:click={saveOutputChanges}
+          onclick={saveOutputChanges}
         >
           Save Changes
         </button>

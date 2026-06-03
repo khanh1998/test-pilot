@@ -1,12 +1,28 @@
 <script lang="ts">
   import type { FlowOutput } from './types';
-  import { createEventDispatcher } from 'svelte';
+  
 
-  // Props
-  export let outputs: FlowOutput[] = [];
-  export let isRunning: boolean = false;
+  
+  interface Props {
+    [key: string]: unknown;
+    // Props
+    outputs?: FlowOutput[];
+    isRunning?: boolean;
+  }
 
-  const dispatch = createEventDispatcher();
+  let { outputs = [], isRunning = false , ...callbackProps
+  }: Props & Record<string, unknown> = $props();
+
+  function dispatch(eventName: string, detail?: unknown) {
+    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === "function") {
+      if (arguments.length > 1) {
+        handler(detail);
+      } else {
+        handler();
+      }
+    }
+  }
 
   function openOutputEditor() {
     dispatch('openOutputEditor');
@@ -40,7 +56,7 @@
     
     <button
       class="inline-flex items-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-      on:click={openOutputEditor}
+      onclick={openOutputEditor}
       disabled={isRunning}
     >
       <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

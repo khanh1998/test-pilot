@@ -10,6 +10,7 @@
 
   // Props
   interface Props {
+    [key: string]: unknown;
     children: Snippet;
     breadcrumbOverrides?: { segment: string; name: string }[];
   }
@@ -83,36 +84,45 @@
       name: 'Modules',
       href: '/projects/modules',
       icon: 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4'
+    },
+    {
+      name: 'Agents',
+      href: '/projects/agents/setup',
+      icon: 'M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z'
     }
   ];
 
   // Check if current route is active
   function isActiveRoute(href: string): boolean {
-    return $page.url.pathname === href;
+    return (
+      $page.url.pathname === href ||
+      $page.url.pathname.startsWith(`${href}/`) ||
+      (href.startsWith('/projects/agents') && $page.url.pathname.startsWith('/projects/agents'))
+    );
   }
 
   // Generate breadcrumb items based on current path
   function generateBreadcrumbs() {
     const path = $page.url.pathname;
     const segments = path.split('/').filter(Boolean);
-    
+
     const breadcrumbs = [];
 
     // Skip the projects segment (index 0) and start from meaningful segments
     if (segments.length > 1) {
       let currentPath = '';
-      
+
       for (let i = 1; i < segments.length; i++) {
         currentPath += '/' + segments[i];
         const fullPath = '/projects' + currentPath;
         const isLast = i === segments.length - 1;
-        
+
         // Map segment names to display names
         let displayName = segments[i];
         let href = fullPath;
-        
+
         // Check for override first
-        const override = breadcrumbOverrides.find(o => o.segment === segments[i]);
+        const override = breadcrumbOverrides.find((o) => o.segment === segments[i]);
         if (override) {
           displayName = override.name;
         } else {
@@ -131,6 +141,18 @@
               break;
             case 'test-flows':
               displayName = 'Test Flows';
+              break;
+            case 'agents':
+              displayName = 'Agents';
+              break;
+            case 'setup':
+              displayName = 'MCP Setup';
+              break;
+            case 'tokens':
+              displayName = 'Tokens';
+              break;
+            case 'guidelines':
+              displayName = 'Guidelines';
               break;
             case 'generate':
               displayName = 'Generate Flow';
@@ -164,7 +186,7 @@
               }
           }
         }
-        
+
         breadcrumbs.push({
           name: displayName,
           href: href,
@@ -172,7 +194,7 @@
         });
       }
     }
-    
+
     // If we're on the main dashboard page or no breadcrumbs were generated, return empty array
     // This will hide the breadcrumb bar on the main dashboard
     return breadcrumbs;
@@ -183,7 +205,11 @@
 
 <div class="flex h-screen bg-gray-100">
   <!-- Sidebar -->
-  <div class="relative flex flex-col {sidebarOpen ? 'w-64' : 'w-16'} bg-gray-900 transition-all duration-300 ease-in-out">
+  <div
+    class="relative flex flex-col {sidebarOpen
+      ? 'w-64'
+      : 'w-16'} bg-gray-900 transition-all duration-300 ease-in-out"
+  >
     <!-- Sidebar header -->
     <div class="flex h-16 flex-shrink-0 items-center justify-between bg-gray-900 px-4">
       {#if sidebarOpen}
@@ -194,31 +220,47 @@
       <button
         type="button"
         onclick={toggleSidebar}
-        class="flex h-8 w-8 items-center justify-center rounded-md text-gray-400 hover:bg-gray-800 hover:text-white focus:outline-none focus:ring-2 focus:ring-white"
+        class="flex h-8 w-8 items-center justify-center rounded-md text-gray-400 hover:bg-gray-800 hover:text-white focus:ring-2 focus:ring-white focus:outline-none"
         aria-label="Toggle sidebar"
       >
         <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           {#if sidebarOpen}
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M11 19l-7-7 7-7m8 14l-7-7 7-7"
+            />
           {:else}
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M13 5l7 7-7 7M5 5l7 7-7 7"
+            />
           {/if}
         </svg>
       </button>
     </div>
 
     <!-- Project Selector -->
-    <div 
-      class="px-4 py-2 relative"
+    <div
+      class="relative px-4 py-2"
       role="region"
       aria-label="Project selector"
-      onmouseenter={() => { if (!sidebarOpen) hoveredItem = 'Project Selector'; }}
-      onmouseleave={() => hoveredItem = null}
+      onmouseenter={() => {
+        if (!sidebarOpen) hoveredItem = 'Project Selector';
+      }}
+      onmouseleave={() => (hoveredItem = null)}
     >
       <ProjectSelector isCollapsed={!sidebarOpen} />
       {#if !sidebarOpen && hoveredItem === 'Project Selector'}
-        <div class="absolute left-full top-1/2 transform -translate-y-1/2 ml-1 bg-gray-800 text-gray-200 text-sm px-3 py-2 rounded-md shadow-xl border border-gray-700 whitespace-nowrap z-50 transition-all duration-200">
-          <div class="absolute left-0 top-1/2 transform -translate-y-1/2 -translate-x-1 w-2 h-2 bg-gray-800 border-l border-t border-gray-700 rotate-45"></div>
+        <div
+          class="absolute top-1/2 left-full z-50 ml-1 -translate-y-1/2 transform rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm whitespace-nowrap text-gray-200 shadow-xl transition-all duration-200"
+        >
+          <div
+            class="absolute top-1/2 left-0 h-2 w-2 -translate-x-1 -translate-y-1/2 rotate-45 transform border-t border-l border-gray-700 bg-gray-800"
+          ></div>
           Project Selector
         </div>
       {/if}
@@ -230,14 +272,22 @@
         <div class="relative" role="presentation">
           <a
             href={item.href}
-            onmouseenter={() => { if (!sidebarOpen) hoveredItem = item.name; }}
-            onmouseleave={() => hoveredItem = null}
-            class="group flex items-center rounded-md px-2 py-2 text-sm font-medium transition-colors duration-200 {isActiveRoute(item.href)
+            onmouseenter={() => {
+              if (!sidebarOpen) hoveredItem = item.name;
+            }}
+            onmouseleave={() => (hoveredItem = null)}
+            class="group flex items-center rounded-md px-2 py-2 text-sm font-medium transition-colors duration-200 {isActiveRoute(
+              item.href
+            )
               ? 'bg-gray-800 text-white'
-              : 'text-gray-300 hover:bg-gray-700 hover:text-white'} {!sidebarOpen ? 'justify-center' : ''}"
+              : 'text-gray-300 hover:bg-gray-700 hover:text-white'} {!sidebarOpen
+              ? 'justify-center'
+              : ''}"
           >
             <svg
-              class="{sidebarOpen ? 'mr-3' : ''} h-5 w-5 flex-shrink-0 {isActiveRoute(item.href) ? 'text-white' : 'text-gray-400 group-hover:text-white'}"
+              class="{sidebarOpen ? 'mr-3' : ''} h-5 w-5 flex-shrink-0 {isActiveRoute(item.href)
+                ? 'text-white'
+                : 'text-gray-400 group-hover:text-white'}"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -249,8 +299,12 @@
             {/if}
           </a>
           {#if !sidebarOpen && hoveredItem === item.name}
-            <div class="absolute left-full top-1/2 transform -translate-y-1/2 ml-3 bg-gray-800 text-gray-200 text-sm px-3 py-2 rounded-md shadow-xl border border-gray-700 whitespace-nowrap z-50 transition-all duration-200">
-              <div class="absolute left-0 top-1/2 transform -translate-y-1/2 -translate-x-1 w-2 h-2 bg-gray-800 border-l border-t border-gray-700 rotate-45"></div>
+            <div
+              class="absolute top-1/2 left-full z-50 ml-3 -translate-y-1/2 transform rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm whitespace-nowrap text-gray-200 shadow-xl transition-all duration-200"
+            >
+              <div
+                class="absolute top-1/2 left-0 h-2 w-2 -translate-x-1 -translate-y-1/2 rotate-45 transform border-t border-l border-gray-700 bg-gray-800"
+              ></div>
               {item.name}
             </div>
           {/if}
@@ -280,12 +334,17 @@
           <button
             type="button"
             onclick={handleSignOut}
-            class="flex h-8 w-8 items-center justify-center rounded-md bg-red-600 text-white hover:bg-red-500 focus:outline-none focus:ring-2 focus:ring-white"
+            class="flex h-8 w-8 items-center justify-center rounded-md bg-red-600 text-white hover:bg-red-500 focus:ring-2 focus:ring-white focus:outline-none"
             title="Sign out"
             aria-label="Sign out"
           >
             <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+              />
             </svg>
           </button>
         {/if}
@@ -303,16 +362,24 @@
             {#each breadcrumbs as crumb, index}
               <li class="flex items-center">
                 {#if index > 0}
-                  <svg class="mr-2 h-4 w-4 flex-shrink-0 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 111.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+                  <svg
+                    class="mr-2 h-4 w-4 flex-shrink-0 text-gray-400"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                  >
+                    <path
+                      fill-rule="evenodd"
+                      d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 111.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
+                      clip-rule="evenodd"
+                    />
                   </svg>
                 {/if}
                 {#if crumb.isLast}
                   <span class="text-sm font-medium text-gray-900">{crumb.name}</span>
                 {:else}
-                  <a 
-                    href={crumb.href} 
-                    class="text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors duration-150"
+                  <a
+                    href={crumb.href}
+                    class="text-sm font-medium text-gray-500 transition-colors duration-150 hover:text-gray-700"
                   >
                     {crumb.name}
                   </a>
@@ -324,8 +391,6 @@
       </div>
     {/if}
 
-
-
     <!-- Page content -->
     <main class="flex-1 overflow-y-auto bg-white">
       <div class="h-full">
@@ -336,7 +401,7 @@
 </div>
 
 {#if error}
-  <div class="fixed bottom-4 right-4 rounded-md bg-red-50 p-4 shadow-lg">
+  <div class="fixed right-4 bottom-4 rounded-md bg-red-50 p-4 shadow-lg">
     <div class="flex">
       <div class="ml-3">
         <h3 class="text-sm font-medium text-red-800">Error</h3>
@@ -348,11 +413,15 @@
         <button
           type="button"
           onclick={() => (error = null)}
-          class="inline-flex rounded-md bg-red-50 p-1.5 text-red-500 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-600 focus:ring-offset-2 focus:ring-offset-red-50"
+          class="inline-flex rounded-md bg-red-50 p-1.5 text-red-500 hover:bg-red-100 focus:ring-2 focus:ring-red-600 focus:ring-offset-2 focus:ring-offset-red-50 focus:outline-none"
           aria-label="Dismiss error"
         >
           <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+            <path
+              fill-rule="evenodd"
+              d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+              clip-rule="evenodd"
+            />
           </svg>
         </button>
       </div>

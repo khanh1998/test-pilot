@@ -1,38 +1,67 @@
 <script lang="ts">
-  import type { Endpoint, StepEndpoint, ExecutionState } from './types';
+    import type { Endpoint, StepEndpoint, ExecutionState } from './types';
   import type { ApiEndpoint } from '$lib/types/api';
   import { getEndpointDisplayId } from './utils';
   import EndpointDetails from '$lib/components/apis/EndpointDetails.svelte';
 
-  export let endpoint: Endpoint;
-  export let stepEndpoint: StepEndpoint;
-  export let endpointIndex: number;
-  // stepIndex not directly used in this component, but needed for event handlers
-  export let stepIndex: number;
-  export let executionState: ExecutionState = {};
-  export let duplicateCount: number = 1;
-  export let instanceIndex: number = 1;
-  export let apiHosts: Record<string | number, { url: string; name?: string; description?: string }> = {};
-  export let isDragging: boolean = false;
-  export let isDropTarget: boolean = false;
+  
 
   // Emitted events will be handled by the parent component
-  import { createEventDispatcher } from 'svelte';
-  const dispatch = createEventDispatcher();
+
+  function dispatch(eventName: string, detail?: unknown) {
+    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === "function") {
+      if (arguments.length > 1) {
+        handler(detail);
+      } else {
+        handler();
+      }
+    }
+  }
 
   // State for endpoint details panel
-  let showEndpointDetails = false;
-  let selectedEndpoint: ApiEndpoint | null = null;
+  let showEndpointDetails = $state(false);
+  let selectedEndpoint: ApiEndpoint | null = $state(null);
 
-  // Additional prop for step ID
-  export let stepId: string;
+  
+  interface Props {
+    [key: string]: unknown;
+    endpoint: Endpoint;
+    stepEndpoint: StepEndpoint;
+    endpointIndex: number;
+    // stepIndex not directly used in this component, but needed for event handlers
+    stepIndex: number;
+    executionState?: ExecutionState;
+    duplicateCount?: number;
+    instanceIndex?: number;
+    apiHosts?: Record<string | number, { url: string; name?: string; description?: string }>;
+    isDragging?: boolean;
+    isDropTarget?: boolean;
+    // Additional prop for step ID
+    stepId: string;
+  }
+
+  let {
+    endpoint,
+    stepEndpoint,
+    endpointIndex,
+    stepIndex,
+    executionState = {},
+    duplicateCount = 1,
+    instanceIndex = 1,
+    apiHosts = {},
+    isDragging = false,
+    isDropTarget = false,
+    stepId
+  , ...callbackProps
+  }: Props & Record<string, unknown> = $props();
 
   // Generate a unique ID for this endpoint instance
   // Use the stepId-endpointIndex format that matches FlowRunner.svelte
   const endpointDisplayId = `${stepId}-${endpointIndex}`;
 
   // Create reactive derived values to ensure the component updates when executionState changes
-  $: {
+  $effect(() => {
     // Log when executionState changes to help debug reactivity issues
     if (process.env.NODE_ENV === 'development') {
       console.debug(
@@ -40,28 +69,28 @@
         executionState[endpointDisplayId]
       );
     }
-  }
+  });
 
-  $: currentExecutionState = executionState[endpointDisplayId] || {};
-  $: executionStatus = currentExecutionState?.status;
-  $: executionResponse = currentExecutionState?.response;
-  $: executionTiming = currentExecutionState?.timing || null;
-  $: transformationResults = currentExecutionState?.transformations || {};
+  let currentExecutionState = $derived(executionState[endpointDisplayId] || {});
+  let executionStatus = $derived(currentExecutionState?.status);
+  let executionResponse = $derived(currentExecutionState?.response);
+  let executionTiming = $derived(currentExecutionState?.timing || null);
+  let transformationResults = $derived(currentExecutionState?.transformations || {});
 
   // Check if an endpoint is currently running
-  $: isRunning = executionStatus === 'running';
+  let isRunning = $derived(executionStatus === 'running');
 
   // Check if an endpoint has completed execution
-  $: isCompleted = executionStatus === 'completed';
+  let isCompleted = $derived(executionStatus === 'completed');
 
   // Check if an endpoint has failed
-  $: isFailed = executionStatus === 'failed';
+  let isFailed = $derived(executionStatus === 'failed');
 
   // Check if transformation results are available
-  $: hasTransformationResults = Object.keys(transformationResults).length > 0;
+  let hasTransformationResults = $derived(Object.keys(transformationResults).length > 0);
 
   // Get the response status code for an endpoint
-  $: statusCode = executionResponse?.status || null;
+  let statusCode = $derived(executionResponse?.status || null);
 
   // Get a stylized class for the response status
   function getResponseStatusClass(): string {
@@ -166,11 +195,11 @@
   role="button"
   tabindex="0"
   aria-label="Endpoint card for {endpoint.method} {endpoint.path}. Drag to reorder or use Ctrl+Arrow keys."
-  on:dragstart={handleDragStart}
-  on:dragend={handleDragEnd}
-  on:dragover={handleDragOver}
-  on:drop={handleDrop}
-  on:keydown={handleKeyDown}
+  ondragstart={handleDragStart}
+  ondragend={handleDragEnd}
+  ondragover={handleDragOver}
+  ondrop={handleDrop}
+  onkeydown={handleKeyDown}
 >
   <div class="mb-2 flex items-start justify-between">
     <div class="flex items-center flex-1 min-w-0">
@@ -208,7 +237,7 @@
       <!-- Small info button to show endpoint details -->
       <button
         class="text-gray-400 hover:text-blue-600 transition-colors p-0.5 rounded-full hover:bg-blue-50"
-        on:click={showEndpointDetail}
+        onclick={showEndpointDetail}
         aria-label="View endpoint details"
         title="View endpoint details"
       >
@@ -218,7 +247,7 @@
       </button>
       <button
         class="text-red-500 hover:text-red-700 p-0.5"
-        on:click={removeEndpoint}
+        onclick={removeEndpoint}
         aria-label="Remove endpoint"
       >
         <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
@@ -281,7 +310,7 @@
     <div class="mb-1 grid grid-cols-2 gap-1">
       <button
         class="flex items-center justify-center rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-xs text-blue-700 transition-colors hover:bg-blue-100"
-        on:click={openParamEditor}
+        onclick={openParamEditor}
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -305,7 +334,7 @@
         class="flex items-center justify-center rounded border px-1.5 py-0.5 text-xs {executionResponse
           ? 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100'
           : 'border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100'} transition-colors"
-        on:click={openResponseViewer}
+        onclick={openResponseViewer}
         disabled={!executionResponse}
         title={executionResponse
           ? 'View complete request and response details'
@@ -333,7 +362,7 @@
         class="flex items-center justify-center rounded border px-1.5 py-0.5 text-xs transition-colors {hasTransformationResults
           ? 'border-purple-300 bg-purple-100 text-purple-800 hover:bg-purple-200'
           : 'border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100'}"
-        on:click={openTransformationEditor}
+        onclick={openTransformationEditor}
         title={hasTransformationResults
           ? `Transform results available (${Object.keys(transformationResults).length} aliases)`
           : 'Configure response transformations'}
@@ -358,7 +387,7 @@
       <!-- Assertion Editor Button -->
       <button
         class="flex items-center justify-center rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-xs text-amber-700 transition-colors hover:bg-amber-100"
-        on:click={openAssertionEditor}
+        onclick={openAssertionEditor}
       >
         <svg 
           xmlns="http://www.w3.org/2000/svg" 
@@ -527,5 +556,5 @@
 <EndpointDetails
   bind:isOpen={showEndpointDetails}
   endpoint={selectedEndpoint}
-  on:close={closeEndpointDetails}
+  onClose={closeEndpointDetails}
 />

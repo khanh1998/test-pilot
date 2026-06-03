@@ -1,5 +1,5 @@
 <script lang="ts">
-  import ApiEndpoints from '$lib/components/apis/ApiEndpoints.svelte';
+    import ApiEndpoints from '$lib/components/apis/ApiEndpoints.svelte';
   import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
@@ -18,15 +18,15 @@
     endpointCount: number;
   };
 
-  $: apiId = parseInt($page.params.id || '0');
+  let apiId = $derived(parseInt($page.params.id || '0'));
 
-  let apiName = '';
+  let apiName = $state('');
   let apiDetails: ApiDetails | null = null;
-  let loading = false;
-  let error: string | null = null;
+  let loading = $state(false);
+  let error: string | null = $state(null);
 
   // Confirm dialog state
-  let showConfirmDialog = false;
+  let showConfirmDialog = $state(false);
 
   // Fetch API details on component mount
   // This is done here to get the API name for the header and delete confirmation
@@ -59,9 +59,11 @@
   });
 
   // Call fetchApiDetails when apiId changes or on initial load
-  $: if (apiId) {
-    fetchApiDetails();
-  }
+  $effect(() => {
+    if (apiId) {
+      fetchApiDetails();
+    }
+  });
 
   function goToUpdatePage() {
     goto(`/projects/apis/${apiId}/update`);
@@ -102,7 +104,7 @@
     </div>
     <div class="flex space-x-4">
       <button
-        on:click={goToUpdatePage}
+        onclick={goToUpdatePage}
         class="flex items-center space-x-2 rounded bg-yellow-500 px-4 py-2 text-white hover:bg-yellow-600"
       >
         <svg
@@ -122,7 +124,7 @@
         Update API
       </button>
       <button
-        on:click={deleteApi}
+        onclick={deleteApi}
         disabled={loading}
         class="flex items-center space-x-2 rounded bg-red-500 px-4 py-2 text-white hover:bg-red-600 disabled:opacity-50"
       >
@@ -179,6 +181,6 @@
   confirmText="Delete"
   cancelText="Cancel"
   confirmVariant="danger"
-  on:confirm={confirmDeleteApi}
-  on:cancel={cancelDeleteApi}
+  onConfirm={confirmDeleteApi}
+  onCancel={cancelDeleteApi}
 />

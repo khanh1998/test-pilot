@@ -1,8 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
-import { verifyToken } from '$lib/server/middleware/auth';
-import { verifyAuthToken, verifySupabaseAuthToken } from '$lib/server/service/auth/authentication';
+import { AgentTokenService } from '$lib/server/service/agents/agent_token_service';
 import { createTestPilotMcpServer, type McpAuthContext } from '../../../mcp/app';
 
 interface McpSession {
@@ -11,6 +10,7 @@ interface McpSession {
 }
 
 const transports = new Map<string, McpSession>();
+const agentTokenService = new AgentTokenService();
 
 function jsonError(status: number, message: string): Response {
   return Response.json(
@@ -32,7 +32,10 @@ export async function handleMcpRequest(request: Request): Promise<Response> {
     const sessionId = request.headers.get('mcp-session-id');
 
     if (request.method === 'POST') {
-      const parsedBody = await request.clone().json().catch(() => undefined);
+      const parsedBody = await request
+        .clone()
+        .json()
+        .catch(() => undefined);
 
       if (sessionId && transports.has(sessionId)) {
         const session = transports.get(sessionId)!;
@@ -100,34 +103,29 @@ export async function handleMcpRequest(request: Request): Promise<Response> {
 async function authenticateMcpRequest(request: Request): Promise<McpAuthContext> {
   const authHeader = request.headers.get('authorization');
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    throw new Error('Unauthorized: Missing or invalid bearer token');
+    throw new Error('Unauthorized: Missing or invalid agent token');
   }
 
   const token = authHeader.slice('Bearer '.length).trim();
   if (!token) {
-    throw new Error('Unauthorized: Missing or invalid bearer token');
+    throw new Error('Unauthorized: Missing or invalid agent token');
   }
 
-  const decoded = verifyToken(token);
-  if (decoded?.userId) {
-    const { user } = await verifyAuthToken(token);
+  try {
+    const authContext = await agentTokenService.authenticateToken(token);
     return {
-      userId: user.id,
-      email: user.email,
-      name: user.name ?? undefined
+      userId: authContext.userId,
+      agentTokenId: authContext.tokenId,
+      email: authContext.email,
+      name: authContext.name
     };
+  } catch {
+    throw new Error('Unauthorized: Invalid or expired agent token');
   }
-
-  const { user } = await verifySupabaseAuthToken(token);
-  return {
-    userId: user.id,
-    email: user.email,
-    name: user.name ?? undefined
-  };
 }
 
 function ensureAuthorizedForSession(auth: McpAuthContext, session: McpSession): void {
-  if (auth.userId !== session.auth.userId) {
-    throw new Error('Forbidden: MCP session belongs to a different user');
+  if (auth.userId !== session.auth.userId || auth.agentTokenId !== session.auth.agentTokenId) {
+    throw new Error('Forbidden: MCP session belongs to a different agent token');
   }
 }

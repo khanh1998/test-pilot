@@ -6,6 +6,7 @@ export interface Project {
   id: number;
   name: string;
   description: string | null;
+  agentContext?: string | null;
   userId: number;
   projectJson: any;
   createdAt: string;
@@ -30,7 +31,7 @@ const SELECTED_PROJECT_KEY = 'test-pilot-selected-project-id';
 // This allows users to return to their last selected project when reopening the app
 function getStoredProjectId(): number | null {
   if (!browser) return null;
-  
+
   try {
     const stored = localStorage.getItem(SELECTED_PROJECT_KEY);
     return stored ? parseInt(stored, 10) : null;
@@ -42,7 +43,7 @@ function getStoredProjectId(): number | null {
 
 function setStoredProjectId(projectId: number | null): void {
   if (!browser) return;
-  
+
   try {
     if (projectId === null) {
       localStorage.removeItem(SELECTED_PROJECT_KEY);
@@ -66,50 +67,50 @@ function createProjectStore() {
 
   return {
     subscribe,
-    
+
     // Load user's projects
     async loadProjects() {
-      update(state => ({ ...state, isLoading: true, error: null }));
-      
+      update((state) => ({ ...state, isLoading: true, error: null }));
+
       try {
         const response = await fetchWithAuth('/api/projects');
-        
+
         if (!response.ok) {
           throw new Error('Failed to load projects');
         }
-        
+
         const data: ProjectListResponse = await response.json();
         const projects: Project[] = data.projects || [];
-        
+
         // Try to restore previously selected project from localStorage
         const storedProjectId = getStoredProjectId();
         let selectedProject: Project | null = null;
-        
+
         if (storedProjectId) {
           // Find the stored project in the loaded projects
-          selectedProject = projects.find(p => p.id === storedProjectId) || null;
+          selectedProject = projects.find((p) => p.id === storedProjectId) || null;
         }
-        
+
         // Fallback to first project if no stored selection or stored project not found
         if (!selectedProject && projects.length > 0) {
           selectedProject = projects[0];
         }
-        
+
         // Store the selected project ID (could be from fallback)
         if (selectedProject) {
           setStoredProjectId(selectedProject.id);
         }
-        
-        update(state => ({
+
+        update((state) => ({
           ...state,
           projects,
           selectedProject,
           isLoading: false
         }));
-        
+
         return data;
       } catch (error: any) {
-        update(state => ({
+        update((state) => ({
           ...state,
           isLoading: false,
           error: error.message || 'Failed to load projects'
@@ -122,8 +123,8 @@ function createProjectStore() {
     selectProject(project: Project | null) {
       // Store selection in localStorage
       setStoredProjectId(project?.id || null);
-      
-      update(state => ({
+
+      update((state) => ({
         ...state,
         selectedProject: project
       }));
@@ -132,7 +133,7 @@ function createProjectStore() {
     // Clear project selection
     clearSelection() {
       setStoredProjectId(null);
-      update(state => ({
+      update((state) => ({
         ...state,
         selectedProject: null
       }));
@@ -141,31 +142,31 @@ function createProjectStore() {
     // Get selected project ID (helper)
     getSelectedProjectId(): number | null {
       let selectedId: number | null = null;
-      
+
       // Get current state synchronously
-      subscribe(state => {
+      subscribe((state) => {
         selectedId = state.selectedProject?.id || null;
       })();
-      
+
       return selectedId;
     },
 
     // Restore selected project from localStorage (useful for app initialization)
     restoreSelectedProject() {
       const storedProjectId = getStoredProjectId();
-      
+
       if (storedProjectId) {
         // Find and select the stored project if it exists in current projects
-        update(state => {
-          const storedProject = state.projects.find(p => p.id === storedProjectId);
-          
+        update((state) => {
+          const storedProject = state.projects.find((p) => p.id === storedProjectId);
+
           if (storedProject && state.selectedProject?.id !== storedProject.id) {
             return {
               ...state,
               selectedProject: storedProject
             };
           }
-          
+
           return state;
         });
       }
@@ -192,9 +193,9 @@ function createProjectStore() {
         }
 
         const { project } = await response.json();
-        
+
         // Add to store and auto-select the new project
-        update(state => ({
+        update((state) => ({
           ...state,
           projects: [...state.projects, project],
           selectedProject: project
@@ -205,7 +206,7 @@ function createProjectStore() {
 
         return project;
       } catch (error: any) {
-        update(state => ({
+        update((state) => ({
           ...state,
           error: error.message || 'Failed to create project'
         }));
@@ -215,14 +216,17 @@ function createProjectStore() {
 
     // Add new project to local store (used when project is created elsewhere)
     addProject(project: Project) {
-      update(state => ({
+      update((state) => ({
         ...state,
         projects: [...state.projects, project]
       }));
     },
 
     // Update project via API
-    async updateProject(projectId: number, projectData: { name?: string; description?: string }) {
+    async updateProject(
+      projectId: number,
+      projectData: { name?: string; description?: string; agentContext?: string | null }
+    ) {
       try {
         const response = await fetchWithAuth(`/api/projects/${projectId}`, {
           method: 'PUT',
@@ -235,21 +239,18 @@ function createProjectStore() {
         }
 
         const { project } = await response.json();
-        
+
         // Update in store
-        update(state => ({
+        update((state) => ({
           ...state,
-          projects: state.projects.map(p => 
-            p.id === project.id ? project : p
-          ),
-          selectedProject: state.selectedProject?.id === project.id 
-            ? project 
-            : state.selectedProject
+          projects: state.projects.map((p) => (p.id === project.id ? project : p)),
+          selectedProject:
+            state.selectedProject?.id === project.id ? project : state.selectedProject
         }));
 
         return project;
       } catch (error: any) {
-        update(state => ({
+        update((state) => ({
           ...state,
           error: error.message || 'Failed to update project'
         }));
@@ -259,14 +260,11 @@ function createProjectStore() {
 
     // Update project in local store (used when project is updated elsewhere)
     updateProjectLocal(updatedProject: Project) {
-      update(state => ({
+      update((state) => ({
         ...state,
-        projects: state.projects.map(p => 
-          p.id === updatedProject.id ? updatedProject : p
-        ),
-        selectedProject: state.selectedProject?.id === updatedProject.id 
-          ? updatedProject 
-          : state.selectedProject
+        projects: state.projects.map((p) => (p.id === updatedProject.id ? updatedProject : p)),
+        selectedProject:
+          state.selectedProject?.id === updatedProject.id ? updatedProject : state.selectedProject
       }));
     },
 
@@ -281,20 +279,20 @@ function createProjectStore() {
           const errorData = await response.json();
           throw new Error(errorData.error || 'Failed to delete project');
         }
-        
+
         // Remove from store
-        update(state => {
-          const projects = state.projects.filter(p => p.id !== projectId);
+        update((state) => {
+          const projects = state.projects.filter((p) => p.id !== projectId);
           const wasSelectedProject = state.selectedProject?.id === projectId;
-          const newSelectedProject = wasSelectedProject 
-            ? projects[0] || null 
+          const newSelectedProject = wasSelectedProject
+            ? projects[0] || null
             : state.selectedProject;
-          
+
           // Update localStorage if the selected project changed
           if (wasSelectedProject) {
             setStoredProjectId(newSelectedProject?.id || null);
           }
-          
+
           return {
             ...state,
             projects,
@@ -304,7 +302,7 @@ function createProjectStore() {
 
         return true;
       } catch (error: any) {
-        update(state => ({
+        update((state) => ({
           ...state,
           error: error.message || 'Failed to delete project'
         }));
@@ -314,18 +312,16 @@ function createProjectStore() {
 
     // Remove project from local store (used when project is deleted elsewhere)
     removeProjectLocal(projectId: number) {
-      update(state => {
-        const projects = state.projects.filter(p => p.id !== projectId);
+      update((state) => {
+        const projects = state.projects.filter((p) => p.id !== projectId);
         const wasSelectedProject = state.selectedProject?.id === projectId;
-        const newSelectedProject = wasSelectedProject 
-          ? projects[0] || null 
-          : state.selectedProject;
-        
+        const newSelectedProject = wasSelectedProject ? projects[0] || null : state.selectedProject;
+
         // Update localStorage if the selected project changed
         if (wasSelectedProject) {
           setStoredProjectId(newSelectedProject?.id || null);
         }
-        
+
         return {
           ...state,
           projects,

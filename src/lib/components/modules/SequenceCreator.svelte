@@ -1,15 +1,27 @@
 <!-- SequenceCreator.svelte - Simple inline sequence creation form -->
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  
 
-  export let isCreating: boolean = false;
+  interface Props {
+    [key: string]: unknown;
+    isCreating?: boolean;
+  }
 
-  const dispatch = createEventDispatcher<{
-    create: { name: string };
-    cancel: void;
-  }>();
+  let { isCreating = $bindable(false) , ...callbackProps
+  }: Props & Record<string, unknown> = $props();
 
-  let sequenceName = '';
+  function dispatch(eventName: string, detail?: unknown) {
+    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === "function") {
+      if (arguments.length > 1) {
+        handler(detail);
+      } else {
+        handler();
+      }
+    }
+  }
+
+  let sequenceName = $state('');
 
   function handleSubmit() {
     if (sequenceName.trim()) {
@@ -40,7 +52,7 @@
       <div class="flex-1">
         <input
           bind:value={sequenceName}
-          on:keydown={handleKeydown}
+          onkeydown={handleKeydown}
           placeholder="Enter sequence name..."
           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
         />
@@ -48,7 +60,7 @@
       <div class="flex gap-2">
         <button
           type="button"
-          on:click={handleSubmit}
+          onclick={handleSubmit}
           disabled={!sequenceName.trim()}
           class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
         >
@@ -56,7 +68,7 @@
         </button>
         <button
           type="button"
-          on:click={handleCancel}
+          onclick={handleCancel}
           class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 text-sm font-medium"
         >
           Cancel
@@ -67,7 +79,7 @@
 {:else}
   <button
     type="button"
-    on:click={() => (isCreating = true)}
+    onclick={() => (isCreating = true)}
     class="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-400 hover:text-blue-600 transition-colors mb-4 flex items-center justify-center gap-2"
   >
     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

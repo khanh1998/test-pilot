@@ -2,6 +2,7 @@ export interface Project {
   id: number;
   name: string;
   description?: string;
+  agentContext?: string | null;
   userId: number;
   projectJson: ProjectConfig;
   createdAt: Date;
@@ -75,6 +76,7 @@ export interface CreateProjectRequest {
 export interface UpdateProjectRequest {
   name?: string;
   description?: string;
+  agentContext?: string | null;
   projectJson?: ProjectConfig;
 }
 

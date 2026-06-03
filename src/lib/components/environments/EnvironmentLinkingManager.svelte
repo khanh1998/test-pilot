@@ -1,21 +1,39 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  
   import EnvironmentParameterMapper from './EnvironmentParameterMapper.svelte';
   import type { Environment } from '$lib/types/environment';
   import type { EnvironmentMapping, FlowParameter } from '../test-flows/types';
 
-  export let environment: Environment | null = null;
-  export let linkedEnvironment: EnvironmentMapping | null = null;
-  export let flowParameters: FlowParameter[] = [];
-  export let selectedSubEnvironment: string | null = null;
-  export let disabled: boolean = false;
+  interface Props {
+    [key: string]: unknown;
+    environment?: Environment | null;
+    linkedEnvironment?: EnvironmentMapping | null;
+    flowParameters?: FlowParameter[];
+    selectedSubEnvironment?: string | null;
+    disabled?: boolean;
+  }
 
-  const dispatch = createEventDispatcher<{
-    change: { linkedEnvironment: EnvironmentMapping | null };
-    subEnvironmentChange: { environmentId: number; subEnvironment: string };
-  }>();
+  let {
+    environment = null,
+    linkedEnvironment = $bindable(null),
+    flowParameters = [],
+    selectedSubEnvironment = null,
+    disabled = false
+  , ...callbackProps
+  }: Props & Record<string, unknown> = $props();
 
-  let showLinkForm = false;
+  function dispatch(eventName: string, detail?: unknown) {
+    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === "function") {
+      if (arguments.length > 1) {
+        handler(detail);
+      } else {
+        handler();
+      }
+    }
+  }
+
+  let showLinkForm = $state(false);
 
   // Link the environment to the flow
   function handleLinkEnvironment() {
@@ -46,8 +64,8 @@
   }
 
   // Handle parameter mapping changes
-  function handleParameterMappingChange(event: CustomEvent<{ environmentId: number; parameterMappings: Record<string, string> }>) {
-    const { parameterMappings } = event.detail;
+  function handleParameterMappingChange(payload: { environmentId: number; parameterMappings: Record<string, string> }) {
+    const { parameterMappings } = payload;
     
     if (linkedEnvironment) {
       linkedEnvironment = { ...linkedEnvironment, parameterMappings };
@@ -77,7 +95,7 @@
     {#if !showLinkForm && environment && !linkedEnvironment}
       <button
         class="inline-flex items-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-        on:click={() => showLinkForm = true}
+        onclick={() => showLinkForm = true}
         {disabled}
       >
         <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -107,7 +125,7 @@
           <div class="flex space-x-2">
             <button
               class="inline-flex items-center rounded-md border border-transparent bg-blue-600 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-              on:click={handleLinkEnvironment}
+              onclick={handleLinkEnvironment}
               {disabled}
             >
               Link
@@ -115,7 +133,7 @@
             
             <button
               class="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-              on:click={() => {
+              onclick={() => {
                 showLinkForm = false;
               }}
               {disabled}
@@ -128,7 +146,7 @@
         <p class="text-gray-500">No environment configured for this project.</p>
         <button
           class="mt-3 inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
-          on:click={() => showLinkForm = false}
+          onclick={() => showLinkForm = false}
         >
           Cancel
         </button>
@@ -164,7 +182,7 @@
               
               <button
                 class="inline-flex items-center rounded-md border border-red-300 bg-white px-3 py-2 text-sm font-medium text-red-700 shadow-sm hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
-                on:click={handleRemoveEnvironment}
+                onclick={handleRemoveEnvironment}
                 {disabled}
               >
                 <svg class="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -185,7 +203,7 @@
                     class="px-2 py-1 text-xs font-medium rounded transition-colors {selectedSubEnv === subEnv 
                       ? 'bg-blue-600 text-white' 
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}"
-                    on:click={() => handleSubEnvironmentChange(subEnv)}
+                    onclick={() => handleSubEnvironmentChange(subEnv)}
                     {disabled}
                   >
                     {environment.config.environments[subEnv]?.name || subEnv}
@@ -209,7 +227,7 @@
             parameterMappings={linkedEnvironment.parameterMappings}
             selectedSubEnvironment={selectedSubEnv}
             {disabled}
-            on:change={handleParameterMappingChange}
+            onChange={handleParameterMappingChange}
           />
         </div>
       </div>
@@ -238,7 +256,7 @@
               
               <button
                 class="inline-flex items-center rounded-md border border-red-300 bg-white px-3 py-2 text-sm font-medium text-red-700 shadow-sm hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
-                on:click={handleRemoveEnvironment}
+                onclick={handleRemoveEnvironment}
                 {disabled}
               >
                 <svg class="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -263,7 +281,7 @@
             parameterMappings={linkedEnvironment.parameterMappings}
             selectedSubEnvironment={undefined}
             {disabled}
-            on:change={handleParameterMappingChange}
+            onChange={handleParameterMappingChange}
           />
         </div>
       </div>
@@ -281,7 +299,7 @@
         <div class="mt-4">
           <button
             class="inline-flex items-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-            on:click={() => showLinkForm = true}
+            onclick={() => showLinkForm = true}
             {disabled}
           >
             <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

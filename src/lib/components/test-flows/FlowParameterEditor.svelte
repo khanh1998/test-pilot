@@ -1,22 +1,37 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+    
   import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
   import type { FlowParameter } from './types';
 
-  export let isOpen = false;
-  export let parameters: FlowParameter[] = [];
-  export let currentValues: Record<string, unknown> = {};
+  interface Props {
+    [key: string]: unknown;
+    isOpen?: boolean;
+    parameters?: FlowParameter[];
+    currentValues?: Record<string, unknown>;
+  }
 
-  const dispatch = createEventDispatcher();
+  let { isOpen = false, parameters = [], currentValues = {} , ...callbackProps
+  }: Props & Record<string, unknown> = $props();
 
-  let workingParameters: FlowParameter[] = [];
-  let initialized = false;
+  function dispatch(eventName: string, detail?: unknown) {
+    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === "function") {
+      if (arguments.length > 1) {
+        handler(detail);
+      } else {
+        handler();
+      }
+    }
+  }
 
-  let showConfirmDialog = false;
-  let pendingDeleteIndex: number | null = null;
+  let workingParameters: FlowParameter[] = $state([]);
+  let initialized = $state(false);
 
-  let defaultValueIsNullSet: Record<number, boolean> = {};
-  let defaultValueErrors: Record<string, string> = {};
+  let showConfirmDialog = $state(false);
+  let pendingDeleteIndex: number | null = $state(null);
+
+  let defaultValueIsNullSet: Record<number, boolean> = $state({});
+  let defaultValueErrors: Record<string, string> = $state({});
 
   function createEmptyParameter(): FlowParameter {
     return {
@@ -80,12 +95,14 @@
     return JSON.stringify(value);
   }
 
-  $: if (!initialized) {
-    workingParameters = parameters.map((parameter) => ({ ...parameter }));
-    initializeNullStates(workingParameters);
-    defaultValueErrors = {};
-    initialized = true;
-  }
+  $effect(() => {
+    if (!initialized) {
+      workingParameters = parameters.map((parameter) => ({ ...parameter }));
+      initializeNullStates(workingParameters);
+      defaultValueErrors = {};
+      initialized = true;
+    }
+  });
 
   function addParameter() {
     const nextParameters = [...workingParameters, createEmptyParameter()];
@@ -170,7 +187,7 @@
   class="fixed inset-0 z-40 flex justify-end {isOpen
     ? 'opacity-100'
     : 'pointer-events-none opacity-0'}"
-  on:keydown={(e) => e.key === 'Escape' && closeEditor()}
+  onkeydown={(e) => e.key === 'Escape' && closeEditor()}
   role="dialog"
   aria-modal="true"
   tabindex="-1"
@@ -185,13 +202,13 @@
       <div class="flex items-center space-x-2">
         <button
           class="rounded bg-green-500 px-3 py-1.5 text-sm text-white hover:bg-green-600"
-          on:click={saveAllAndClose}
+          onclick={saveAllAndClose}
         >
           Save All
         </button>
         <button
           class="rounded-full p-2 hover:bg-gray-100"
-          on:click={closeEditor}
+          onclick={closeEditor}
           aria-label="Close parameters panel"
         >
           <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -214,7 +231,7 @@
         </div>
         <button
           class="shrink-0 rounded bg-blue-500 px-3 py-2 text-sm text-white hover:bg-blue-600"
-          on:click={addParameter}
+          onclick={addParameter}
         >
           Add Parameter
         </button>
@@ -271,7 +288,7 @@
                     <select
                       id="param-type-{index}"
                       bind:value={param.type}
-                      on:change={() => handleParameterTypeChange(index)}
+                      onchange={() => handleParameterTypeChange(index)}
                       class="block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
                     >
                       <option value="string">String</option>
@@ -294,7 +311,7 @@
                             <input
                               type="checkbox"
                               checked={Boolean(param.defaultValue)}
-                              on:change={(e) => {
+                              onchange={(e) => {
                                 param.defaultValue = (e.target as HTMLInputElement).checked;
                               }}
                               class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
@@ -314,7 +331,7 @@
                           <textarea
                             id="param-default-{index}"
                             bind:value={param.defaultValue}
-                            on:input={(e) => {
+                            oninput={(e) => {
                               const value = (e.target as HTMLTextAreaElement).value;
                               if (value.trim()) {
                                 validateJsonInput(value, `default-${index}`);
@@ -351,7 +368,7 @@
                         <input
                           type="checkbox"
                           bind:checked={defaultValueIsNullSet[index]}
-                          on:change={() =>
+                          onchange={() =>
                             handleNullToggle(defaultValueIsNullSet[index], param, index)}
                           class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                         />
@@ -390,7 +407,7 @@
                   <div class="flex h-[38px] items-center justify-end">
                     <button
                       class="rounded p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600"
-                      on:click={() => removeParameter(index)}
+                      onclick={() => removeParameter(index)}
                       aria-label="Remove parameter"
                     >
                       <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -422,6 +439,6 @@
   confirmText="Remove"
   cancelText="Cancel"
   confirmVariant="danger"
-  on:confirm={confirmDeleteParameter}
-  on:cancel={cancelDeleteParameter}
+  onConfirm={confirmDeleteParameter}
+  onCancel={cancelDeleteParameter}
 />

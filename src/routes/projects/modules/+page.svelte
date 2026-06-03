@@ -70,10 +70,10 @@
     }
   }
 
-  async function handleCreateModule(event: CustomEvent<{ module: Partial<ProjectModule> }>) {
+  async function handleCreateModule(payload: { module: Partial<ProjectModule> }) {
     if (!selectedProject) return;
 
-    const { module: moduleData } = event.detail;
+    const { module: moduleData } = payload;
 
     try {
       isSubmitting = true;
@@ -98,10 +98,10 @@
     showEditModuleModal = true;
   }
 
-  async function handleUpdateModule(event: CustomEvent<{ module: Partial<ProjectModule> }>) {
+  async function handleUpdateModule(payload: { module: Partial<ProjectModule> }) {
     if (!selectedProject || !editingModule) return;
 
-    const { module: moduleData } = event.detail;
+    const { module: moduleData } = payload;
 
     try {
       isSubmitting = true;
@@ -353,8 +353,8 @@
       <ModuleForm
         isLoading={isSubmitting}
         mode="create"
-        on:submit={handleCreateModule}
-        on:cancel={closeCreateModuleModal}
+        onSubmit={handleCreateModule}
+        onCancel={closeCreateModuleModal}
       />
     </div>
   </div>
@@ -375,8 +375,8 @@
         module={editingModule}
         isLoading={isSubmitting}
         mode="edit"
-        on:submit={handleUpdateModule}
-        on:cancel={closeEditModuleModal}
+        onSubmit={handleUpdateModule}
+        onCancel={closeEditModuleModal}
       />
     </div>
   </div>
@@ -391,7 +391,7 @@
     confirmText="Delete"
     cancelText="Cancel"
     confirmVariant="danger"
-    on:confirm={confirmDeleteModule}
-    on:cancel={cancelDelete}
+    onConfirm={confirmDeleteModule}
+    onCancel={cancelDelete}
   />
 {/if}

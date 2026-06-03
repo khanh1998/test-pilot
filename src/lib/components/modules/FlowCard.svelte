@@ -1,33 +1,56 @@
 <!-- FlowCard.svelte - Compact flow card for sequence rows -->
 <script lang="ts">
-  import type { TestFlow } from '../../types/test-flow.js';
+  function stopPropagation<T extends Event>(handler: (event: T) => unknown) {
+    return (event: T) => {
+      event.stopPropagation();
+      return handler(event);
+    };
+  }
+
+    import type { TestFlow } from '../../types/test-flow.js';
   import type { SequenceFlowResult } from '$lib/sequence-runner/types';
   import type { FlowSequenceStep } from '../../types/flow_sequence.js';
-  import { createEventDispatcher } from 'svelte';
+  
 
-  export let flow: TestFlow;
-  export let stepOrder: number;
-  export let isDragging: boolean = false;
-  export let isDropTarget: boolean = false;
-  export let executionResults: SequenceFlowResult[] = [];
-  export let isFirst: boolean = false;
-  export let isLast: boolean = false;
-  export let isMoving: boolean = false;
-  export let sequenceStep: FlowSequenceStep | undefined = undefined;
+  interface Props {
+    [key: string]: unknown;
+    flow: TestFlow;
+    stepOrder: number;
+    isDragging?: boolean;
+    isDropTarget?: boolean;
+    executionResults?: SequenceFlowResult[];
+    isFirst?: boolean;
+    isLast?: boolean;
+    isMoving?: boolean;
+    sequenceStep?: FlowSequenceStep | undefined;
+  }
+
+  let {
+    flow,
+    stepOrder,
+    isDragging = false,
+    isDropTarget = false,
+    executionResults = [],
+    isFirst = false,
+    isLast = false,
+    isMoving = false,
+    sequenceStep = undefined
+  , ...callbackProps
+  }: Props & Record<string, unknown> = $props();
 
   // State for toggling between inputs and outputs
-  let activeTab: 'outputs' | 'inputs' = 'outputs';
+  let activeTab: 'outputs' | 'inputs' = $state('outputs');
 
-  const dispatch = createEventDispatcher<{
-    click: { flow: TestFlow; stepOrder: number };
-    dragstart: { flow: TestFlow; stepOrder: number };
-    dragend: void;
-    remove: { stepOrder: number };
-    showResults: { flow: TestFlow; stepOrder: number; executionResult: SequenceFlowResult };
-    moveLeft: { stepOrder: number };
-    moveRight: { stepOrder: number };
-    toggleExpectsError: { stepOrder: number; expectsError: boolean };
-  }>();
+  function dispatch(eventName: string, detail?: unknown) {
+    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === "function") {
+      if (arguments.length > 1) {
+        handler(detail);
+      } else {
+        handler();
+      }
+    }
+  }
 
   function handleClick() {
     dispatch('click', { flow, stepOrder });
@@ -111,34 +134,34 @@
   }
 
   // Find execution result for this flow and step
-  $: executionResult = executionResults.find(result => {
+  let executionResult = $derived(executionResults.find(result => {
     const flowIdNum = parseInt(flow.id);
     const match = result.flowId === flowIdNum && result.stepOrder === stepOrder;
     return match;
-  }) || null;
+  }) || null);
 
   // Get expects error state from sequence step
-  $: expectsError = sequenceStep?.expects_error ?? false;
+  let expectsError = $derived(sequenceStep?.expects_error ?? false);
 
   // Determine execution status for visual indicators
-  $: executionStatus = executionResult ? (
+  let executionStatus = $derived(executionResult ? (
     executionResult.matchedExpectation !== undefined ? (
       executionResult.matchedExpectation ? 'expected' : 'unexpected'
     ) : (
       executionResult.success ? 'success' : 'error'
     )
-  ) : 'none';
-  $: hasResults = executionResult !== null;
+  ) : 'none');
+  let hasResults = $derived(executionResult !== null);
   
   // Debug logging
-  $: {
+  $effect(() => {
     const flowIdNum = parseInt(flow.id);
     console.log(`🎯 FlowCard ${flow.name} (flowId=${flowIdNum}, stepOrder=${stepOrder}): executionResult=`, executionResult);
     console.log(`🎯 FlowCard ${flow.name}: hasResults=${hasResults}, executionStatus=${executionStatus}`);
     if (executionResults.length > 0) {
       console.log(`🎯 FlowCard ${flow.name}: Available results:`, executionResults.map(r => ({ flowId: r.flowId, stepOrder: r.stepOrder, success: r.success })));
     }
-  }
+  });
 </script>
 
 <div
@@ -197,7 +220,7 @@
           <button
             type="button"
             class="folder-tab px-3 py-1.5 cursor-pointer transition-all {activeTab === 'inputs' ? 'folder-tab-active' : 'folder-tab-inactive'}"
-            on:click={(e) => { e.stopPropagation(); activeTab = 'inputs'; }}
+            onclick={(e) => { e.stopPropagation(); activeTab = 'inputs'; }}
             title="Click to view input parameters"
           >
             Inputs
@@ -205,7 +228,7 @@
           <button
             type="button"
             class="folder-tab px-3 py-1.5 cursor-pointer transition-all {activeTab === 'outputs' ? 'folder-tab-active' : 'folder-tab-inactive'}"
-            on:click={(e) => { e.stopPropagation(); activeTab = 'outputs'; }}
+            onclick={(e) => { e.stopPropagation(); activeTab = 'outputs'; }}
             title="Click to view outputs"
           >
             Outputs
@@ -218,7 +241,7 @@
           <button
             type="button"
             class="w-7 h-7 rounded hover:bg-opacity-80 transition-colors flex items-center justify-center shadow-sm {expectsError ? 'bg-orange-500 text-white hover:bg-orange-600' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'}"
-            on:click={handleToggleExpectsError}
+            onclick={handleToggleExpectsError}
             aria-label="Toggle expects error"
             title={expectsError ? "Currently expecting this step to fail/return error. Click to expect success." : "Currently expecting this step to succeed. Click to expect failure/error."}
           >
@@ -230,7 +253,7 @@
           <button
             type="button"
             class="w-7 h-7 bg-amber-500 text-white rounded hover:bg-amber-600 transition-colors flex items-center justify-center shadow-sm"
-            on:click={handleEdit}
+            onclick={handleEdit}
             aria-label="Edit flow parameters"
             title="Edit Parameters"
           >
@@ -242,7 +265,7 @@
           <button
             type="button"
             class="w-7 h-7 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors flex items-center justify-center shadow-sm"
-            on:click={handleViewDetails}
+            onclick={handleViewDetails}
             aria-label="View flow details"
             title="View Details"
           >
@@ -255,7 +278,7 @@
           <button
             type="button"
             class="w-7 h-7 bg-red-500 text-white rounded hover:bg-red-600 transition-colors flex items-center justify-center shadow-sm"
-            on:click={handleRemove}
+            onclick={handleRemove}
             aria-label="Remove flow"
             title="Remove from Sequence"
           >
@@ -313,7 +336,7 @@
               executionStatus === 'success' ? 'bg-green-500 hover:bg-green-600' : 
               'bg-red-500 hover:bg-red-600'
             } text-white rounded-md transition-colors flex items-center justify-center gap-2 font-medium text-sm shadow-sm"
-            on:click={handleShowResults}
+            onclick={handleShowResults}
             aria-label="View execution results"
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -338,7 +361,7 @@
             <button
               type="button"
               class="move-btn px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-800 rounded transition-all flex items-center gap-1 text-xs font-medium"
-              on:click={handleMoveLeft}
+              onclick={handleMoveLeft}
               aria-label="Move left"
               title="Move left"
             >
@@ -352,8 +375,8 @@
           <div 
             class="drag-handle text-gray-400 hover:text-gray-600 transition-colors cursor-grab active:cursor-grabbing p-1 rounded hover:bg-gray-100"
             draggable="true"
-            on:dragstart={handleDragStart}
-            on:dragend={handleDragEnd}
+            ondragstart={handleDragStart}
+            ondragend={handleDragEnd}
             role="button"
             tabindex="0"
             aria-label="Drag to reorder"
@@ -369,7 +392,7 @@
             <button
               type="button"
               class="move-btn px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-800 rounded transition-all flex items-center gap-1 text-xs font-medium"
-              on:click={handleMoveRight}
+              onclick={handleMoveRight}
               aria-label="Move right"
               title="Move right"
             >

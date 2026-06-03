@@ -1,20 +1,37 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  
   import type { Environment } from '$lib/types/environment';
   import type { FlowParameter } from '../test-flows/types';
 
-  export let environment: Environment;
-  export let flowParameters: FlowParameter[] = [];
-  export let parameterMappings: Record<string, string> = {};
-  export let selectedSubEnvironment: string | undefined = undefined;
-  export let disabled: boolean = false;
+  interface Props {
+    [key: string]: unknown;
+    environment: Environment;
+    flowParameters?: FlowParameter[];
+    parameterMappings?: Record<string, string>;
+    selectedSubEnvironment?: string | undefined;
+    disabled?: boolean;
+  }
 
-  const dispatch = createEventDispatcher<{
-    change: { environmentId: number; parameterMappings: Record<string, string> };
-  }>();
+  let {
+    environment,
+    flowParameters = [],
+    parameterMappings = {},
+    selectedSubEnvironment = undefined,
+    disabled = false
+  , ...callbackProps
+  }: Props & Record<string, unknown> = $props();
 
-  // Get available environment variables from the environment config
-  $: environmentVariables = getEnvironmentVariables(environment);
+  function dispatch(eventName: string, detail?: unknown) {
+    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === "function") {
+      if (arguments.length > 1) {
+        handler(detail);
+      } else {
+        handler();
+      }
+    }
+  }
+
 
   function getEnvironmentVariables(env: Environment): string[] {
     const variables = new Set<string>();
@@ -36,9 +53,29 @@
     return Array.from(variables).sort();
   }
 
+
+  // Handle parameter mapping change
+  function handleMappingChange(parameterName: string, variableName: string) {
+    const updatedMappings = { ...parameterMappings };
+    
+    if (variableName === '') {
+      // Remove mapping if empty
+      delete updatedMappings[parameterName];
+    } else {
+      updatedMappings[parameterName] = variableName;
+    }
+    
+    dispatch('change', { 
+      environmentId: environment.id, 
+      parameterMappings: updatedMappings 
+    });
+  }
+
+  // Get available environment variables from the environment config
+  let environmentVariables = $derived(getEnvironmentVariables(environment));
   // Get the current value of an environment variable for the selected sub-environment
   // Make this reactive to selectedSubEnvironment changes
-  $: getEnvironmentVariableValue = (variableName: string): string => {
+  let getEnvironmentVariableValue = $derived((variableName: string): string => {
     if (!selectedSubEnvironment || !environment.config.environments[selectedSubEnvironment]) {
       return 'No sub-environment selected';
     }
@@ -64,27 +101,9 @@
     }
     
     return 'Not configured';
-  };
-
-  // Handle parameter mapping change
-  function handleMappingChange(parameterName: string, variableName: string) {
-    const updatedMappings = { ...parameterMappings };
-    
-    if (variableName === '') {
-      // Remove mapping if empty
-      delete updatedMappings[parameterName];
-    } else {
-      updatedMappings[parameterName] = variableName;
-    }
-    
-    dispatch('change', { 
-      environmentId: environment.id, 
-      parameterMappings: updatedMappings 
-    });
-  }
-
+  });
   // Get the sub-environments for display
-  $: subEnvironments = Object.keys(environment.config.environments || {});
+  let subEnvironments = $derived(Object.keys(environment.config.environments || {}));
 </script>
 
 <div class="space-y-4">
@@ -131,7 +150,7 @@
               <select
                 class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                 value={parameterMappings[parameter.name] || ''}
-                on:change={(e) => handleMappingChange(parameter.name, e.currentTarget.value)}
+                onchange={(e) => handleMappingChange(parameter.name, e.currentTarget.value)}
                 {disabled}
               >
                 <option value="">Select environment variable...</option>

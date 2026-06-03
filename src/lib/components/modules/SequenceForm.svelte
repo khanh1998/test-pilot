@@ -7,31 +7,49 @@
     selectedFlows = new Set(selectedFlows); // Trigger reactivity
   }equences -->
 <script lang="ts">
-  import type { FlowSequence, FlowSequenceStep } from '../../types/flow_sequence.js';
+    import type { FlowSequence, FlowSequenceStep } from '../../types/flow_sequence.js';
   import type { TestFlow } from '../../types/test-flow.js';
-  import { createEventDispatcher } from 'svelte';
+  
 
-  export let sequence: Partial<FlowSequence> = {};
-  export let availableFlows: TestFlow[] = [];
-  export let selectedFlowIds: string[] = [];
-  export let isLoading: boolean = false;
-  export let mode: 'create' | 'edit' = 'create';
+  interface Props {
+    [key: string]: unknown;
+    sequence?: Partial<FlowSequence>;
+    availableFlows?: TestFlow[];
+    selectedFlowIds?: string[];
+    isLoading?: boolean;
+    mode?: 'create' | 'edit';
+  }
 
-  const dispatch = createEventDispatcher<{
-    submit: { sequence: Partial<FlowSequence>; flowIds: string[] };
-    cancel: void;
-  }>();
+  let {
+    sequence = {},
+    availableFlows = [],
+    selectedFlowIds = [],
+    isLoading = false,
+    mode = 'create'
+  , ...callbackProps
+  }: Props & Record<string, unknown> = $props();
 
-  let name = sequence.name || '';
-  let description = sequence.description || '';
-  let selectedFlows = new Set(selectedFlowIds);
-  let globalSettings = {
+  function dispatch(eventName: string, detail?: unknown) {
+    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === "function") {
+      if (arguments.length > 1) {
+        handler(detail);
+      } else {
+        handler();
+      }
+    }
+  }
+
+  let name = $state(sequence.name || '');
+  let description = $state(sequence.description || '');
+  let selectedFlows = $state(new Set(selectedFlowIds));
+  let globalSettings = $state({
     timeout: sequence.sequenceConfig?.global_settings?.timeout || 30000,
     continue_on_error: sequence.sequenceConfig?.global_settings?.continue_on_error || false,
     parallel_execution: sequence.sequenceConfig?.global_settings?.parallel_execution || false
-  };
+  });
 
-  $: isValid = name.trim().length > 0;
+  let isValid = $derived(name.trim().length > 0);
 
   function handleSubmit() {
     if (!isValid) return;
@@ -66,7 +84,7 @@
   }
 </script>
 
-<form on:submit|preventDefault={handleSubmit} class="space-y-6">
+<form onsubmit={(event) => { event.preventDefault(); handleSubmit(); }} class="space-y-6">
   <!-- Sequence Name -->
   <div>
     <label for="sequence-name" class="block text-sm font-medium text-gray-700 mb-2">
@@ -169,7 +187,7 @@
             <input
               type="checkbox"
               checked={selectedFlows.has(flow.id)}
-              on:change={() => toggleFlow(flow.id)}
+              onchange={() => toggleFlow(flow.id)}
               class="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
               disabled={isLoading}
             />
@@ -213,7 +231,7 @@
   <div class="flex justify-end space-x-3 pt-4 border-t border-gray-200">
     <button
       type="button"
-      on:click={handleCancel}
+      onclick={handleCancel}
       class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
       disabled={isLoading}
     >

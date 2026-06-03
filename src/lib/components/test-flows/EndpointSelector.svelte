@@ -1,7 +1,9 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  
 
-  export let endpoints: {
+  interface Props {
+    [key: string]: unknown;
+    endpoints?: {
     id: number;
     apiId: number;
     path: string;
@@ -10,31 +12,49 @@
     summary?: string;
     description?: string;
     tags?: string[];
-  }[] = [];
-  export let disabled: boolean = false;
-  export let apiHosts: Record<string | number, { url: string; name?: string; description?: string }> = {};
-  export let showSelector: boolean = false; // Make this a component parameter with default false
+  }[];
+    disabled?: boolean;
+    apiHosts?: Record<string | number, { url: string; name?: string; description?: string }>;
+    showSelector?: boolean; // Make this a component parameter with default false
+  }
 
-  const dispatch = createEventDispatcher();
-  let searchTerm = '';
-  let selectedTags: string[] = [];
-  let selectedMethod = '';
-  let selectedApiId = '';
+  let {
+    endpoints = [],
+    disabled = false,
+    apiHosts = {},
+    showSelector = $bindable(false)
+  , ...callbackProps
+  }: Props & Record<string, unknown> = $props();
 
-  $: allTags = [...new Set(endpoints.flatMap((e) => e.tags || []))].sort();
+  function dispatch(eventName: string, detail?: unknown) {
+    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === "function") {
+      if (arguments.length > 1) {
+        handler(detail);
+      } else {
+        handler();
+      }
+    }
+  }
+  let searchTerm = $state('');
+  let selectedTags: string[] = $state([]);
+  let selectedMethod = $state('');
+  let selectedApiId = $state('');
+
+  let allTags = $derived([...new Set(endpoints.flatMap((e) => e.tags || []))].sort());
   
   // Get list of all API IDs used by endpoints
-  $: apiIds = [...new Set(endpoints.map((e) => e.apiId))];
+  let apiIds = $derived([...new Set(endpoints.map((e) => e.apiId))]);
   
   // Create readable API names mapping
-  $: apiNames = Object.fromEntries(
+  let apiNames = $derived(Object.fromEntries(
     apiIds.map(id => [
       id, 
       (apiHosts[id]?.name || `API ${id}`)
     ])
-  );
+  ));
 
-  $: filteredEndpoints = endpoints.filter((endpoint) => {
+  let filteredEndpoints = $derived(endpoints.filter((endpoint) => {
     // Filter by search term
     const matchesSearch =
       searchTerm === '' ||
@@ -54,17 +74,17 @@
                       String(endpoint.apiId) === String(selectedApiId);
     
     return matchesSearch && matchesTags && matchesMethod && matchesApi;
-  });
+  }));
   
   // Group endpoints by API ID for better organization
-  $: groupedEndpoints = filteredEndpoints.reduce((groups, endpoint) => {
+  let groupedEndpoints = $derived(filteredEndpoints.reduce((groups, endpoint) => {
     const apiId = String(endpoint.apiId); // Convert to string for consistent keys
     if (!groups[apiId]) {
       groups[apiId] = [];
     }
     groups[apiId].push(endpoint);
     return groups;
-  }, {} as Record<string, typeof filteredEndpoints>);
+  }, {} as Record<string, typeof filteredEndpoints>));
 
   function selectEndpoint(endpoint: (typeof endpoints)[number]) {
     dispatch('select', endpoint);
@@ -85,7 +105,7 @@
   {#if !showSelector}
     <button
       class="flex w-full items-center justify-center rounded-md border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-600 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
-      on:click={() => (showSelector = true)}
+      onclick={() => (showSelector = true)}
       {disabled}
     >
       <svg class="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -140,7 +160,7 @@
                 class="rounded border px-2 py-1 text-xs {selectedTags.includes(tag)
                   ? 'border-blue-300 bg-blue-100 text-blue-800'
                   : 'border-gray-200 bg-gray-100 text-gray-700 hover:bg-gray-200'}"
-                on:click={() => toggleTagFilter(tag)}
+                onclick={() => toggleTagFilter(tag)}
               >
                 {tag}
               </button>
@@ -176,7 +196,7 @@
               {#each endpoints as endpoint (endpoint.id)}
                 <button
                   class="flex w-full items-start gap-2 p-3 text-left transition hover:bg-gray-50"
-                  on:click={() => selectEndpoint(endpoint)}
+                  onclick={() => selectEndpoint(endpoint)}
                 >
                   <span
                     class={`rounded px-2 py-0.5 text-xs font-medium

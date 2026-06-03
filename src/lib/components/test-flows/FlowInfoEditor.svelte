@@ -1,11 +1,26 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  
 
-  export let name: string;
-  export let description: string | null;
-  export let disabled: boolean = false;
+  interface Props {
+    [key: string]: unknown;
+    name: string;
+    description: string | null;
+    disabled?: boolean;
+  }
 
-  const dispatch = createEventDispatcher();
+  let { name = $bindable(), description = $bindable(), disabled = false , ...callbackProps
+  }: Props & Record<string, unknown> = $props();
+
+  function dispatch(eventName: string, detail?: unknown) {
+    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === "function") {
+      if (arguments.length > 1) {
+        handler(detail);
+      } else {
+        handler();
+      }
+    }
+  }
 
   function handleNameChange() {
     dispatch('nameChange', { name });
@@ -16,7 +31,7 @@
   }
 
   // Validation
-  $: isNameValid = name && name.trim().length > 0;
+  let isNameValid = $derived(name && name.trim().length > 0);
 </script>
 
 <div class="space-y-4">
@@ -31,7 +46,7 @@
       id="flowName"
       type="text"
       bind:value={name}
-      on:input={handleNameChange}
+      oninput={handleNameChange}
       {disabled}
       class="w-full rounded-md border px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none
              {!isNameValid ? 'border-red-300 bg-red-50' : 'border-gray-300'}
@@ -52,7 +67,7 @@
     <textarea
       id="flowDescription"
       bind:value={description}
-      on:input={handleDescriptionChange}
+      oninput={handleDescriptionChange}
       {disabled}
       rows="3"
       class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none resize-y

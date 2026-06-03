@@ -1,22 +1,37 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  
   import type { Environment } from '$lib/types/environment';
 
-  export let id: string = 'simplified-environment-selector';
-  export let environment: Environment | null = null;
-  export let selectedSubEnvironment: string | null = null;
-  export let placeholder: string = 'Select sub-environment...';
-  export let disabled: boolean = false;
+  interface Props {
+    [key: string]: unknown;
+    id?: string;
+    environment?: Environment | null;
+    selectedSubEnvironment?: string | null;
+    placeholder?: string;
+    disabled?: boolean;
+  }
 
-  const dispatch = createEventDispatcher<{
-    select: { environmentId: number | null; subEnvironment: string | null };
-  }>();
+  let {
+    id = 'simplified-environment-selector',
+    environment = null,
+    selectedSubEnvironment = null,
+    placeholder = 'Select sub-environment...',
+    disabled = false
+  , ...callbackProps
+  }: Props & Record<string, unknown> = $props();
 
-  // Use the provided environment directly
-  $: projectEnvironment = environment;
+  function dispatch(eventName: string, detail?: unknown) {
+    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === "function") {
+      if (arguments.length > 1) {
+        handler(detail);
+      } else {
+        handler();
+      }
+    }
+  }
 
-  // Generate sub-environment options for the single project environment
-  $: subEnvironmentOptions = generateSubEnvironmentOptions(projectEnvironment);
+
 
   function generateSubEnvironmentOptions(
     environment: Environment | null
@@ -54,9 +69,13 @@
     dispatch('select', { environmentId: projectEnvironment.id, subEnvironment: subEnv });
   }
 
+  // Use the provided environment directly
+  let projectEnvironment = $derived(environment);
+  // Generate sub-environment options for the single project environment
+  let subEnvironmentOptions = $derived(generateSubEnvironmentOptions(projectEnvironment));
   // Check if there's a project environment available
-  $: hasProjectEnvironment = projectEnvironment !== null;
-  $: environmentName = projectEnvironment?.name || 'Project Environment';
+  let hasProjectEnvironment = $derived(projectEnvironment !== null);
+  let environmentName = $derived(projectEnvironment?.name || 'Project Environment');
 </script>
 
 <div class="w-full">
@@ -83,7 +102,7 @@
             {id}
             class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm pl-14 {disabled ? 'bg-gray-50 cursor-not-allowed' : ''}"
             value={selectedSubEnvironment || ''}
-            on:change={handleSelectionChange}
+            onchange={handleSelectionChange}
             {disabled}
           >
             <option value="">{placeholder}</option>

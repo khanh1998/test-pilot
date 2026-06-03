@@ -47,7 +47,7 @@
     }
   }
 
-  async function handleEnvironmentCreated(event: CustomEvent<{ environment: Environment }>) {
+  async function handleEnvironmentCreated(payload: { environment: Environment }) {
     if (!selectedProject) return;
 
     isLinkingEnvironment = true;
@@ -55,7 +55,7 @@
 
     try {
       const linkedEnvironment = await linkEnvironment(selectedProject.id, {
-        environmentId: event.detail.environment.id,
+        environmentId: payload.environment.id,
         variableMappings: {}
       });
 
@@ -272,8 +272,8 @@
 
   {#if showCreateEnvironment}
     <EnvironmentCreator
-      on:created={handleEnvironmentCreated}
-      on:close={() => showCreateEnvironment = false}
+      onCreated={handleEnvironmentCreated}
+      onClose={() => showCreateEnvironment = false}
     />
   {/if}
 </div>

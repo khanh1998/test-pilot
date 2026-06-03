@@ -1,17 +1,29 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  
   import { createEnvironment } from '$lib/http_client/environments';
   import type { CreateEnvironmentData, Environment } from '$lib/types/environment';
 
-  const dispatch = createEventDispatcher<{
-    created: { environment: Environment };
-    close: void;
-  }>();
+  interface Props {
+    [key: string]: unknown;
+  }
 
-  let name = '';
-  let description = '';
-  let isCreating = false;
-  let error: string | null = null;
+  const callbackProps: Props = $props();
+
+  function dispatch(eventName: string, detail?: unknown) {
+    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === "function") {
+      if (arguments.length > 1) {
+        handler(detail);
+      } else {
+        handler();
+      }
+    }
+  }
+
+  let name = $state('');
+  let description = $state('');
+  let isCreating = $state(false);
+  let error: string | null = $state(null);
 
   async function handleSubmit(event: SubmitEvent) {
     event.preventDefault();
@@ -142,4 +154,3 @@
     </form>
   </div>
 </div>
-

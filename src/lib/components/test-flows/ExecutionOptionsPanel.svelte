@@ -2,8 +2,13 @@
   import { fade } from 'svelte/transition';
   import type { ExecutionPreferences } from '$lib/flow-runner';
 
-  export let preferences: ExecutionPreferences;
-  export let isVisible: boolean = false;
+  interface Props {
+    [key: string]: unknown;
+    preferences: ExecutionPreferences;
+    isVisible?: boolean;
+  }
+
+  let { preferences = $bindable(), isVisible = false }: Props = $props();
 </script>
 
 {#if isVisible}

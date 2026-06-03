@@ -1,25 +1,48 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  
   import type { Endpoint, ExecutionState } from './types';
   import { formatJson, getStatusColor, getEndpointDisplayId } from './utils';
 
-  export let isOpen = false;
-  export let endpoint: Endpoint;
-  export let endpointIndex: number;
-  export let duplicateCount: number = 1;
-  export let instanceIndex: number = 1;
-  export let executionState: ExecutionState = {};
+  function dispatch(eventName: string, detail?: unknown) {
+    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === "function") {
+      if (arguments.length > 1) {
+        handler(detail);
+      } else {
+        handler();
+      }
+    }
+  }
 
-  const dispatch = createEventDispatcher();
+  let activeTab: 'request' | 'response' | 'headers' = $state('response');
 
-  let activeTab: 'request' | 'response' | 'headers' = 'response';
+  
+  interface Props {
+    [key: string]: unknown;
+    isOpen?: boolean;
+    endpoint: Endpoint;
+    endpointIndex: number;
+    duplicateCount?: number;
+    instanceIndex?: number;
+    executionState?: ExecutionState;
+    // Additional prop needed for the new endpointId format
+    stepId: string;
+  }
 
-  // Additional prop needed for the new endpointId format
-  export let stepId: string;
+  let {
+    isOpen = false,
+    endpoint,
+    endpointIndex,
+    duplicateCount = 1,
+    instanceIndex = 1,
+    executionState = {},
+    stepId
+  , ...callbackProps
+  }: Props & Record<string, unknown> = $props();
 
   // Get the endpoint ID - using stepId-endpointIndex format now instead of endpointId-endpointIndex
-  $: endpointId = `${stepId}-${endpointIndex}`;
-  $: executionData = executionState[endpointId] || {};
+  let endpointId = $derived(`${stepId}-${endpointIndex}`);
+  let executionData = $derived(executionState[endpointId] || {});
 
   function closeResponseViewer() {
     dispatch('close');

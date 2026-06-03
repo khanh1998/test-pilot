@@ -1,32 +1,46 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+    
   import type { Environment } from '$lib/types/environment';
   
-  export let environments: Environment[] = [];
-  export let selectedEnvironmentId: number | null = null;
-  export let selectedSubEnvironment: string | null = null;
-  export let placeholder: string = 'Select environment...';
-  export let disabled: boolean = false;
-  export let id: string = 'environment-selector';
+  interface Props {
+    [key: string]: unknown;
+    environments?: Environment[];
+    selectedEnvironmentId?: number | null;
+    selectedSubEnvironment?: string | null;
+    placeholder?: string;
+    disabled?: boolean;
+    id?: string;
+  }
 
-  const dispatch = createEventDispatcher<{
-    select: { environmentId: number | null; subEnvironment: string | null };
-  }>();
+  let {
+    environments = [],
+    selectedEnvironmentId = $bindable(null),
+    selectedSubEnvironment = $bindable(null),
+    placeholder = 'Select environment...',
+    disabled = false,
+    id = 'environment-selector'
+  , ...callbackProps
+  }: Props & Record<string, unknown> = $props();
 
-  let isOpen = false;
-  let selectedEnvironment: Environment | null = null;
-
-  $: {
-    if (selectedEnvironmentId) {
-      selectedEnvironment = environments.find(env => env.id === selectedEnvironmentId) || null;
-    } else {
-      selectedEnvironment = null;
+  function dispatch(eventName: string, detail?: unknown) {
+    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === "function") {
+      if (arguments.length > 1) {
+        handler(detail);
+      } else {
+        handler();
+      }
     }
   }
 
-  $: availableSubEnvironments = selectedEnvironment 
+  let isOpen = $state(false);
+  const selectedEnvironment: Environment | null = $derived(
+    selectedEnvironmentId ? environments.find((env) => env.id === selectedEnvironmentId) || null : null
+  );
+
+  let availableSubEnvironments = $derived(selectedEnvironment 
     ? Object.keys(selectedEnvironment.config.environments)
-    : [];
+    : []);
 
   function toggleDropdown() {
     if (!disabled) {
@@ -76,7 +90,7 @@
   }
 </script>
 
-<svelte:window on:click={handleClickOutside} />
+<svelte:window onclick={handleClickOutside} />
 
 <div class="w-full environment-selector {disabled ? 'opacity-60 pointer-events-none' : ''}" class:disabled>
   <div class="flex gap-4 items-end flex-wrap">
@@ -85,7 +99,7 @@
       <button 
         {id}
         class="w-full flex justify-between items-center px-3 py-2 border border-gray-300 rounded-md bg-white cursor-pointer transition-all text-sm hover:border-gray-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:cursor-not-allowed {isOpen ? 'border-blue-500 ring-1 ring-blue-500' : ''}" 
-        on:click={toggleDropdown}
+        onclick={toggleDropdown}
         {disabled}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
@@ -102,7 +116,7 @@
         <div class="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto" role="listbox">
           <button 
             class="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 focus:outline-none focus:bg-gray-50 {selectedEnvironmentId === null ? 'bg-blue-50 text-blue-900' : 'text-gray-900'}" 
-            on:click={() => selectEnvironment(null)}
+            onclick={() => selectEnvironment(null)}
             role="option"
             aria-selected={selectedEnvironmentId === null}
           >
@@ -111,7 +125,7 @@
           {#each environments as environment}
             <button 
               class="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 focus:outline-none focus:bg-gray-50 {selectedEnvironmentId === environment.id ? 'bg-blue-50 text-blue-900' : 'text-gray-900'}" 
-              on:click={() => selectEnvironment(environment.id)}
+              onclick={() => selectEnvironment(environment.id)}
               role="option"
               aria-selected={selectedEnvironmentId === environment.id}
             >
@@ -135,7 +149,7 @@
           {#each availableSubEnvironments as subEnvName}
             <button 
               class="px-3 py-2 text-sm font-medium rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed {selectedSubEnvironment === subEnvName ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}" 
-              on:click={() => selectSubEnvironment(subEnvName)}
+              onclick={() => selectSubEnvironment(subEnvName)}
               {disabled}
               role="tab"
               aria-selected={selectedSubEnvironment === subEnvName}
@@ -149,7 +163,7 @@
 
     <!-- Clear Selection Button -->
     {#if selectedEnvironmentId}
-      <button class="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed" on:click={clearSelection} {disabled}>
+      <button class="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed" onclick={clearSelection} {disabled}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <line x1="18" y1="6" x2="6" y2="18"></line>
           <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -177,5 +191,4 @@
     </div>
   {/if}
 </div>
-
 

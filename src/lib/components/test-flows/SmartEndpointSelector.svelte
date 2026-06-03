@@ -1,34 +1,49 @@
 <script lang="ts">
-  import { createEventDispatcher, onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { searchEndpoints } from '$lib/http_client/endpoints';
   import type { SearchEndpointResult } from '$lib/http_client/endpoints';
   import type { Endpoint } from './types';
 
-  export let disabled: boolean = false;
-  export let apiHosts: Record<
+  interface Props {
+    [key: string]: unknown;
+    disabled?: boolean;
+    apiHosts?: Record<
     string | number,
     { url: string; name?: string; description?: string }
-  > = {};
+  >;
+  }
 
-  const dispatch = createEventDispatcher();
+  let { disabled = false, apiHosts = {} , ...callbackProps
+  }: Props & Record<string, unknown> = $props();
 
-  let searchTerm = '';
-  let selectedApiId = '';
-  let searchResults: SearchEndpointResult[] = [];
-  let isSearching = false;
+  function dispatch(eventName: string, detail?: unknown) {
+    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === "function") {
+      if (arguments.length > 1) {
+        handler(detail);
+      } else {
+        handler();
+      }
+    }
+  }
+
+  let searchTerm = $state('');
+  let selectedApiId = $state('');
+  let searchResults: SearchEndpointResult[] = $state([]);
+  let isSearching = $state(false);
   let searchTimeout: ReturnType<typeof setTimeout> | null = null;
-  let showDropdown = false;
-  let searchInput: HTMLInputElement;
-  let dropdownStyle = '';
+  let showDropdown = $state(false);
+  let searchInput: HTMLInputElement | undefined = $state();
+  let dropdownStyle = $state('');
   let isCollapsed = false;
 
   // Get list of all API IDs from apiHosts
-  $: apiIds = Object.keys(apiHosts)
+  let apiIds = $derived(Object.keys(apiHosts)
     .map((id) => parseInt(id.toString()))
-    .filter((id) => !isNaN(id));
+    .filter((id) => !isNaN(id)));
 
   // Create readable API names mapping
-  $: apiNames = Object.fromEntries(apiIds.map((id) => [id, apiHosts[id]?.name || `API ${id}`]));
+  let apiNames = $derived(Object.fromEntries(apiIds.map((id) => [id, apiHosts[id]?.name || `API ${id}`])));
 
   // Simple function to position dropdown
   function positionDropdown() {

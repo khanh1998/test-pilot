@@ -1,8 +1,16 @@
 <script lang="ts">
+  function stopPropagation<T extends Event>(handler: (event: T) => unknown) {
+    return (event: T) => {
+      event.stopPropagation();
+      return handler(event);
+    };
+  }
+
   import { projectStore } from '$lib/store/project';
   import type { Project } from '$lib/store/project';
 
   interface Props {
+    [key: string]: unknown;
     project: Project;
     onSelect: () => void;
   }

@@ -9,6 +9,7 @@
   import type { Snippet } from 'svelte';
 
   interface Props {
+    [key: string]: unknown;
     children: Snippet;
   }
   let { children }: Props = $props();

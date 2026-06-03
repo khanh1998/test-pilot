@@ -1,22 +1,35 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+    
   import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
   import type { SubEnvironment, VariableDefinition } from '$lib/types/environment';
 
-  export let subEnvironments: Record<string, SubEnvironment> = {};
-  export let variableDefinitions: Record<string, VariableDefinition> = {};
-  export let disabled: boolean = false;
+  interface Props {
+    [key: string]: unknown;
+    subEnvironments?: Record<string, SubEnvironment>;
+    variableDefinitions?: Record<string, VariableDefinition>;
+    disabled?: boolean;
+  }
 
-  const dispatch = createEventDispatcher<{
-    change: { subEnvironments: Record<string, SubEnvironment> };
-  }>();
+  let { subEnvironments = $bindable({}), variableDefinitions = {}, disabled = false , ...callbackProps
+  }: Props & Record<string, unknown> = $props();
 
-  let newSubEnvName = '';
-  let showAddForm = false;
+  function dispatch(eventName: string, detail?: unknown) {
+    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === "function") {
+      if (arguments.length > 1) {
+        handler(detail);
+      } else {
+        handler();
+      }
+    }
+  }
+
+  let newSubEnvName = $state('');
+  let showAddForm = $state(false);
 
   // Confirm dialog state
-  let showConfirmDialog = false;
-  let pendingDeleteSubEnv: string | null = null;
+  let showConfirmDialog = $state(false);
+  let pendingDeleteSubEnv: string | null = $state(null);
 
   const commonSubEnvNames = ['dev', 'sit', 'uat', 'staging', 'prod'];
 
@@ -94,8 +107,8 @@
     dispatch('change', { subEnvironments });
   }
 
-  $: subEnvEntries = Object.entries(subEnvironments);
-  $: availableCommonEnvs = commonSubEnvNames.filter((name) => !(name in subEnvironments));
+  let subEnvEntries = $derived(Object.entries(subEnvironments));
+  let availableCommonEnvs = $derived(commonSubEnvNames.filter((name) => !(name in subEnvironments)));
 </script>
 
 <div
@@ -107,7 +120,7 @@
     <h3 class="m-0 text-lg font-semibold text-gray-900">Sub-Environments</h3>
     <button
       class="inline-flex cursor-pointer items-center gap-2 rounded-md border-0 bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-      on:click={toggleAddForm}
+      onclick={toggleAddForm}
       {disabled}
       type="button"
     >
@@ -139,7 +152,7 @@
         {#each availableCommonEnvs as envName}
           <button
             class="cursor-pointer rounded border border-blue-300 bg-blue-100 px-3 py-1 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-200 disabled:cursor-not-allowed disabled:opacity-50"
-            on:click={() => addCommonSubEnv(envName)}
+            onclick={() => addCommonSubEnv(envName)}
             {disabled}
             type="button"
           >
@@ -153,7 +166,7 @@
   {#if showAddForm}
     <form
       class="border-b border-gray-100 bg-gray-50 p-6"
-      on:submit|preventDefault={addSubEnvironment}
+      onsubmit={(event) => { event.preventDefault(); addSubEnvironment(); }}
     >
       <div class="flex items-center gap-4">
         <input
@@ -172,7 +185,7 @@
         <button
           type="button"
           class="cursor-pointer rounded-md border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-          on:click={toggleAddForm}
+          onclick={toggleAddForm}
           {disabled}>Cancel</button
         >
       </div>
@@ -192,7 +205,7 @@
             </div>
             <button
               class="cursor-pointer rounded border-0 bg-red-50 p-2 text-red-600 transition-all hover:bg-red-200 disabled:cursor-not-allowed disabled:opacity-50"
-              on:click={() => removeSubEnvironment(subEnvKey)}
+              onclick={() => removeSubEnvironment(subEnvKey)}
               {disabled}
               type="button"
               aria-label="Remove sub-environment {subEnvKey}"
@@ -238,7 +251,7 @@
                   id="display-name-{subEnvKey}"
                   type="text"
                   bind:value={subEnv.name}
-                  on:input={updateSubEnvironments}
+                  oninput={updateSubEnvironments}
                   placeholder="Environment display name"
                   class="rounded border border-gray-300 px-2 py-2 text-sm transition-colors focus:border-blue-500 focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)] focus:outline-none"
                   {disabled}
@@ -254,7 +267,7 @@
                 id="description-{subEnvKey}"
                 type="text"
                 bind:value={subEnv.description}
-                on:input={updateSubEnvironments}
+                oninput={updateSubEnvironments}
                 placeholder="Describe this environment..."
                 class="rounded border border-gray-300 px-2 py-2 text-sm transition-colors focus:border-blue-500 focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)] focus:outline-none"
                 {disabled}
@@ -284,7 +297,7 @@
                           <select
                             id="var-{subEnvKey}-{varName}"
                             bind:value={subEnv.variables[varName]}
-                            on:change={updateSubEnvironments}
+                            onchange={updateSubEnvironments}
                             class="w-full rounded border border-gray-300 px-2 py-2 text-sm transition-colors focus:border-blue-500 focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)] focus:outline-none"
                             {disabled}
                           >
@@ -297,7 +310,7 @@
                             id="var-{subEnvKey}-{varName}"
                             type="number"
                             bind:value={subEnv.variables[varName]}
-                            on:input={updateSubEnvironments}
+                            oninput={updateSubEnvironments}
                             placeholder={`Default: ${varDef.default_value}`}
                             class="w-full rounded border border-gray-300 px-2 py-2 text-sm transition-colors focus:border-blue-500 focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)] focus:outline-none"
                             {disabled}
@@ -307,7 +320,7 @@
                             id="var-{subEnvKey}-{varName}"
                             type="text"
                             bind:value={subEnv.variables[varName]}
-                            on:input={updateSubEnvironments}
+                            oninput={updateSubEnvironments}
                             placeholder={`Default: ${varDef.default_value}`}
                             class="w-full rounded border border-gray-300 px-2 py-2 text-sm transition-colors focus:border-blue-500 focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)] focus:outline-none"
                             {disabled}
@@ -348,6 +361,6 @@
   confirmText="Remove"
   cancelText="Cancel"
   confirmVariant="danger"
-  on:confirm={confirmDeleteSubEnv}
-  on:cancel={cancelDeleteSubEnv}
+  onConfirm={confirmDeleteSubEnv}
+  onCancel={cancelDeleteSubEnv}
 />

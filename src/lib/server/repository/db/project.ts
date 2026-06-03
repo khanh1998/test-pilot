@@ -1,9 +1,16 @@
 import { db } from '../../db/index.js';
-import { projects, projectApis, projectEnvironments, projectModules, apis, environments } from '../../db/schema.js';
+import {
+  projects,
+  projectApis,
+  projectEnvironments,
+  projectModules,
+  apis,
+  environments
+} from '../../db/schema.js';
 import { eq, and, desc, asc, inArray } from 'drizzle-orm';
-import type { 
-  Project, 
-  ProjectConfig, 
+import type {
+  Project,
+  ProjectConfig,
   CreateProjectRequest,
   UpdateProjectRequest,
   ProjectListResponse,
@@ -107,12 +114,12 @@ export class ProjectRepository {
 
     return {
       project,
-      modules: modulesResult.map(module => ({
+      modules: modulesResult.map((module) => ({
         ...module,
         description: module.description || undefined,
         displayOrder: module.displayOrder || 0
       })),
-      apis: apisResult.map(api => ({
+      apis: apisResult.map((api) => ({
         id: api.id,
         projectId: api.projectId,
         apiId: api.apiId,
@@ -125,12 +132,13 @@ export class ProjectRepository {
           host: api.apiHost || undefined
         }
       })),
-      environments: environmentsResult.map(env => {
+      environments: environmentsResult.map((env) => {
         // Find the corresponding variable mappings in project_json.environment_mappings
-        const variableMappings = project.projectJson?.environment_mappings?.find(
-          mapping => mapping.environment_id === env.environmentId
-        )?.variable_mappings || {};
-        
+        const variableMappings =
+          project.projectJson?.environment_mappings?.find(
+            (mapping) => mapping.environment_id === env.environmentId
+          )?.variable_mappings || {};
+
         return {
           id: env.id,
           projectId: env.projectId,
@@ -182,13 +190,18 @@ export class ProjectRepository {
   /**
    * Update project
    */
-  async updateProject(projectId: number, userId: number, data: UpdateProjectRequest): Promise<Project | null> {
+  async updateProject(
+    projectId: number,
+    userId: number,
+    data: UpdateProjectRequest
+  ): Promise<Project | null> {
     const updateData: any = {
       updatedAt: new Date()
     };
 
     if (data.name !== undefined) updateData.name = data.name;
     if (data.description !== undefined) updateData.description = data.description;
+    if (data.agentContext !== undefined) updateData.agentContext = data.agentContext;
     if (data.projectJson !== undefined) updateData.projectJson = data.projectJson;
 
     const result = await db
@@ -222,7 +235,7 @@ export class ProjectRepository {
   async linkApisToProject(projectId: number, apiIds: number[]): Promise<void> {
     if (apiIds.length === 0) return;
 
-    const values = apiIds.map(apiId => ({
+    const values = apiIds.map((apiId) => ({
       projectId,
       apiId,
       createdAt: new Date()
@@ -251,6 +264,7 @@ export class ProjectRepository {
       id: row.id,
       name: row.name,
       description: row.description,
+      agentContext: row.agentContext,
       userId: row.userId,
       projectJson: row.projectJson as ProjectConfig,
       createdAt: row.createdAt,

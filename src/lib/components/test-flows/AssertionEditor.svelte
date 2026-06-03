@@ -1,26 +1,54 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+    
   import type { Endpoint, StepEndpoint } from './types';
   // Import assertion types from our new assertion module
   import type { AssertionDataSource, AssertionOperator, AssertionType, Assertion } from '$lib/assertions/types';
   import { getAllOperators, isValidOperator } from '$lib/assertions';
   import { safeRandomUuid } from '$lib/utils/uuid';
 
-  // Sliding panel props
-  export let isOpen = false;
-  export let isMounted = false;
-  export let endpoint: Endpoint;
-  export let stepEndpoint: StepEndpoint;
-  export let stepIndex: number;
-  export let endpointIndex: number;
-  export let duplicateCount: number = 1;
-  export let instanceIndex: number = 1;
+  
 
-  // Add props for displaying assertion results
-  export let assertionResults: { passed: boolean; results: Array<any>; failureMessage?: string } = { passed: true, results: [] }; // Results from last execution
-  export let hasExecutionData: boolean = false; // Whether we have execution data to show
+  
+  interface Props {
+    [key: string]: unknown;
+    // Sliding panel props
+    isOpen?: boolean;
+    isMounted?: boolean;
+    endpoint: Endpoint;
+    stepEndpoint: StepEndpoint;
+    stepIndex: number;
+    endpointIndex: number;
+    duplicateCount?: number;
+    instanceIndex?: number;
+    // Add props for displaying assertion results
+    assertionResults?: { passed: boolean; results: Array<any>; failureMessage?: string }; // Results from last execution
+    hasExecutionData?: boolean; // Whether we have execution data to show
+  }
 
-  const dispatch = createEventDispatcher();
+  let {
+    isOpen = false,
+    isMounted = false,
+    endpoint,
+    stepEndpoint = $bindable(),
+    stepIndex,
+    endpointIndex,
+    duplicateCount = 1,
+    instanceIndex = 1,
+    assertionResults = { passed: true, results: [] },
+    hasExecutionData = false
+  , ...callbackProps
+  }: Props & Record<string, unknown> = $props();
+
+  function dispatch(eventName: string, detail?: unknown) {
+    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === "function") {
+      if (arguments.length > 1) {
+        handler(detail);
+      } else {
+        handler();
+      }
+    }
+  }
 
   // Assertion editor state
   let assertions: Array<{
@@ -33,7 +61,7 @@
     expected_value_type?: ExpectedValueType;
     enabled: boolean;
     is_template_expression?: boolean; // Add template expression support
-  }> = [];
+  }> = $state([]);
   
   // Value types for assertion expected values
   type ExpectedValueType = 'string' | 'number' | 'boolean' | 'array';
@@ -49,7 +77,7 @@
     expected_value_type?: ExpectedValueType;
     enabled: boolean;
     is_template_expression?: boolean; // Add template expression support
-  } = {
+  } = $state({
     id: safeRandomUuid(),
     data_source: 'response' as AssertionDataSource,
     assertion_type: 'status_code' as AssertionType,
@@ -59,7 +87,7 @@
     expected_value_type: 'number',
     enabled: true,
     is_template_expression: false
-  };
+  });
   
   // Define available operators for each assertion type
   const operatorsByType: Record<AssertionType, AssertionOperator[]> = {
@@ -97,9 +125,11 @@
   };
   
   // Auto-show results if we have execution data
-  $: if (hasExecutionData && assertionResults.results && assertionResults.results.length > 0) {
-    showResults = true;
-  }
+  $effect(() => {
+    if (hasExecutionData && assertionResults.results && assertionResults.results.length > 0) {
+      showResults = true;
+    }
+  });
   
   // Get all available operators from our registry
   const allOperators = getAllOperators();
@@ -173,7 +203,7 @@
   }
   
   // Track validation state for array inputs
-  let arrayValidationStates: Record<string, { isValid: boolean; error?: string }> = {};
+  let arrayValidationStates: Record<string, { isValid: boolean; error?: string }> = $state({});
   
   function updateArrayValidation(id: string, isValid: boolean, error?: string) {
     arrayValidationStates[id] = { isValid, error };
@@ -242,25 +272,27 @@
   }
   
   // UI state for showing/hiding results
-  let showResults = false;
+  let showResults = $state(false);
   
   // Initialize state when component mounts
-  $: if (isMounted && endpoint && stepEndpoint) {
-    // Initialize assertions if needed
-    if (!stepEndpoint.assertions) {
-      stepEndpoint.assertions = [];
+  $effect(() => {
+    if (isMounted && endpoint && stepEndpoint) {
+      // Initialize assertions if needed
+      if (!stepEndpoint.assertions) {
+        stepEndpoint.assertions = [];
+      }
+      assertions = [...(stepEndpoint.assertions || [])];
+      
+      // Initialize skipDefaultStatusCheck if not set
+      if (stepEndpoint.skipDefaultStatusCheck === undefined) {
+        stepEndpoint.skipDefaultStatusCheck = false;
+      }
     }
-    assertions = [...(stepEndpoint.assertions || [])];
-    
-    // Initialize skipDefaultStatusCheck if not set
-    if (stepEndpoint.skipDefaultStatusCheck === undefined) {
-      stepEndpoint.skipDefaultStatusCheck = false;
-    }
-  }
+  });
   
   // Get transformations for transformed_data source
-  $: hasTransformations = stepEndpoint?.transformations && stepEndpoint.transformations.length > 0;
-  $: transformations = stepEndpoint?.transformations || [];
+  let hasTransformations = $derived(stepEndpoint?.transformations && stepEndpoint.transformations.length > 0);
+  let transformations = $derived(stepEndpoint?.transformations || []);
   
   // Save changes from assertion editor
   function saveAssertionChanges() {
@@ -620,7 +652,7 @@
   class="fixed inset-0 z-40 flex justify-end transition-opacity duration-200 ease-in-out {isOpen
     ? 'opacity-100'
     : 'opacity-0'}"
-  on:keydown={(e) => e.key === 'Escape' && closeAssertionEditor()}
+  onkeydown={(e) => e.key === 'Escape' && closeAssertionEditor()}
   role="dialog"
   aria-modal="true"
   tabindex="-1"
@@ -628,7 +660,7 @@
   <!-- Transparent clickable overlay for the left side -->
   <div
     class="absolute inset-y-0 right-0 left-0 bg-transparent transition-opacity duration-300 ease-in-out sm:right-[75%] md:right-[600px] lg:right-[500px]"
-    on:click={closeAssertionEditor}
+    onclick={closeAssertionEditor}
     role="presentation"
     aria-hidden="true"
   ></div>
@@ -672,20 +704,20 @@
             class="rounded px-2 py-0.5 text-xs transition-colors {showResults
               ? 'bg-gray-600 text-white hover:bg-gray-700'
               : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}"
-            on:click={() => (showResults = !showResults)}
+            onclick={() => (showResults = !showResults)}
           >
             {showResults ? 'Hide Results' : 'Show Results'}
           </button>
         {/if}
         <button
           class="rounded bg-blue-600 px-2 py-0.5 text-xs text-white hover:bg-blue-700"
-          on:click={saveAssertionChanges}
+          onclick={saveAssertionChanges}
         >
           Save
         </button>
         <button
           class="rounded bg-gray-200 px-2 py-0.5 text-xs text-gray-800 hover:bg-gray-300"
-          on:click={closeAssertionEditor}
+          onclick={closeAssertionEditor}
         >
           Cancel
         </button>
@@ -711,7 +743,7 @@
                 type="checkbox"
                 bind:checked={stepEndpoint.skipDefaultStatusCheck}
                 class="mr-2 rounded border-gray-300"
-                on:change={() => dispatch('change')}
+                onchange={() => dispatch('change')}
               />
               Skip automatic 2xx status check
             </label>
@@ -755,7 +787,7 @@
                       type="checkbox"
                       bind:checked={assertion.enabled}
                       class="mr-2 rounded border-gray-300"
-                      on:change={handleAssertionChange}
+                      onchange={handleAssertionChange}
                     />
                     <span class="font-medium">#{i + 1}</span>
                     {#if hasAssertionResult(i)}
@@ -774,7 +806,7 @@
                   </div>
                   <button
                     class="text-red-600 hover:text-red-800"
-                    on:click={() => removeAssertion(i)}
+                    onclick={() => removeAssertion(i)}
                     aria-label="Remove Assertion"
                   >
                     <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
@@ -815,7 +847,7 @@
               id="data-source-{i}"
               bind:value={assertion.data_source}
               class="w-full rounded border px-1.5 py-0.5 text-xs"
-              on:change={() => {
+              onchange={() => {
                 // Auto-set assertion type to json_body when transformed_data is selected
                 if (assertion.data_source === 'transformed_data') {
                   assertion.assertion_type = 'json_body';
@@ -840,7 +872,7 @@
                 id="assertion-type-{i}"
                 bind:value={assertion.assertion_type}
                 class="w-full rounded border px-1.5 py-0.5 text-xs"
-                on:change={() => {
+                onchange={() => {
                   updateAssertionType(assertion, assertion.assertion_type);
                   handleAssertionChange();
                 }}
@@ -868,7 +900,7 @@
                         bind:value={assertion.data_id}
                         class="w-full rounded border px-1.5 py-0.5 text-xs"
                         placeholder={assertion.data_source === 'transformed_data' ? '$.transformedField' : assertion.assertion_type === 'header' ? 'content-type' : '$.data.user.id'}
-                        on:change={handleAssertionChange}
+                        onchange={handleAssertionChange}
                       />
                       {#if assertion.assertion_type === 'json_body' || assertion.data_source === 'transformed_data'}
                         <p class="mt-0.5 text-xs text-gray-500">JSONPath from {assertion.data_source}</p>
@@ -886,7 +918,7 @@
                         id="type-{i}"
                         class="w-full rounded border px-1.5 py-0.5 text-xs mb-2"
                         value={assertion.expected_value_type || getDefaultValueType(assertion.assertion_type)}
-                        on:change={(e) => handleExpectedValueTypeChange(assertion, (e.target as HTMLSelectElement).value as ExpectedValueType)}
+                        onchange={(e) => handleExpectedValueTypeChange(assertion, (e.target as HTMLSelectElement).value as ExpectedValueType)}
                       >
                         <option value="string">String</option>
                         <option value="number">Number</option>
@@ -902,7 +934,7 @@
                       id="operator-{i}"
                       bind:value={assertion.operator}
                       class="w-full rounded border px-1.5 py-0.5 text-xs"
-                      on:change={(e) => {
+                      onchange={(e) => {
                         if (e.target && 'value' in e.target) {
                           updateOperator(assertion, e.target.value as AssertionOperator);
                         }
@@ -929,7 +961,7 @@
                               type="checkbox"
                               bind:checked={assertion.is_template_expression}
                               class="mr-1 rounded border-gray-300"
-                              on:change={() => {
+                              onchange={() => {
                                 // Reset expected value when toggling template mode
                                 if (assertion.is_template_expression) {
                                   assertion.expected_value = '';
@@ -960,7 +992,7 @@
                             class="w-full rounded border px-1.5 py-0.5 text-xs font-mono bg-yellow-50 border-yellow-200"
                             rows="2"
                             placeholder="{`{{res:step1-0.$.data.id}} or {{{res:step1-0.$.user.active}}}`}"
-                            on:change={handleAssertionChange}
+                            onchange={handleAssertionChange}
                           ></textarea>
                         </div>
                       {:else}
@@ -979,7 +1011,7 @@
                             placeholder="Min"
                             class="w-1/2 rounded border px-1.5 py-0.5 text-xs"
                             value={minValue}
-                            on:change={(e) => {
+                            onchange={(e) => {
                               // Convert to a number and handle NaN
                               const min = Number(e.currentTarget.value);
                               const max = Array.isArray(assertion.expected_value) && assertion.expected_value.length > 1 
@@ -997,7 +1029,7 @@
                             placeholder="Max"
                             class="w-1/2 rounded border px-1.5 py-0.5 text-xs"
                             value={maxValue}
-                            on:change={(e) => {
+                            onchange={(e) => {
                               // Convert to a number and handle NaN
                               const max = Number(e.currentTarget.value);
                               const min = Array.isArray(assertion.expected_value) && assertion.expected_value.length > 0 
@@ -1022,7 +1054,7 @@
                           class="w-full rounded border px-1.5 py-0.5 text-xs font-mono {validationState.isValid ? 'border-gray-300' : 'border-red-300 bg-red-50'}"
                           rows="3"
                           placeholder='[1, 2, 3] or ["a", "b", "c"]'
-                          on:input={(e) => {
+                          oninput={(e) => {
                             const value = e.currentTarget.value;
                             const validation = validateArrayInput(value);
                             updateArrayValidation(inputId, validation.isValid, validation.error);
@@ -1057,7 +1089,7 @@
                           id="expected-value-{i}" 
                           bind:value={assertion.expected_value} 
                           class="w-full rounded border px-1.5 py-0.5 text-xs"
-                          on:change={handleAssertionChange}
+                          onchange={handleAssertionChange}
                         >
                           <option value="string">String</option>
                           <option value="number">Number</option>
@@ -1071,7 +1103,7 @@
                           id="expected-value-{i}" 
                           value={String(assertion.expected_value)}
                           class="w-full rounded border px-1.5 py-0.5 text-xs"
-                          on:change={(e) => {
+                          onchange={(e) => {
                             assertion.expected_value = e.currentTarget.value === 'true';
                             handleAssertionChange();
                           }}
@@ -1087,7 +1119,7 @@
                           bind:value={assertion.expected_value}
                           class="w-full rounded border px-1.5 py-0.5 text-xs"
                           placeholder="Enter number"
-                          on:change={handleAssertionChange}
+                          onchange={handleAssertionChange}
                         />
                       {:else if assertion.expected_value_type === 'array' || 
                                getDefaultValueType(assertion.assertion_type) === 'array'}
@@ -1099,7 +1131,7 @@
                           class="w-full rounded border px-1.5 py-0.5 text-xs font-mono {validationState.isValid ? 'border-gray-300' : 'border-red-300 bg-red-50'}"
                           rows="3"
                           placeholder='[1,2,3] or ["a","b"] - primitives only'
-                          on:input={(e) => {
+                          oninput={(e) => {
                             const value = e.currentTarget.value;
                             const validation = validateArrayInput(value);
                             updateArrayValidation(inputId, validation.isValid, validation.error);
@@ -1134,7 +1166,7 @@
                           type={(assertion.expected_value_type || getDefaultValueType(assertion.assertion_type)) === 'number' ? 'number' : 'text'}
                           bind:value={assertion.expected_value}
                           class="w-full rounded border px-1.5 py-0.5 text-xs"
-                          on:change={handleAssertionChange}
+                          onchange={handleAssertionChange}
                         />
                       {/if}
                       {/if}
@@ -1245,7 +1277,7 @@
               id="new-data-source"
               bind:value={newAssertion.data_source}
               class="w-full rounded border px-1.5 py-0.5 text-xs"
-              on:change={() => {
+              onchange={() => {
                 // Auto-set assertion type to json_body when transformed_data is selected
                 if (newAssertion.data_source === 'transformed_data') {
                   newAssertion.assertion_type = 'json_body';
@@ -1269,7 +1301,7 @@
                 id="new-assertion-type"
                 bind:value={newAssertion.assertion_type}
                 class="w-full rounded border px-1.5 py-0.5 text-xs"
-                on:change={() => {
+                onchange={() => {
                   updateAssertionType(newAssertion, newAssertion.assertion_type);
                 }}
               >
@@ -1315,7 +1347,7 @@
                 id="new-type"
                 class="w-full rounded border px-1.5 py-0.5 text-xs mb-2"
                 bind:value={newAssertion.expected_value_type}
-                on:change={(e) => {
+                onchange={(e) => {
                   if (e.target && 'value' in e.target) {
                     const newType = e.target.value as ExpectedValueType;
                     newAssertion.expected_value_type = newType;
@@ -1355,7 +1387,7 @@
               id="new-operator"
               bind:value={newAssertion.operator}
               class="w-full rounded border px-1.5 py-0.5 text-xs"
-              on:change={(e) => {
+              onchange={(e) => {
                 if (e.target && 'value' in e.target) {
                   updateOperator(newAssertion, e.target.value as AssertionOperator);
                 }
@@ -1381,7 +1413,7 @@
                       type="checkbox"
                       bind:checked={newAssertion.is_template_expression}
                       class="mr-1 rounded border-gray-300"
-                      on:change={() => {
+                      onchange={() => {
                         // Reset expected value when toggling template mode
                         if (newAssertion.is_template_expression) {
                           newAssertion.expected_value = '';
@@ -1434,7 +1466,7 @@
                     placeholder="Min"
                     class="w-1/2 rounded border px-1.5 py-0.5 text-xs"
                     value={minValue}
-                    on:change={(e) => {
+                    onchange={(e) => {
                       const min = Number(e.currentTarget.value);
                       const max = Array.isArray(newAssertion.expected_value) && newAssertion.expected_value.length > 1 
                         ? Number(newAssertion.expected_value[1]) : min + 10;
@@ -1448,7 +1480,7 @@
                     placeholder="Max"
                     class="w-1/2 rounded border px-1.5 py-0.5 text-xs"
                     value={maxValue}
-                    on:change={(e) => {
+                    onchange={(e) => {
                       const max = Number(e.currentTarget.value);
                       const min = Array.isArray(newAssertion.expected_value) && newAssertion.expected_value.length > 0 
                         ? Number(newAssertion.expected_value[0]) : 0;
@@ -1470,7 +1502,7 @@
                   class="w-full rounded border px-1.5 py-0.5 text-xs font-mono {validationState.isValid ? 'border-gray-300' : 'border-red-300 bg-red-50'}"
                   rows="3"
                   placeholder='[1, 2, 3] or ["a", "b", "c"]'
-                  on:input={(e) => {
+                  oninput={(e) => {
                     const value = e.currentTarget.value;
                     const validation = validateArrayInput(value);
                     updateArrayValidation(inputId, validation.isValid, validation.error);
@@ -1517,7 +1549,7 @@
                   id="new-expected-value"
                   value={String(newAssertion.expected_value)}
                   class="w-full rounded border px-1.5 py-0.5 text-xs"
-                  on:change={(e) => {
+                  onchange={(e) => {
                     newAssertion.expected_value = e.currentTarget.value === 'true';
                   }}
                 >
@@ -1542,7 +1574,7 @@
                   class="w-full rounded border px-1.5 py-0.5 text-xs font-mono {validationState.isValid ? 'border-gray-300' : 'border-red-300 bg-red-50'}"
                   rows="3"
                   placeholder='[1,2,3] or ["a","b"] - primitives only'
-                  on:input={(e) => {
+                  oninput={(e) => {
                     const value = e.currentTarget.value;
                     const validation = validateArrayInput(value);
                     updateArrayValidation(inputId, validation.isValid, validation.error);
@@ -1586,7 +1618,7 @@
         <div class="mt-3">
           <button
             class="w-full rounded py-1 text-sm font-medium transition-colors {hasValidationErrors() ? 'bg-gray-400 text-gray-700 cursor-not-allowed' : 'bg-green-600 text-white hover:bg-green-700'}"
-            on:click={addAssertion}
+            onclick={addAssertion}
             disabled={hasValidationErrors()}
             title={hasValidationErrors() ? 'Please fix validation errors before adding assertion' : 'Add assertion'}
           >

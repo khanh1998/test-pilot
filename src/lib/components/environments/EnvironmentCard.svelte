@@ -1,18 +1,29 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  
   import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
   import type { Environment } from '$lib/types/environment';
   
-  export let environment: Environment;
+  interface Props {
+    [key: string]: unknown;
+    environment: Environment;
+  }
+
+  let { environment , ...callbackProps
+  }: Props & Record<string, unknown> = $props();
 
   // Confirm dialog state
-  let showConfirmDialog = false;
+  let showConfirmDialog = $state(false);
 
-  const dispatch = createEventDispatcher<{
-    edit: { environment: Environment };
-    delete: { environment: Environment };
-    view: { environment: Environment };
-  }>();
+  function dispatch(eventName: string, detail?: unknown) {
+    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === "function") {
+      if (arguments.length > 1) {
+        handler(detail);
+      } else {
+        handler();
+      }
+    }
+  }
 
   function handleEdit() {
     dispatch('edit', { environment });
@@ -35,9 +46,9 @@
     dispatch('view', { environment });
   }
 
-  $: subEnvironments = Object.keys(environment.config.environments);
-  $: variableCount = Object.keys(environment.config.variable_definitions || {}).length;
-  $: linkedApiCount = environment.config.linked_apis?.length || 0;
+  let subEnvironments = $derived(Object.keys(environment.config.environments));
+  let variableCount = $derived(Object.keys(environment.config.variable_definitions || {}).length);
+  let linkedApiCount = $derived(environment.config.linked_apis?.length || 0);
 </script>
 
 <div class="group border border-gray-200 rounded-lg p-6 bg-white shadow-sm transition-all duration-200 ease-in-out cursor-pointer hover:shadow-md hover:border-gray-300">
@@ -112,8 +123,8 @@
   confirmText="Delete"
   cancelText="Cancel"
   confirmVariant="danger"
-  on:confirm={confirmDelete}
-  on:cancel={cancelDelete}
+  onConfirm={confirmDelete}
+  onCancel={cancelDelete}
 />
 
 

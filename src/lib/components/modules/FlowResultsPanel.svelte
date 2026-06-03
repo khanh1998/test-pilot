@@ -1,18 +1,31 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  
   import { fade, fly } from 'svelte/transition';
   import JsonViewer from '../ui/JsonViewer.svelte';
   import type { SequenceFlowResult } from '$lib/sequence-runner/types';
 
-  export let isOpen = false;
-  export let flowResult: SequenceFlowResult | null = null;
-  export let flowName: string = '';
+  interface Props {
+    [key: string]: unknown;
+    isOpen?: boolean;
+    flowResult?: SequenceFlowResult | null;
+    flowName?: string;
+  }
 
-  const dispatch = createEventDispatcher<{
-    close: void;
-  }>();
+  let { isOpen = false, flowResult = null, flowName = '' , ...callbackProps
+  }: Props & Record<string, unknown> = $props();
 
-  let activeTab: 'overview' | 'outputs' | 'responses' | 'parameters' = 'overview';
+  function dispatch(eventName: string, detail?: unknown) {
+    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === "function") {
+      if (arguments.length > 1) {
+        handler(detail);
+      } else {
+        handler();
+      }
+    }
+  }
+
+  let activeTab: 'overview' | 'outputs' | 'responses' | 'parameters' = $state('overview');
 
   function closePanel() {
     dispatch('close');
@@ -45,10 +58,10 @@
     }
   }
 
-  $: statusInfo = flowResult ? getStatusIcon(flowResult.success) : null;
+  let statusInfo = $derived(flowResult ? getStatusIcon(flowResult.success) : null);
 </script>
 
-<svelte:window on:keydown={handleKeydown} />
+<svelte:window onkeydown={handleKeydown} />
 
 {#if isOpen}
   <!-- Panel -->
@@ -80,7 +93,7 @@
       <button
         type="button"
         class="rounded-full p-2 text-gray-400 transition-colors hover:bg-gray-200 hover:text-gray-600"
-        on:click={closePanel}
+        onclick={closePanel}
         aria-label="Close"
       >
         <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -96,7 +109,7 @@
           class="border-b-2 px-4 py-3 text-sm font-medium transition-colors {activeTab === 'overview'
             ? 'border-blue-500 text-blue-600'
             : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}"
-          on:click={() => (activeTab = 'overview')}
+          onclick={() => (activeTab = 'overview')}
         >
           <div class="flex items-center">
             <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -110,7 +123,7 @@
           class="border-b-2 px-4 py-3 text-sm font-medium transition-colors {activeTab === 'outputs'
             ? 'border-blue-500 text-blue-600'
             : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}"
-          on:click={() => (activeTab = 'outputs')}
+          onclick={() => (activeTab = 'outputs')}
         >
           <div class="flex items-center">
             <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -124,7 +137,7 @@
           class="border-b-2 px-4 py-3 text-sm font-medium transition-colors {activeTab === 'responses'
             ? 'border-blue-500 text-blue-600'
             : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}"
-          on:click={() => (activeTab = 'responses')}
+          onclick={() => (activeTab = 'responses')}
         >
           <div class="flex items-center">
             <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -138,7 +151,7 @@
           class="border-b-2 px-4 py-3 text-sm font-medium transition-colors {activeTab === 'parameters'
             ? 'border-blue-500 text-blue-600'
             : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}"
-          on:click={() => (activeTab = 'parameters')}
+          onclick={() => (activeTab = 'parameters')}
         >
           <div class="flex items-center">
             <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

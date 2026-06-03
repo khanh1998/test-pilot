@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+    
   import type { Endpoint, StepEndpoint, ExecutionState } from './types';
   import type { TemplateContext } from '$lib/template/types';
   import EndpointCard from './EndpointCard.svelte';
@@ -8,81 +8,85 @@
   import TransformationEditor from './TransformationEditor.svelte';
   import AssertionEditor from './AssertionEditor.svelte';
 
-  export let step: {
+  interface Props {
+    [key: string]: unknown;
+    step: {
     step_id: string;
     label: string;
     endpoints: StepEndpoint[];
     clearCookiesBeforeExecution?: boolean;
   };
-  export let endpoints: Endpoint[] = [];
-  export let apiHosts: Record<string | number, { url: string; name?: string; description?: string }> = {};
-  export let stepIndex: number;
-  export let isFirstStep: boolean = false;
-  export let isLastStep: boolean = false;
-  export let isRunning: boolean = false; // Flag from parent to indicate if test flow execution is in progress
-  export let executionStore: ExecutionState = {}; // Store from parent for better reactivity
-  export let templateContext: TemplateContext | null = null; // Template context for resolving template expressions
+    endpoints?: Endpoint[];
+    apiHosts?: Record<string | number, { url: string; name?: string; description?: string }>;
+    stepIndex: number;
+    isFirstStep?: boolean;
+    isLastStep?: boolean;
+    isRunning?: boolean; // Flag from parent to indicate if test flow execution is in progress
+    executionStore?: ExecutionState; // Store from parent for better reactivity
+    templateContext?: TemplateContext | null; // Template context for resolving template expressions
+    endpointSelector?: import('svelte').Snippet;
+  }
+
+  type EndpointIndexPayload = { endpointIndex: number };
+  type EndpointDragPayload = { event: DragEvent };
+
+  let {
+    step = $bindable(),
+    endpoints = [],
+    apiHosts = {},
+    stepIndex,
+    isFirstStep = false,
+    isLastStep = false,
+    isRunning = false,
+    executionStore = {},
+    templateContext = null,
+    endpointSelector,
+    ...callbackProps
+  }: Props = $props();
 
   // Emitted events will be handled by the parent component
-  const dispatch = createEventDispatcher();
 
-  // Parameter editor state
-  let isParamEditorOpen = false;
-  let isParamEditorMounted = false;
-  let activeEndpointIndex: number | null = null;
-
-  // Response viewer state
-  let isResponseViewerOpen = false;
-  let isResponseViewerMounted = false;
-  let activeResponseEndpointIndex: number | null = null;
-  
-  // Transformation editor state
-  let isTransformationEditorOpen = false;
-  let isTransformationEditorMounted = false;
-  let activeTransformationEndpointIndex: number | null = null;
-
-  // Assertion editor state
-  let isAssertionEditorOpen = false;
-  let isAssertionEditorMounted = false;
-  let activeAssertionEndpointIndex: number | null = null;
-
-  // Drag and drop state
-  let draggedEndpointIndex = -1;
-  let dropTargetIndex = -1;
-
-  // Step execution state
-  let stepExecutionState = { status: 'none' };
-
-  // Computed property to handle undefined clearCookiesBeforeExecution values
-  $: clearCookiesEnabled = step.clearCookiesBeforeExecution === true;
-
-  // Sort endpoints by order field, fallback to array index
-  $: sortedEndpoints = step.endpoints
-    .map((endpoint, index) => ({ endpoint, originalIndex: index }))
-    .sort((a, b) => {
-      const orderA = a.endpoint.order ?? a.originalIndex;
-      const orderB = b.endpoint.order ?? b.originalIndex;
-      return orderA - orderB;
-    });
-
-  // Ensure all endpoints have order values (migration for old flows)
-  $: {
-    let needsUpdate = false;
-    step.endpoints.forEach((endpoint, index) => {
-      if (endpoint.order === undefined) {
-        endpoint.order = index;
-        needsUpdate = true;
+  function dispatch(eventName: string, detail?: unknown) {
+    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === "function") {
+      if (arguments.length > 1) {
+        handler(detail);
+      } else {
+        handler();
       }
-    });
-    if (needsUpdate) {
-      dispatch('change');
     }
   }
 
-  // Helper to determine step execution state
-  $: {
-    stepExecutionState = computeStepExecutionState(executionStore, step);
-  }
+  // Parameter editor state
+  let isParamEditorOpen = $state(false);
+  let isParamEditorMounted = $state(false);
+  let activeEndpointIndex: number | null = $state(null);
+
+  // Response viewer state
+  let isResponseViewerOpen = $state(false);
+  let isResponseViewerMounted = $state(false);
+  let activeResponseEndpointIndex: number | null = $state(null);
+  
+  // Transformation editor state
+  let isTransformationEditorOpen = $state(false);
+  let isTransformationEditorMounted = $state(false);
+  let activeTransformationEndpointIndex: number | null = $state(null);
+
+  // Assertion editor state
+  let isAssertionEditorOpen = $state(false);
+  let isAssertionEditorMounted = $state(false);
+  let activeAssertionEndpointIndex: number | null = $state(null);
+
+  // Drag and drop state
+  let draggedEndpointIndex = $state(-1);
+  let dropTargetIndex = $state(-1);
+
+  // Step execution state
+  let stepExecutionState = $state({ status: 'none' });
+
+
+
+
 
   // Helper to find an endpoint by ID
   function findEndpoint(id: string | number): Endpoint | undefined {
@@ -167,8 +171,8 @@
   }
 
   // Open parameter editor panel for a specific endpoint
-  function openParamEditor(event: CustomEvent<{ endpointIndex: number }>) {
-    const { endpointIndex } = event.detail;
+  function openParamEditor(payload: EndpointIndexPayload) {
+    const { endpointIndex } = payload;
     activeEndpointIndex = endpointIndex;
 
     // First set the panel as mounted but with transform to the right
@@ -205,8 +209,8 @@
   }
 
   // Open response viewer panel for a specific endpoint
-  function openResponseViewer(event: CustomEvent<{ endpointIndex: number }>) {
-    const { endpointIndex } = event.detail;
+  function openResponseViewer(payload: EndpointIndexPayload) {
+    const { endpointIndex } = payload;
     activeResponseEndpointIndex = endpointIndex;
 
     // First set the panel as mounted but with transform to the right
@@ -238,8 +242,8 @@
   }
 
   // Open transformation editor panel for a specific endpoint
-  function openTransformationEditor(event: CustomEvent<{ endpointIndex: number }>) {
-    const { endpointIndex } = event.detail;
+  function openTransformationEditor(payload: EndpointIndexPayload) {
+    const { endpointIndex } = payload;
     activeTransformationEndpointIndex = endpointIndex;
 
     // First set the panel as mounted but with transform to the right
@@ -271,8 +275,8 @@
   }
 
   // Open assertion editor panel for a specific endpoint
-  function openAssertionEditor(event: CustomEvent<{ endpointIndex: number }>) {
-    const { endpointIndex } = event.detail;
+  function openAssertionEditor(payload: EndpointIndexPayload) {
+    const { endpointIndex } = payload;
     activeAssertionEndpointIndex = endpointIndex;
 
     // First set the panel as mounted but with transform to the right
@@ -309,8 +313,8 @@
   }
 
   // Drag and drop handlers
-  function handleEndpointDragStart(event: CustomEvent<{ endpointIndex: number }>) {
-    draggedEndpointIndex = event.detail.endpointIndex;
+  function handleEndpointDragStart(payload: EndpointIndexPayload) {
+    draggedEndpointIndex = payload.endpointIndex;
     console.log('Endpoint drag started:', { draggedEndpointIndex });
   }
 
@@ -360,23 +364,50 @@
   }
 
   // Keyboard navigation handlers
-  function handleMoveLeft(event: CustomEvent<{ endpointIndex: number }>) {
+  function handleMoveLeft(payload: EndpointIndexPayload) {
     const currentIndex = sortedEndpoints.findIndex(
-      item => item.originalIndex === event.detail.endpointIndex
+      item => item.originalIndex === payload.endpointIndex
     );
     if (currentIndex > 0) {
       reorderEndpoint(currentIndex, currentIndex - 1);
     }
   }
 
-  function handleMoveRight(event: CustomEvent<{ endpointIndex: number }>) {
+  function handleMoveRight(payload: EndpointIndexPayload) {
     const currentIndex = sortedEndpoints.findIndex(
-      item => item.originalIndex === event.detail.endpointIndex
+      item => item.originalIndex === payload.endpointIndex
     );
     if (currentIndex < sortedEndpoints.length - 1) {
       reorderEndpoint(currentIndex, currentIndex + 1);
     }
   }
+  // Computed property to handle undefined clearCookiesBeforeExecution values
+  let clearCookiesEnabled = $derived(step.clearCookiesBeforeExecution === true);
+  // Sort endpoints by order field, fallback to array index
+  let sortedEndpoints = $derived(step.endpoints
+    .map((endpoint, index) => ({ endpoint, originalIndex: index }))
+    .sort((a, b) => {
+      const orderA = a.endpoint.order ?? a.originalIndex;
+      const orderB = b.endpoint.order ?? b.originalIndex;
+      return orderA - orderB;
+    }));
+  // Ensure all endpoints have order values (migration for old flows)
+  $effect(() => {
+    let needsUpdate = false;
+    step.endpoints.forEach((endpoint, index) => {
+      if (endpoint.order === undefined) {
+        endpoint.order = index;
+        needsUpdate = true;
+      }
+    });
+    if (needsUpdate) {
+      dispatch('change');
+    }
+  });
+  // Helper to determine step execution state
+  $effect(() => {
+    stepExecutionState = computeStepExecutionState(executionStore, step);
+  });
 </script>
 
 <div
@@ -400,18 +431,18 @@
           title="Click to edit step name"
           placeholder={`Step ${stepIndex + 1}`}
           class:text-gray-400={!step.label || step.label.trim() === ''}
-          on:focus={(e) => {
+          onfocus={(e) => {
             if (e.target && e.target instanceof HTMLInputElement) {
               e.target.select();
             }
           }}
-          on:blur={() => {
+          onblur={() => {
             if (step.label.trim() === '') {
               step.label = `Step ${stepIndex + 1}`;
             }
             dispatch('change');
           }}
-          on:keydown={(e) => {
+          onkeydown={(e: KeyboardEvent) => {
             if (e.key === 'Enter' && e.target instanceof HTMLInputElement) {
               e.target.blur();
             }
@@ -484,7 +515,7 @@
       <button
         class="ml-2 inline-flex items-center rounded-md px-2 py-1 text-xs transition-colors
           {stepExecutionState.status === 'running' ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'}"
-        on:click={() => dispatch('runStep', { stepIndex })}
+        onclick={() => dispatch('runStep', { stepIndex })}
         disabled={stepExecutionState.status === 'running'}
         title={stepExecutionState.status === 'running' ? 'Step is currently running' : 'Run this step'}
       >
@@ -507,7 +538,7 @@
               bind:checked={clearCookiesEnabled}
               class="sr-only peer"
               disabled={isRunning}
-              on:change={() => {
+              onchange={() => {
                 step.clearCookiesBeforeExecution = clearCookiesEnabled;
                 dispatch('change');
               }}
@@ -531,7 +562,7 @@
       {#if !isFirstStep}
         <button
           class="p-1 text-gray-600 hover:text-gray-800"
-          on:click={moveStepUp}
+          onclick={moveStepUp}
           aria-label="Move Step Up"
           title="Move Step Up"
           disabled={isRunning}
@@ -548,7 +579,7 @@
       {#if !isLastStep}
         <button
           class="p-1 text-gray-600 hover:text-gray-800"
-          on:click={moveStepDown}
+          onclick={moveStepDown}
           aria-label="Move Step Down"
           title="Move Step Down"
           disabled={isRunning}
@@ -564,7 +595,7 @@
 
       <button
         class="p-1 text-red-600 hover:text-red-800"
-        on:click={() => dispatch('removeStep', { stepIndex })}
+        onclick={() => dispatch('removeStep', { stepIndex })}
         aria-label="Remove Step"
         disabled={isRunning}
         class:opacity-50={isRunning}
@@ -617,7 +648,7 @@
       <!-- When no endpoints, show selector and message side by side -->
       <div class="flex flex-row gap-3">
         <div class="flex-shrink-0">
-          <slot name="endpoint-selector"></slot>
+          {@render endpointSelector?.()}
         </div>
         <div class="flex items-center text-sm text-gray-400 italic">
           No endpoints in this step yet
@@ -627,7 +658,7 @@
       <!-- Show selector on the left (sticky), then all endpoint cards (scrollable) -->
       <div class="flex flex-row gap-3">
         <div class="flex-shrink-0 sticky left-0 z-10 bg-white">
-          <slot name="endpoint-selector"></slot>
+          {@render endpointSelector?.()}
         </div>
         <div class="flex flex-row gap-3 overflow-x-auto pb-2 flex-1">
         {#each sortedEndpoints as { endpoint: stepEndpoint, originalIndex }, sortedIndex (`${stepEndpoint.endpoint_id}-${originalIndex}`)}
@@ -647,17 +678,17 @@
               {apiHosts}
               isDragging={draggedEndpointIndex === sortedIndex}
               isDropTarget={dropTargetIndex === sortedIndex}
-              on:openParamEditor={openParamEditor}
-              on:openTransformationEditor={openTransformationEditor}
-              on:openResponseViewer={openResponseViewer}
-              on:openAssertionEditor={openAssertionEditor}
-              on:removeEndpoint={() => removeEndpoint(originalIndex)}
-              on:dragstart={handleEndpointDragStart}
-              on:dragend={handleEndpointDragEnd}
-              on:dragover={(e) => handleEndpointDragOver(e.detail.event, sortedIndex)}
-              on:drop={(e) => handleEndpointDrop(e.detail.event, sortedIndex)}
-              on:moveLeft={handleMoveLeft}
-              on:moveRight={handleMoveRight}
+              onOpenParamEditor={openParamEditor}
+              onOpenTransformationEditor={openTransformationEditor}
+              onOpenResponseViewer={openResponseViewer}
+              onOpenAssertionEditor={openAssertionEditor}
+              onRemoveEndpoint={() => removeEndpoint(originalIndex)}
+              onDragstart={handleEndpointDragStart}
+              onDragend={handleEndpointDragEnd}
+              onDragover={(payload: EndpointDragPayload) => handleEndpointDragOver(payload.event, sortedIndex)}
+              onDrop={(payload: EndpointDragPayload) => handleEndpointDrop(payload.event, sortedIndex)}
+              onMoveLeft={handleMoveLeft}
+              onMoveRight={handleMoveRight}
             />
           {:else}
             <!-- Show error card for missing endpoint -->
@@ -685,7 +716,7 @@
                 </div>
                 <button
                   class="ml-2 p-1 text-red-600 hover:text-red-800 hover:bg-red-100 rounded"
-                  on:click={() => removeEndpoint(originalIndex)}
+                  onclick={() => removeEndpoint(originalIndex)}
                   title="Remove this missing endpoint"
                   aria-label="Remove missing endpoint"
                 >
@@ -719,8 +750,8 @@
       {endpointIndex}
       {duplicateCount}
       {instanceIndex}
-      on:close={closeParamEditor}
-      on:change={handleParamChange}
+      onClose={closeParamEditor}
+      onChange={handleParamChange}
     />
   {/if}
 {/if}
@@ -738,7 +769,7 @@
       {duplicateCount}
       {instanceIndex}
       executionState={executionStore}
-      on:close={closeResponseViewer}
+      onClose={closeResponseViewer}
     />
   {/if}
 {/if}
@@ -759,8 +790,8 @@
       rawResponse={executionStore[`${step.step_id}-${endpointIndex}`]?.response?.body}
       hasExecutionData={!!executionStore[`${step.step_id}-${endpointIndex}`]?.response}
       {templateContext}
-      on:close={closeTransformationEditor}
-      on:change={handleTransformationChange}
+      onClose={closeTransformationEditor}
+      onChange={handleTransformationChange}
     />
   {/if}
 {/if}
@@ -781,8 +812,8 @@
       {instanceIndex}
       assertionResults={executionStore[`${step.step_id}-${endpointIndex}`]?.assertions || { passed: true, results: [] }}
       hasExecutionData={!!executionStore[`${step.step_id}-${endpointIndex}`]?.response}
-      on:close={closeAssertionEditor}
-      on:change={handleParamChange}
+      onClose={closeAssertionEditor}
+      onChange={handleParamChange}
     />
   {/if}
 {/if}

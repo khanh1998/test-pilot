@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+    import { onMount, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { projectStore, type Project } from '$lib/store/project';
@@ -15,55 +15,55 @@
     description: string;
     createdAt: string;
     updatedAt: string;
-  }[] = [];
+  }[] = $state([]);
 
-  let loading = true;
-  let error: string | null = null;
-  let showCreateModal = false;
+  let loading = $state(true);
+  let error: string | null = $state(null);
+  let showCreateModal = $state(false);
 
   // Project state
-  let selectedProject: Project | null = null;
+  let selectedProject: Project | null = $state(null);
   let isProjectLoading = false;
   let projectError: string | null = null;
 
   // Pagination state - synced with URL
-  let currentPage = 1;
+  let currentPage = $state(1);
   let pageSize = 12;
-  let totalItems = 0;
-  let totalPages = 0;
+  let totalItems = $state(0);
+  let totalPages = $state(0);
   let hasNext = false;
   let hasPrev = false;
 
   // Search/filter state - synced with URL
-  let searchTerm = ''; // This reflects the actual search being performed (from URL)
-  let searchInput = ''; // This is what the user types in the input field
+  let searchTerm = $state(''); // This reflects the actual search being performed (from URL)
+  let searchInput = $state(''); // This is what the user types in the input field
   let searchTimeout: ReturnType<typeof setTimeout> | null = null;
   
   // Control flags
-  let isInitialized = false;
-  let isProjectReady = false;
+  let isInitialized = $state(false);
+  let isProjectReady = $state(false);
   let hasLoadedData = false; // Track if we've ever loaded data
 
   // Form data for creating a new test flow
-  let newFlowName = '';
-  let newFlowDescription = '';
-  let selectedApiIds: number[] = [];
+  let newFlowName = $state('');
+  let newFlowDescription = $state('');
+  let selectedApiIds: number[] = $state([]);
   
   // Available APIs
-  let availableApis: { id: number; name: string; host: string; selected?: boolean }[] = [];
+  let availableApis: { id: number; name: string; host: string; selected?: boolean }[] = $state([]);
 
   // Confirm dialog state
-  let showConfirmDialog = false;
-  let pendingDeleteFlow: { id: number; name: string } | null = null;
+  let showConfirmDialog = $state(false);
+  let pendingDeleteFlow: { id: number; name: string } | null = $state(null);
 
   // Clone dialog state
-  let showCloneDialog = false;
+  let showCloneDialog = $state(false);
   let pendingCloneFlow: {
     id: number;
     name: string;
     description: string;
-  } | null = null;
-  let cloneLoading = false;
+  } | null = $state(null);
+  let cloneLoading = $state(false);
 
   // Subscribe to project store
   const unsubscribe = projectStore.subscribe((state) => {
@@ -87,11 +87,6 @@
     }
   });
 
-  // Reactive statement to handle URL changes (browser back/forward)
-  $: if (isInitialized && isProjectReady && $page.url.searchParams) {
-    console.log('Reactive: URL changed, calling syncFromURL');
-    syncFromURL();
-  }
 
   // Sync current state with URL parameters (without fetching)
   function syncFromURL() {
@@ -359,7 +354,7 @@
     showCloneDialog = true;
   }
 
-  async function confirmCloneFlow(event: CustomEvent<{ name: string; description: string }>) {
+  async function confirmCloneFlow(payload: { name: string; description: string }) {
     if (!pendingCloneFlow) return;
 
     try {
@@ -367,8 +362,8 @@
       error = null;
 
       const result = await testFlowClient.cloneTestFlow(pendingCloneFlow.id, {
-        name: event.detail.name,
-        description: event.detail.description
+        name: payload.name,
+        description: payload.description
       });
       
       if (!result) {
@@ -396,6 +391,13 @@
     pendingCloneFlow = null;
     showCloneDialog = false;
   }
+  // Reactive statement to handle URL changes (browser back/forward)
+  $effect(() => {
+    if (isInitialized && isProjectReady && $page.url.searchParams) {
+      console.log('Reactive: URL changed, calling syncFromURL');
+      syncFromURL();
+    }
+  });
 </script>
 
 <div class="p-6">
@@ -420,7 +422,7 @@
     <div class="flex gap-3">
       <button
         class="rounded-md bg-blue-600 px-4 py-2 text-white transition hover:bg-blue-700"
-        on:click={() => (showCreateModal = true)}
+        onclick={() => (showCreateModal = true)}
       >
         Create Test Flow
       </button>
@@ -445,7 +447,7 @@
           placeholder="Search test flows by name or description..."
           class="block w-full pl-10 pr-10 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 {loading ? 'opacity-75' : ''}"
           bind:value={searchInput}
-          on:input={handleSearchInput}
+          oninput={handleSearchInput}
           disabled={loading}
         />
         {#if searchInput.trim()}
@@ -453,7 +455,7 @@
             aria-label="trim"
             type="button"
             class="absolute inset-y-0 right-0 pr-3 flex items-center hover:text-gray-600"
-            on:click={() => {
+            onclick={() => {
               searchInput = '';
               handleSearchInput();
             }}
@@ -502,7 +504,7 @@
         {#if selectedProject}
           <button
             class="rounded-md bg-blue-600 px-4 py-2 text-white transition hover:bg-blue-700"
-            on:click={() => (showCreateModal = true)}
+            onclick={() => (showCreateModal = true)}
           >
             Create Test Flow for {selectedProject.name}
           </button>
@@ -517,7 +519,7 @@
             <div>
               <button
                 class="rounded-md bg-blue-600 px-4 py-2 text-white transition hover:bg-blue-700"
-                on:click={() => (showCreateModal = true)}
+                onclick={() => (showCreateModal = true)}
               >
                 Create Test Flow
               </button>
@@ -567,7 +569,7 @@
           <button
             class="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={currentPage === 1 || loading}
-            on:click={() => goToPage(1)}
+            onclick={() => goToPage(1)}
           >
             {#if loading && currentPage !== 1}
               <div class="mr-1 h-4 w-4 animate-spin rounded-full border-2 border-gray-400 border-t-transparent"></div>
@@ -589,7 +591,7 @@
                 class="px-3 py-2 text-sm font-medium rounded-md {currentPage === page
                   ? 'bg-blue-600 text-white'
                   : 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50'} disabled:opacity-50 disabled:cursor-not-allowed"
-                on:click={() => goToPage(page)}
+                onclick={() => goToPage(page)}
                 disabled={loading}
               >
                 {#if loading && currentPage === page}
@@ -604,7 +606,7 @@
           <button
             class="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={currentPage === totalPages || loading}
-            on:click={() => goToPage(totalPages)}
+            onclick={() => goToPage(totalPages)}
           >
             Last
             {#if loading && currentPage !== totalPages}
@@ -684,7 +686,7 @@
                   id="api-{api.id}"
                   class="mr-2"
                   checked={selectedApiIds.includes(api.id)}
-                  on:change={() => toggleApiSelection(api.id)}
+                  onchange={() => toggleApiSelection(api.id)}
                 />
                 <label for="api-{api.id}" class="flex-grow cursor-pointer">{api.name}</label>
               </div>
@@ -698,7 +700,7 @@
       <div class="flex justify-end">
         <button
           class="mr-2 rounded-md bg-gray-200 px-4 py-2 text-gray-800 transition hover:bg-gray-300"
-          on:click={() => {
+          onclick={() => {
             showCreateModal = false;
             error = null;
           }}
@@ -707,7 +709,7 @@
         </button>
         <button
           class="rounded-md bg-blue-600 px-4 py-2 text-white transition hover:bg-blue-700 disabled:opacity-50"
-          on:click={createTestFlow}
+          onclick={createTestFlow}
           disabled={loading || !newFlowName.trim() || selectedApiIds.length === 0}
         >
           {loading ? 'Creating...' : 'Create'}
@@ -725,8 +727,8 @@
   confirmText="Delete"
   cancelText="Cancel"
   confirmVariant="danger"
-  on:confirm={confirmDeleteFlow}
-  on:cancel={cancelDeleteFlow}
+  onConfirm={confirmDeleteFlow}
+  onCancel={cancelDeleteFlow}
 />
 
 <!-- Clone Dialog -->
@@ -735,8 +737,8 @@
   originalName={pendingCloneFlow?.name || ''}
   originalDescription={pendingCloneFlow?.description || ''}
   loading={cloneLoading}
-  on:confirm={confirmCloneFlow}
-  on:cancel={cancelCloneFlow}
+  onConfirm={confirmCloneFlow}
+  onCancel={cancelCloneFlow}
 />
 
 

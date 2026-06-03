@@ -1,15 +1,15 @@
 <script lang="ts">
-  import { goto } from '$app/navigation';
+    import { goto } from '$app/navigation';
   import { uploadSwaggerFile } from '$lib/http_client/apis';
 
-  let fileInput: HTMLInputElement;
-  let nameInput: string = '';
-  let descriptionInput: string = '';
-  let hostInput: string = '';
-  let file: File | null = null;
-  let uploading = false;
-  let error: string | null = null;
-  let fileError: string | null = null;
+  let fileInput: HTMLInputElement | undefined = $state();
+  let nameInput: string = $state('');
+  let descriptionInput: string = $state('');
+  let hostInput: string = $state('');
+  let file: File | null = $state(null);
+  let uploading = $state(false);
+  let error: string | null = $state(null);
+  let fileError: string | null = $state(null);
 
   function handleFileChange(event: Event) {
     const input = event.target as HTMLInputElement;
@@ -59,7 +59,7 @@
     </p>
   </div>
 
-  <form on:submit|preventDefault={handleSubmit} class="space-y-6">
+  <form onsubmit={(event) => { event.preventDefault(); handleSubmit(); }} class="space-y-6">
     <div class="space-y-4">
       <!-- File Upload -->
       <div>
@@ -70,8 +70,8 @@
           class="cursor-pointer rounded-md border-2 border-dashed border-gray-300 px-6 py-8 text-center hover:border-blue-500"
           role="button"
           tabindex="0"
-          on:click={() => fileInput.click()}
-          on:keydown={(e) => e.key === 'Enter' && fileInput.click()}
+          onclick={() => fileInput?.click()}
+          onkeydown={(e) => e.key === 'Enter' && fileInput?.click()}
         >
           <input
             type="file"
@@ -79,7 +79,7 @@
             accept=".yaml,.yml,.json"
             class="hidden"
             bind:this={fileInput}
-            on:change={handleFileChange}
+            onchange={handleFileChange}
           />
           {#if file}
             <p class="text-sm text-gray-600">

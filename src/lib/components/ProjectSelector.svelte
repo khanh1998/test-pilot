@@ -4,6 +4,7 @@
   import { projectStore, type Project } from '$lib/store/project';
   
   interface Props {
+    [key: string]: unknown;
     isCollapsed?: boolean;
   }
   
@@ -74,7 +75,7 @@
 
 </script>
 
-<svelte:document on:click={handleClickOutside} />
+<svelte:document onclick={handleClickOutside} />
 
 <div class="project-selector relative">
   {#if isCollapsed}
