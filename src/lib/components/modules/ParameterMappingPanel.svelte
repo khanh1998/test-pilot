@@ -143,6 +143,10 @@
   }
 
   function updateParameterMapping(index: number, field: keyof ParameterMapping, value: any) {
+    if (!parameterMappings[index]) {
+      return;
+    }
+
     parameterMappings[index] = { ...parameterMappings[index], [field]: value };
     
     // Clear related fields when source_type changes
@@ -200,6 +204,9 @@
   }));
   // Get environment variables from the selected environment and sub-environment
   let environmentVariables = $derived(getEnvironmentVariables(selectedEnvironment, selectedSubEnvironment));
+  let hasInitializedMappings = $derived(
+    flowParameters.length === 0 || parameterMappings.length === flowParameters.length
+  );
   $effect(() => {
     if (flow && isOpen) {
       initializeParameterMappings();
@@ -245,7 +252,7 @@
       </div>
 
       <!-- Parameters List -->
-      {#if flowParameters.length > 0}
+      {#if flowParameters.length > 0 && hasInitializedMappings}
         <div class="space-y-6">
           {#each flowParameters as param, index}
             <div class="border border-gray-200 rounded-lg p-4">
