@@ -1,11 +1,10 @@
 <script lang="ts">
-  
   import type { Endpoint, ExecutionState } from './types';
   import { formatJson, getStatusColor, getEndpointDisplayId } from './utils';
 
   function dispatch(eventName: string, detail?: unknown) {
-    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
-    if (typeof handler === "function") {
+    const handler = callbackProps['on' + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === 'function') {
       if (arguments.length > 1) {
         handler(detail);
       } else {
@@ -16,7 +15,6 @@
 
   let activeTab: 'request' | 'response' | 'headers' = $state('response');
 
-  
   interface Props {
     [key: string]: unknown;
     isOpen?: boolean;
@@ -36,17 +34,36 @@
     duplicateCount = 1,
     instanceIndex = 1,
     executionState = {},
-    stepId
-  , ...callbackProps
+    stepId,
+    ...callbackProps
   }: Props & Record<string, unknown> = $props();
 
   // Get the endpoint ID - using stepId-endpointIndex format now instead of endpointId-endpointIndex
   let endpointId = $derived(`${stepId}-${endpointIndex}`);
   let executionData = $derived(executionState[endpointId] || {});
+  let panelElement: HTMLDivElement | undefined = $state();
 
   function closeResponseViewer() {
+    releasePanelFocus();
     dispatch('close');
   }
+
+  function releasePanelFocus() {
+    if (typeof document === 'undefined' || !panelElement) {
+      return;
+    }
+
+    const activeElement = document.activeElement;
+    if (activeElement instanceof HTMLElement && panelElement.contains(activeElement)) {
+      activeElement.blur();
+    }
+  }
+
+  $effect(() => {
+    if (!isOpen) {
+      releasePanelFocus();
+    }
+  });
 </script>
 
 <div
@@ -68,11 +85,12 @@
 
   <!-- The panel itself - responsive sizing -->
   <div
+    bind:this={panelElement}
     class="fixed inset-y-0 right-0 z-50 w-full overflow-y-auto bg-white shadow-xl transition-transform duration-300 ease-in-out sm:w-[75%] md:w-[600px] lg:w-[500px] {!isOpen
       ? 'pointer-events-none'
       : ''}"
     style="transform: {isOpen ? 'translateX(0)' : 'translateX(100%)'};"
-    aria-hidden={!isOpen}
+    inert={!isOpen}
   >
     <!-- Header -->
     <div

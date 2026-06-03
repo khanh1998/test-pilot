@@ -63,6 +63,7 @@
   let localQueryParams: Record<string, string | string[]> = $state({});
   let localPathParams: Record<string, string | string[]> = $state({});
   let bodyPreview = $derived(getBodyPreview());
+  let panelElement: HTMLDivElement | undefined = $state();
 
   // Initialize state when component mounts
   $effect(() => {
@@ -190,8 +191,26 @@
   }
 
   function closeParamEditor() {
+    releasePanelFocus();
     dispatch('close');
   }
+
+  function releasePanelFocus() {
+    if (typeof document === 'undefined' || !panelElement) {
+      return;
+    }
+
+    const activeElement = document.activeElement;
+    if (activeElement instanceof HTMLElement && panelElement.contains(activeElement)) {
+      activeElement.blur();
+    }
+  }
+
+  $effect(() => {
+    if (!isOpen) {
+      releasePanelFocus();
+    }
+  });
 
   // Helper functions for simplified array parameters
   function getSimplifiedArrayValue(
@@ -338,11 +357,12 @@
 
   <!-- The panel itself - responsive sizing for different screens -->
   <div
+    bind:this={panelElement}
     class="fixed inset-y-0 right-0 z-50 w-full overflow-y-auto bg-white shadow-xl transition-transform duration-300 ease-in-out sm:w-[75%] md:w-[600px] lg:w-[500px] {!isOpen
       ? 'pointer-events-none'
       : ''}"
     style="transform: {isOpen ? 'translateX(0)' : 'translateX(100%)'};"
-    aria-hidden={!isOpen}
+    inert={!isOpen}
   >
     <!-- Header - with added width to ensure it fills full panel width -->
     <div

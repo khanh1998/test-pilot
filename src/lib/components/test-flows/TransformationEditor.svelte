@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { tick } from 'svelte';
   import type { Endpoint, StepEndpoint } from './types';
   import { transformResponse } from '$lib/transform';
   import type { TemplateContext } from '$lib/template/types';
@@ -64,9 +63,11 @@
   let showResults = $state(false);
   let canPreview = $derived(hasExecutionData || hasPreviewData);
   let responseForPreview = $derived(hasExecutionData ? rawResponse : previewResponse);
+  let panelElement: HTMLDivElement | undefined = $state();
 
   // Live evaluation state
-  let liveResults: Record<string, { result: unknown; error: string | null; type: string }> = {};
+  type LiveResult = { result: unknown; error: string | null; type: string };
+  let draftPreview = $derived(evaluatePreview(newTransformation.expression));
 
   // Initialize state when component mounts
   $effect(() => {
@@ -118,11 +119,6 @@
   function editTransformation(index: number) {
     editingTransformationIndex = index;
     newTransformation = { ...transformations[index] };
-
-    // Immediately evaluate the transformation when editing if we have execution data
-    if (canPreview && newTransformation.alias && newTransformation.expression) {
-      evaluateExpression(newTransformation.expression, `new-${newTransformation.alias}`);
-    }
   }
 
   // Update a transformation
@@ -157,8 +153,26 @@
   }
 
   function closeTransformationEditor() {
+    releasePanelFocus();
     dispatch('close');
   }
+
+  function releasePanelFocus() {
+    if (typeof document === 'undefined' || !panelElement) {
+      return;
+    }
+
+    const activeElement = document.activeElement;
+    if (activeElement instanceof HTMLElement && panelElement.contains(activeElement)) {
+      activeElement.blur();
+    }
+  }
+
+  $effect(() => {
+    if (!isOpen) {
+      releasePanelFocus();
+    }
+  });
 
   // Helper function to safely stringify values for display
   function formatValue(value: unknown): string {
@@ -194,19 +208,14 @@
   }
 
   // Live evaluation functions - immediate evaluation, no debouncing
-  function evaluateExpression(expression: string, alias: string) {
+  function evaluatePreview(expression: string): LiveResult | null {
     if (
       !canPreview ||
       responseForPreview === undefined ||
       responseForPreview === null ||
       !expression.trim()
     ) {
-      // Clear any existing result
-      if (alias in liveResults) {
-        const { [alias]: _, ...rest } = liveResults;
-        liveResults = rest;
-      }
-      return;
+      return null;
     }
 
     try {
@@ -222,96 +231,44 @@
       };
       const contextToUse = templateContext || defaultContext;
 
-      // Debug logging to understand what parameters are available
-      if (expression.includes('{{param:')) {
-        console.log('Evaluating expression with parameters:', {
-          expression,
-          alias,
-          hasTemplateContext: !!templateContext,
-          availableParameters: Object.keys(contextToUse.parameters),
-          parameterValues: $state.snapshot(contextToUse.parameters)
-        });
-      }
-
       const result = transformResponse(responseForPreview, expression.trim(), contextToUse);
-      liveResults = {
-        ...liveResults,
-        [alias]: {
-          result,
-          error: null,
-          type: getValueType(result)
-        }
+      return {
+        result,
+        error: null,
+        type: getValueType(result)
       };
     } catch (error) {
-      liveResults = {
-        ...liveResults,
-        [alias]: {
-          result: null,
-          error: error instanceof Error ? error.message : String(error),
-          type: 'error'
-        }
+      return {
+        result: null,
+        error: error instanceof Error ? error.message : String(error),
+        type: 'error'
       };
     }
+  }
+
+  function getLivePreviewHeading(result: LiveResult, errorLabel = 'Error'): string {
+    if (result.error) {
+      return errorLabel;
+    }
+
+    return hasExecutionData ? 'Live Preview' : 'Sample Preview';
+  }
+
+  function getLivePreviewClass(result: LiveResult): string {
+    return result.error ? 'border-red-300 bg-red-50' : 'border-blue-300 bg-blue-50';
+  }
+
+  function getLivePreviewTextClass(result: LiveResult): string {
+    return result.error ? 'text-red-800' : 'text-blue-800';
   }
 
   // Function to handle input changes and trigger live evaluation
   function handleExpressionInput(event: Event) {
-    const target = event.target as HTMLTextAreaElement;
-    const currentExpression = target.value;
-
-    if (newTransformation.alias) {
-      evaluateExpression(currentExpression, `new-${newTransformation.alias}`);
-    }
+    newTransformation.expression = (event.currentTarget as HTMLTextAreaElement).value;
   }
 
   function handleAliasInput(event: Event) {
-    const target = event.target as HTMLInputElement;
-    const currentAlias = target.value;
-
-    if (newTransformation.expression && currentAlias) {
-      evaluateExpression(newTransformation.expression, `new-${currentAlias}`);
-    }
-  }
-
-  // Reactive evaluation for existing transformations when they change
-  $effect(() => {
-    if (canPreview) {
-      transformations.forEach((transformation, index) => {
-        if (transformation.expression && transformation.alias) {
-          evaluateExpression(
-            transformation.expression,
-            `existing-${index}-${transformation.alias}`
-          );
-        }
-      });
-    }
-  });
-
-  // Reactive evaluation for new transformation when execution data becomes available
-  $effect(() => {
-    if (canPreview && newTransformation.alias && newTransformation.expression) {
-      evaluateExpression(newTransformation.expression, `new-${newTransformation.alias}`);
-    }
-  });
-
-  // Get live result for a transformation
-  function getLiveResult(
-    alias: string,
-    index?: number
-  ): { result: unknown; error: string | null; type: string } | null {
-    // Try different key formats
-    const keys = [
-      `new-${alias}`, // For new transformations being typed
-      `existing-${index}-${alias}`, // For existing transformations
-      alias // Fallback
-    ].filter(Boolean);
-
-    for (const key of keys) {
-      if (key in liveResults) {
-        return liveResults[key];
-      }
-    }
-    return null;
+    newTransformation.alias = (event.currentTarget as HTMLInputElement).value;
   }
 </script>
 
@@ -334,11 +291,12 @@
 
   <!-- The panel itself - responsive sizing for different screens -->
   <div
+    bind:this={panelElement}
     class="fixed inset-y-0 right-0 z-50 w-full overflow-y-auto bg-white shadow-xl transition-transform duration-300 ease-in-out sm:w-[75%] md:w-[600px] lg:w-[500px] {!isOpen
       ? 'pointer-events-none'
       : ''}"
     style="transform: {isOpen ? 'translateX(0)' : 'translateX(100%)'};"
-    aria-hidden={!isOpen}
+    inert={!isOpen}
   >
     <!-- Header -->
     <div
@@ -463,19 +421,15 @@
           </p>
 
           <!-- Live preview for new transformation -->
-          {#if canPreview && newTransformation.alias && newTransformation.expression}
-            {@const liveResult = getLiveResult(newTransformation.alias)}
+          {#if canPreview && newTransformation.expression}
+            {@const liveResult = draftPreview}
             {#if liveResult}
-              <div
-                class="mt-2 rounded-lg border-2 {liveResult.error
-                  ? 'border-red-300 bg-red-50'
-                  : 'border-blue-300 bg-blue-50'} p-3"
-              >
+              <div class="mt-2 rounded-lg border-2 {getLivePreviewClass(liveResult)} p-3">
                 <div class="mb-2 flex items-center justify-between">
                   <span
-                    class="text-xs font-semibold {liveResult.error
-                      ? 'text-red-800'
-                      : 'text-blue-800'} flex items-center"
+                    class="flex items-center text-xs font-semibold {getLivePreviewTextClass(
+                      liveResult
+                    )}"
                   >
                     {#if liveResult.error}
                       <svg class="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
@@ -485,7 +439,7 @@
                           clip-rule="evenodd"
                         />
                       </svg>
-                      Error
+                      {getLivePreviewHeading(liveResult)}
                     {:else}
                       <svg class="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
                         <path
@@ -494,14 +448,12 @@
                           clip-rule="evenodd"
                         />
                       </svg>
-                      {hasExecutionData ? 'Live Preview' : 'Sample Preview'}
+                      {getLivePreviewHeading(liveResult)}
                     {/if}
                   </span>
                   {#if !liveResult.error}
                     <span
-                      class="text-xs font-medium {liveResult.error
-                        ? 'border-red-300 bg-red-200 text-red-700'
-                        : 'border-blue-300 bg-blue-200 text-blue-700'} rounded-full border px-2 py-1"
+                      class="rounded-full border border-blue-300 bg-blue-200 px-2 py-1 text-xs font-medium text-blue-700"
                     >
                       {liveResult.type}
                     </span>
@@ -509,14 +461,13 @@
                 </div>
                 <div
                   class="rounded-md border {liveResult.error
-                    ? 'border-red-200 bg-white'
-                    : 'border-blue-200 bg-white'} p-2"
+                    ? 'border-red-200'
+                    : 'border-blue-200'} bg-white p-2"
                 >
                   <pre
-                    class="text-xs {liveResult.error
-                      ? 'text-red-800'
-                      : 'text-blue-800'} max-h-24 overflow-x-auto font-mono">{liveResult.error ||
-                      formatValue(liveResult.result)}</pre>
+                    class="max-h-24 overflow-x-auto font-mono text-xs {getLivePreviewTextClass(
+                      liveResult
+                    )}">{liveResult.error || formatValue(liveResult.result)}</pre>
                 </div>
               </div>
             {/if}
@@ -612,18 +563,14 @@
 
                 <!-- Show live preview if available and different from saved results -->
                 {#if canPreview && transformation.expression}
-                  {@const liveResult = getLiveResult(transformation.alias, i)}
+                  {@const liveResult = evaluatePreview(transformation.expression)}
                   {#if liveResult && (!hasResult(transformation.alias) || !showResults)}
-                    <div
-                      class="mt-2 rounded-lg border-2 {liveResult.error
-                        ? 'border-red-300 bg-red-50'
-                        : 'border-blue-300 bg-blue-50'} p-3"
-                    >
+                    <div class="mt-2 rounded-lg border-2 {getLivePreviewClass(liveResult)} p-3">
                       <div class="mb-2 flex items-center justify-between">
                         <span
-                          class="text-xs font-semibold {liveResult.error
-                            ? 'text-red-800'
-                            : 'text-blue-800'} flex items-center"
+                          class="flex items-center text-xs font-semibold {getLivePreviewTextClass(
+                            liveResult
+                          )}"
                         >
                           {#if liveResult.error}
                             <svg class="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
@@ -633,7 +580,7 @@
                                 clip-rule="evenodd"
                               />
                             </svg>
-                            Expression Error
+                            {getLivePreviewHeading(liveResult, 'Expression Error')}
                           {:else}
                             <svg class="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
                               <path
@@ -642,7 +589,7 @@
                                 clip-rule="evenodd"
                               />
                             </svg>
-                            {hasExecutionData ? 'Live Preview' : 'Sample Preview'}
+                            {getLivePreviewHeading(liveResult)}
                           {/if}
                         </span>
                         {#if !liveResult.error}
@@ -655,14 +602,13 @@
                       </div>
                       <div
                         class="rounded-md border {liveResult.error
-                          ? 'border-red-200 bg-white'
-                          : 'border-blue-200 bg-white'} p-2"
+                          ? 'border-red-200'
+                          : 'border-blue-200'} bg-white p-2"
                       >
                         <pre
-                          class="text-xs {liveResult.error
-                            ? 'text-red-800'
-                            : 'text-blue-800'} max-h-24 overflow-x-auto font-mono">{liveResult.error ||
-                            formatValue(liveResult.result)}</pre>
+                          class="max-h-24 overflow-x-auto font-mono text-xs {getLivePreviewTextClass(
+                            liveResult
+                          )}">{liveResult.error || formatValue(liveResult.result)}</pre>
                       </div>
                     </div>
                   {/if}
