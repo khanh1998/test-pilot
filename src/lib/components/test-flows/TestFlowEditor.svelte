@@ -37,7 +37,7 @@
   } from '$lib/flow-runner';
 
   import { writable } from 'svelte/store';
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, untrack } from 'svelte';
 
   import { isDesktop } from '$lib/environment';
 
@@ -824,7 +824,7 @@
   $effect(() => {
     if (flowData && flowData.steps) {
       totalSteps = flowData.steps.length;
-      initializeFlowRunner();
+      untrack(() => initializeFlowRunner());
     }
   });
   // Re-initialize when environment variables change (but not on initial load)
@@ -837,7 +837,7 @@
       if (envVarsChanged && Object.keys(environmentVariables).length > 0) {
         console.log('Environment variables changed, reinitializing FlowRunner');
         previousEnvironmentVariables = { ...environmentVariables };
-        initializeFlowRunner();
+        untrack(() => initializeFlowRunner());
       }
     }
   });

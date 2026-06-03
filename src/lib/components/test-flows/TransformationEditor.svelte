@@ -229,7 +229,7 @@
           alias,
           hasTemplateContext: !!templateContext,
           availableParameters: Object.keys(contextToUse.parameters),
-          parameterValues: contextToUse.parameters
+          parameterValues: $state.snapshot(contextToUse.parameters)
         });
       }
 

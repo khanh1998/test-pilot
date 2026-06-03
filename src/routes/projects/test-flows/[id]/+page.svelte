@@ -117,7 +117,7 @@
       } else {
         environment = null;
       }
-      console.log('Environment loaded:', environment);
+      console.log('Environment loaded:', environment ? $state.snapshot(environment) : null);
     } catch (err) {
       console.error('Error loading environment:', err);
       environment = null;
@@ -186,7 +186,7 @@
   }
 
   function handleExecutionComplete(payload: any) {
-    console.log('Flow execution complete:', payload);
+    console.log('Flow execution complete:', $state.snapshot(payload));
     const { success, error: executionError } = payload;
 
     if (!success && executionError) {

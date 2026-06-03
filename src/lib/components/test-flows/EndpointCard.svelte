@@ -64,9 +64,10 @@
   $effect(() => {
     // Log when executionState changes to help debug reactivity issues
     if (process.env.NODE_ENV === 'development') {
+      const endpointExecutionState = executionState[endpointDisplayId];
       console.debug(
         `[EndpointCard] executionState updated for ${endpointDisplayId}`,
-        executionState[endpointDisplayId]
+        endpointExecutionState ? $state.snapshot(endpointExecutionState) : endpointExecutionState
       );
     }
   });

@@ -83,8 +83,7 @@
   let draggedEndpointIndex = $state(-1);
   let dropTargetIndex = $state(-1);
 
-  // Step execution state
-  let stepExecutionState = $state({ status: 'none' });
+  let stepLabel = $state(step.label || '');
 
   // Helper to find an endpoint by ID
   function findEndpoint(id: string | number): Endpoint | undefined {
@@ -380,6 +379,25 @@
       reorderEndpoint(currentIndex, currentIndex + 1);
     }
   }
+
+  function commitStepLabel() {
+    const label = stepLabel.trim() || `Step ${stepIndex + 1}`;
+    stepLabel = label;
+    step.label = label;
+    dispatch('change');
+  }
+
+  function updateClearCookies(event: Event) {
+    if (!(event.target instanceof HTMLInputElement)) return;
+
+    step.clearCookiesBeforeExecution = event.target.checked;
+    dispatch('change');
+  }
+
+  $effect(() => {
+    stepLabel = step.label || '';
+  });
+
   // Computed property to handle undefined clearCookiesBeforeExecution values
   let clearCookiesEnabled = $derived(step.clearCookiesBeforeExecution === true);
   // Sort endpoints by order field, fallback to array index
@@ -406,9 +424,7 @@
     }
   });
   // Helper to determine step execution state
-  $effect(() => {
-    stepExecutionState = computeStepExecutionState(executionStore, step);
-  });
+  let stepExecutionState = $derived(computeStepExecutionState(executionStore, step));
 </script>
 
 <div
@@ -427,22 +443,17 @@
       <span class="group relative">
         <input
           type="text"
-          bind:value={step.label}
+          bind:value={stepLabel}
           class="border-b border-transparent bg-transparent px-1 py-0 pr-6 text-lg font-medium group-hover:border-gray-300 focus:border-blue-500 focus:outline-none"
           title="Click to edit step name"
           placeholder={`Step ${stepIndex + 1}`}
-          class:text-gray-400={!step.label || step.label.trim() === ''}
+          class:text-gray-400={!stepLabel || stepLabel.trim() === ''}
           onfocus={(e) => {
             if (e.target && e.target instanceof HTMLInputElement) {
               e.target.select();
             }
           }}
-          onblur={() => {
-            if (step.label.trim() === '') {
-              step.label = `Step ${stepIndex + 1}`;
-            }
-            dispatch('change');
-          }}
+          onblur={commitStepLabel}
           onkeydown={(e: KeyboardEvent) => {
             if (e.key === 'Enter' && e.target instanceof HTMLInputElement) {
               e.target.blur();
@@ -540,13 +551,10 @@
           <label class="relative inline-flex cursor-pointer items-center">
             <input
               type="checkbox"
-              bind:checked={clearCookiesEnabled}
+              checked={clearCookiesEnabled}
               class="peer sr-only"
               disabled={isRunning}
-              onchange={() => {
-                step.clearCookiesBeforeExecution = clearCookiesEnabled;
-                dispatch('change');
-              }}
+              onchange={updateClearCookies}
             />
             <div
               class="peer h-5 w-9 rounded-full bg-gray-200 peer-checked:bg-orange-500 peer-focus:ring-2 peer-focus:ring-orange-300 peer-focus:outline-none after:absolute after:top-[2px] after:left-[2px] after:h-4 after:w-4 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:after:translate-x-full peer-checked:after:border-white"
