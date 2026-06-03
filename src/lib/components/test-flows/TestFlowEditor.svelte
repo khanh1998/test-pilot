@@ -1,5 +1,5 @@
 <script lang="ts">
-    import StepList from './StepList.svelte';
+  import StepList from './StepList.svelte';
   import FlowOutputsPanel from './FlowOutputsPanel.svelte';
   import ParameterInputModal from './ParameterInputModal.svelte';
   import FlowOutputEditor from './FlowOutputEditor.svelte';
@@ -7,24 +7,35 @@
   import FlowExecutionControls from './FlowExecutionControls.svelte';
   import ExecutionOptionsPanel from './ExecutionOptionsPanel.svelte';
   import FlowParameterEditor from './FlowParameterEditor.svelte';
-  import type { TestFlowData, Endpoint, ExecutionState, EndpointExecutionState, Parameter, FlowParameter, FlowStep } from './types';
+  import type {
+    TestFlowData,
+    Endpoint,
+    ExecutionState,
+    EndpointExecutionState,
+    Parameter,
+    FlowParameter,
+    FlowStep
+  } from './types';
   import { getEndpointById, type EndpointDetails } from '$lib/http_client/endpoints';
   import type { Environment } from '$lib/types/environment';
   import { createTemplateContextFromFlowRunner } from '$lib/template/utils';
   import { createTemplateFunctions } from '$lib/template/functions';
   import type { TemplateContext } from '$lib/template/types';
+  import { buildTemplatePreviewContext, type TemplatePreviewContext } from '$lib/template/preview';
   import { projectStore } from '$lib/store/project';
   import * as stepManagement from './step-management';
-  import { FlowRunner, type FlowRunnerOptions, type ExecutionPreferences } from '$lib/flow-runner';
+  import {
+    FlowRunner,
+    resolveFlowParameterValues,
+    type FlowRunnerOptions,
+    type ExecutionPreferences
+  } from '$lib/flow-runner';
 
   import { writable } from 'svelte/store';
   import { onMount, onDestroy } from 'svelte';
-  
+
   import { isDesktop } from '$lib/environment';
 
-  
-  
-  
   interface Props {
     [key: string]: unknown;
     // flowData includes settings.api_hosts which contains multiple API host configurations
@@ -41,24 +52,21 @@
     flowData = $bindable(),
     endpoints = [],
     environment = null,
-    selectedSubEnvironment = $bindable(null)
-  , ...callbackProps
+    selectedSubEnvironment = $bindable(null),
+    ...callbackProps
   }: Props & Record<string, unknown> = $props();
-
-
-
 
   let isRunning = $state(false);
   let flowRunner: FlowRunner | undefined = $state();
   let isLoadingEndpointDetails = $state(false); // Add loading state for endpoint fetching
-  
+
   // Bind to FlowRunner's current parameter values to use in template context
   let currentParameterValues: Record<string, unknown> = $state({});
 
   // Parameter input modal state
   let showParameterInputModal = $state(false);
   let parametersWithMissingValues: Array<FlowParameter> = $state([]);
-  
+
   // Track pending single step execution
   let pendingSingleStepExecution: { step: FlowStep; stepIndex?: number } | null = $state(null);
 
@@ -108,8 +116,10 @@
     timeout: 30000
   });
 
-
-  function computeEnvironmentVariables(env: Environment | null, subEnv: string | null): Record<string, unknown> {
+  function computeEnvironmentVariables(
+    env: Environment | null,
+    subEnv: string | null
+  ): Record<string, unknown> {
     if (!env || !subEnv || !env.config.environments[subEnv]) {
       return {};
     }
@@ -147,13 +157,12 @@
       console.log(`Fetching details for endpoint ${selectedEndpoint.id}...`);
       const endpointDetails = await getEndpointById(selectedEndpoint.id);
       console.log('Endpoint details fetched successfully:', endpointDetails);
-      
+
       // Add endpoint to the step with the fetched details
       const stepEndpoints = flowData.steps[stepIndex].endpoints;
-      const nextOrder = stepEndpoints.length > 0 
-        ? Math.max(...stepEndpoints.map(ep => ep.order ?? 0)) + 1 
-        : 0;
-      
+      const nextOrder =
+        stepEndpoints.length > 0 ? Math.max(...stepEndpoints.map((ep) => ep.order ?? 0)) + 1 : 0;
+
       flowData.steps[stepIndex].endpoints.push({
         endpoint_id: selectedEndpoint.id,
         api_id: selectedEndpoint.apiId, // Include API ID for multi-API support
@@ -167,9 +176,11 @@
       if (!flowData.endpoints) {
         flowData.endpoints = [];
       }
-      
+
       // Check if endpoint already exists in the array to avoid duplicates
-      const existingEndpointIndex = flowData.endpoints.findIndex(ep => ep.id === selectedEndpoint.id);
+      const existingEndpointIndex = flowData.endpoints.findIndex(
+        (ep) => ep.id === selectedEndpoint.id
+      );
       if (existingEndpointIndex === -1) {
         // Convert the API response (EndpointDetails) to match our Endpoint type
         const endpointData: Endpoint = {
@@ -206,10 +217,9 @@
       // Still add the endpoint to the step with basic information
       // This ensures the UI doesn't break if the API call fails
       const stepEndpoints = flowData.steps[stepIndex].endpoints;
-      const nextOrder = stepEndpoints.length > 0 
-        ? Math.max(...stepEndpoints.map(ep => ep.order ?? 0)) + 1 
-        : 0;
-        
+      const nextOrder =
+        stepEndpoints.length > 0 ? Math.max(...stepEndpoints.map((ep) => ep.order ?? 0)) + 1 : 0;
+
       flowData.steps[stepIndex].endpoints.push({
         endpoint_id: selectedEndpoint.id,
         api_id: selectedEndpoint.apiId,
@@ -217,10 +227,10 @@
         pathParams: {},
         queryParams: {}
       });
-      
+
       // Trigger change event to save even with partial data
       handleChange();
-      
+
       // You could add a toast notification here to inform the user
       // For now, we'll just log the error and continue
       console.warn('Continuing with basic endpoint information due to API error');
@@ -231,8 +241,8 @@
   }
 
   function dispatch(eventName: string, detail?: unknown) {
-    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
-    if (typeof handler === "function") {
+    const handler = callbackProps['on' + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === 'function') {
       if (arguments.length > 1) {
         handler(detail);
       } else {
@@ -251,12 +261,12 @@
     selectedProject = state.selectedProject;
   });
 
-
-
-
-
   // Add a log entry to the execution logs
-  function addLog(level: 'info' | 'debug' | 'error' | 'warning', message: string, details?: string) {
+  function addLog(
+    level: 'info' | 'debug' | 'error' | 'warning',
+    message: string,
+    details?: string
+  ) {
     dispatch('log', { level, message, details });
   }
 
@@ -286,7 +296,7 @@
         isRunning = false;
         error = data.error;
         currentParameterValues = data.parameterValues;
-        
+
         // Handle flow outputs from execution
         if (data.flowOutputs) {
           outputResults = data.flowOutputs;
@@ -295,7 +305,7 @@
           outputResults = {};
           outputExecutionError = data.error;
         }
-        
+
         // Force an update of all components that depend on the execution state
         executionStore.update((state) => ({ ...state }));
 
@@ -304,12 +314,12 @@
     };
 
     flowRunner = new FlowRunner(options);
-    
+
     // Store current environment variables for comparison
     previousEnvironmentVariables = { ...environmentVariables };
   }
 
-    // Add event listener on mount
+  // Add event listener on mount
   onMount(async () => {
     // Listen for custom events on the component's node
     const node = document.querySelector('svelte-component[this="TestFlowEditor"]');
@@ -323,10 +333,13 @@
     }
   });
 
-  function handleEnvironmentSelection(payload: { environmentId: number | null; subEnvironment: string | null }) {
+  function handleEnvironmentSelection(payload: {
+    environmentId: number | null;
+    subEnvironment: string | null;
+  }) {
     const { environmentId, subEnvironment } = payload;
     selectedSubEnvironment = subEnvironment;
-    
+
     // Update flowData with environment selection
     if (!flowData.settings.environment) {
       flowData.settings.environment = {
@@ -337,7 +350,7 @@
       flowData.settings.environment.environmentId = environmentId;
       flowData.settings.environment.subEnvironment = subEnvironment;
     }
-    
+
     handleChange();
   }
 
@@ -406,7 +419,7 @@
       showParameterInputModal = false;
       pendingSingleStepExecution = null;
     }
-    
+
     // Reset the execution state store
     executionStore.set({});
 
@@ -425,7 +438,9 @@
   async function runFlow() {
     // Check for API hosts before running
     if (!hasValidApiHosts()) {
-      dispatch('error', { message: 'Please configure at least one API host before running the flow.' });
+      dispatch('error', {
+        message: 'Please configure at least one API host before running the flow.'
+      });
       return;
     }
 
@@ -445,7 +460,7 @@
 
     isRunning = true;
     const result = await flowRunner.runFlow();
-    
+
     if (result.parametersWithMissingValues) {
       parametersWithMissingValues = result.parametersWithMissingValues;
       showParameterInputModal = true;
@@ -477,7 +492,7 @@
       isRunning = true;
 
       const result = await flowRunner.executeSingleStep(step, stepIndex);
-      
+
       // Check if parameters are missing - same handling as runFlow
       if (result.parametersWithMissingValues && result.parametersWithMissingValues.length > 0) {
         parametersWithMissingValues = result.parametersWithMissingValues;
@@ -486,9 +501,9 @@
         isRunning = false;
         return;
       }
-      
+
       isRunning = flowRunner.isRunning;
-      
+
       // Update parameter values from flow runner after execution
       currentParameterValues = flowRunner.parameterValues;
     }
@@ -511,7 +526,7 @@
         (hostInfo) => hostInfo && hostInfo.url && hostInfo.url.trim() !== ''
       );
     }
-    
+
     return false;
   }
 
@@ -543,11 +558,11 @@
 
   function handleOutputSave(payload: { outputs: import('./types').FlowOutput[] }) {
     const { outputs } = payload;
-    
+
     if (!flowData.outputs) {
       flowData.outputs = [];
     }
-    
+
     flowData.outputs = [...outputs];
     handleChange();
   }
@@ -595,10 +610,10 @@
       // Continue with single step execution
       const { step, stepIndex } = pendingSingleStepExecution;
       pendingSingleStepExecution = null; // Clear pending execution
-      
+
       isRunning = true;
       const result = await flowRunner.executeSingleStep(step, stepIndex);
-      
+
       // Update local state
       isRunning = flowRunner.isRunning;
       currentParameterValues = flowRunner.parameterValues;
@@ -607,7 +622,7 @@
       // Continue with full flow execution
       isRunning = true;
       await flowRunner.executeFlowAfterParameterCheck();
-      
+
       // Update local state
       isRunning = flowRunner.isRunning;
       currentStep = flowRunner.currentStep;
@@ -622,12 +637,12 @@
   function handleParameterSave(payload: any) {
     const parameter = payload;
     if (!flowData.parameters) flowData.parameters = [];
-    
+
     if (parameter.isNew) {
       delete parameter.isNew;
       flowData.parameters = [...flowData.parameters, parameter];
     } else {
-      const index = flowData.parameters.findIndex(p => p.name === parameter.name);
+      const index = flowData.parameters.findIndex((p) => p.name === parameter.name);
       if (index !== -1) {
         flowData.parameters[index] = parameter;
         flowData.parameters = [...flowData.parameters];
@@ -637,7 +652,7 @@
   }
 
   function handleParameterRemove(payload: any) {
-    flowData.parameters = flowData.parameters.filter(p => p.name !== payload.name);
+    flowData.parameters = flowData.parameters.filter((p) => p.name !== payload.name);
     handleChange();
   }
 
@@ -649,7 +664,7 @@
   // No longer needed - we use progress and currentStep directly from executionStore
   // This function was previously calculating progress and current step
   // but those values are already available in the executionStore
-  
+
   // No need for manual subscription anymore as we're using the $ syntax directly
   // Sync endpoints into flowData so FlowRunner can access them
   $effect(() => {
@@ -664,102 +679,109 @@
     }
   });
   // Compute template context from current execution state
-  let templateContext = $derived((() => {
-    try {
-      // Extract stored responses and transformations from execution store
-      const storedResponses: Record<string, unknown> = {};
-      const storedTransformations: Record<string, Record<string, unknown>> = {};
+  let templateContext = $derived(
+    (() => {
+      try {
+        // Extract stored responses and transformations from execution store
+        const storedResponses: Record<string, unknown> = {};
+        const storedTransformations: Record<string, Record<string, unknown>> = {};
 
-      Object.entries($executionStore).forEach(([key, state]) => {
-        // Skip non-endpoint entries (progress, currentStep)
-        if (typeof state === 'object' && state !== null && !Array.isArray(state)) {
-          if (state.response?.body) {
-            storedResponses[key] = state.response.body;
-          }
-          if (state.transformations) {
-            storedTransformations[key] = state.transformations;
-          }
-        }
-      });
-
-      // Compute parameter values - use current values from FlowRunner if available, otherwise use defaults
-      const parameterValues: Record<string, unknown> = { ...currentParameterValues };
-      
-      // Fill in any missing values with defaults from flow definition
-      (flowData.parameters || []).forEach(param => {
-        if (!(param.name in parameterValues) && param.defaultValue !== undefined && param.defaultValue !== null) {
-          parameterValues[param.name] = param.defaultValue;
-        }
-      });
-
-      // Compute environment variables from selected environment
-      const environmentVariables: Record<string, unknown> = {};
-      // Use environment prop directly
-      if (environment && selectedSubEnvironment) {
-        if (environment.config.environments[selectedSubEnvironment]) {
-          const subEnvConfig = environment.config.environments[selectedSubEnvironment];
-          
-          // Add variable values from the selected sub-environment
-          Object.entries(environment.config.variable_definitions).forEach(([varName, varDef]) => {
-            const value = subEnvConfig.variables[varName];
-            if (value !== undefined) {
-              environmentVariables[varName] = value;
-            } else if (varDef.default_value !== undefined) {
-              environmentVariables[varName] = varDef.default_value;
+        Object.entries($executionStore).forEach(([key, state]) => {
+          // Skip non-endpoint entries (progress, currentStep)
+          if (typeof state === 'object' && state !== null && !Array.isArray(state)) {
+            if (state.response?.body) {
+              storedResponses[key] = state.response.body;
             }
-          });
+            if (state.transformations) {
+              storedTransformations[key] = state.transformations;
+            }
+          }
+        });
 
-          // Add API hosts from the sub-environment
-          if (subEnvConfig.api_hosts) {
-            Object.entries(subEnvConfig.api_hosts).forEach(([apiId, hostUrl]) => {
-              environmentVariables[`api_host_${apiId}`] = hostUrl;
+        // Compute environment variables from selected environment
+        const environmentVariables: Record<string, unknown> = {};
+        // Use environment prop directly
+        if (environment && selectedSubEnvironment) {
+          if (environment.config.environments[selectedSubEnvironment]) {
+            const subEnvConfig = environment.config.environments[selectedSubEnvironment];
+
+            // Add variable values from the selected sub-environment
+            Object.entries(environment.config.variable_definitions).forEach(([varName, varDef]) => {
+              const value = subEnvConfig.variables[varName];
+              if (value !== undefined) {
+                environmentVariables[varName] = value;
+              } else if (varDef.default_value !== undefined) {
+                environmentVariables[varName] = varDef.default_value;
+              }
+            });
+
+            // Add API hosts from the sub-environment
+            if (subEnvConfig.api_hosts) {
+              Object.entries(subEnvConfig.api_hosts).forEach(([apiId, hostUrl]) => {
+                environmentVariables[`api_host_${apiId}`] = hostUrl;
+              });
+            }
+
+            console.log('Template context computed with environment variables:', {
+              environmentId: environment.id,
+              selectedSubEnvironment,
+              environmentName: environment.name,
+              subEnvironmentName: subEnvConfig.name,
+              variableCount: Object.keys(environmentVariables).length,
+              variables: Object.keys(environmentVariables)
+            });
+          } else {
+            console.warn('Selected sub-environment not found:', {
+              selectedSubEnvironment,
+              availableSubEnvs: environment ? Object.keys(environment.config.environments) : []
             });
           }
-          
-          console.log('Template context computed with environment variables:', {
-            environmentId: environment.id,
-            selectedSubEnvironment,
-            environmentName: environment.name,
-            subEnvironmentName: subEnvConfig.name,
-            variableCount: Object.keys(environmentVariables).length,
-            variables: Object.keys(environmentVariables)
-          });
         } else {
-          console.warn('Selected sub-environment not found:', {
-            selectedSubEnvironment,
-            availableSubEnvs: environment ? Object.keys(environment.config.environments) : []
+          console.log('Template context computed without environment variables:', {
+            hasEnvironment: !!environment,
+            selectedSubEnvironment
           });
         }
-      } else {
-        console.log('Template context computed without environment variables:', {
-          hasEnvironment: !!environment,
-          selectedSubEnvironment
+
+        const parameterValues: Record<string, unknown> = { ...currentParameterValues };
+        for (const parameter of resolveFlowParameterValues(flowData, environmentVariables)) {
+          parameterValues[parameter.name] = parameter.value;
+        }
+
+        // Create template functions
+        const templateFunctions = createTemplateFunctions({
+          responses: storedResponses,
+          transformedData: storedTransformations,
+          parameters: parameterValues,
+          environment: environmentVariables
         });
+
+        // Create full template context
+        return createTemplateContextFromFlowRunner(
+          storedResponses,
+          storedTransformations,
+          parameterValues,
+          templateFunctions,
+          environmentVariables
+        );
+      } catch (error) {
+        console.warn('Failed to create template context:', error);
+        return null;
       }
-
-      // Create template functions
-      const templateFunctions = createTemplateFunctions({
-        responses: storedResponses,
-        transformedData: storedTransformations,
-        parameters: parameterValues,
-        environment: environmentVariables
-      });
-
-      // Create full template context
-      return createTemplateContextFromFlowRunner(
-        storedResponses,
-        storedTransformations,
-        parameterValues,
-        templateFunctions,
-        environmentVariables
-      );
-    } catch (error) {
-      console.warn('Failed to create template context:', error);
-      return null;
-    }
-  })() as TemplateContext | null);
+    })() as TemplateContext | null
+  );
+  let previewTemplateContext = $derived(
+    templateContext
+      ? (buildTemplatePreviewContext({
+          executionState: $executionStore,
+          baseContext: templateContext
+        }) as TemplatePreviewContext)
+      : null
+  );
   // Computed environment variables for template resolution
-  let environmentVariables = $derived(computeEnvironmentVariables(environment, selectedSubEnvironment));
+  let environmentVariables = $derived(
+    computeEnvironmentVariables(environment, selectedSubEnvironment)
+  );
   // Initialize when component mounts or when flowData or environment changes
   $effect(() => {
     if (flowData && flowData.steps) {
@@ -771,8 +793,9 @@
   $effect(() => {
     if (flowRunner && environmentVariables) {
       // Only reinitialize if environment variables actually changed
-      const envVarsChanged = JSON.stringify(previousEnvironmentVariables) !== JSON.stringify(environmentVariables);
-      
+      const envVarsChanged =
+        JSON.stringify(previousEnvironmentVariables) !== JSON.stringify(environmentVariables);
+
       if (envVarsChanged && Object.keys(environmentVariables).length > 0) {
         console.log('Environment variables changed, reinitializing FlowRunner');
         previousEnvironmentVariables = { ...environmentVariables };
@@ -832,6 +855,7 @@
       {isLoadingEndpointDetails}
       executionStore={$executionStore}
       {templateContext}
+      {previewTemplateContext}
       onRemoveStep={handleRemoveStep}
       onRemoveEndpoint={handleRemoveEndpoint}
       onMoveStep={handleMoveStep}
@@ -872,11 +896,7 @@
 
 <!-- Flow Logs Viewer Slide-out Panel -->
 {#if isLogsViewerMounted}
-  <FlowLogsViewer
-    isOpen={isLogsViewerOpen}
-    logs={executionLogs}
-    onClose={closeLogsViewer}
-  />
+  <FlowLogsViewer isOpen={isLogsViewerOpen} logs={executionLogs} onClose={closeLogsViewer} />
 {/if}
 
 <!-- Flow Parameters Editor Slide-out Panel -->

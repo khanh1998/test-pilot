@@ -1,10 +1,25 @@
-import type { FlowParameter, TestFlowData, EnvironmentMapping } from '$lib/components/test-flows/types';
+import type {
+  FlowParameter,
+  TestFlowData,
+  EnvironmentMapping
+} from '$lib/components/test-flows/types';
+
+export interface ResolvedFlowParameter {
+  name: string;
+  value: unknown;
+  source: 'environment' | 'default';
+  sourceName?: string;
+}
 
 export interface ParameterManagerContext {
   flowData: TestFlowData;
   environmentVariables: Record<string, unknown>;
   selectedEnvironment: import('$lib/types/environment').Environment | null;
-  addLog: (level: 'info' | 'debug' | 'error' | 'warning', message: string, details?: string) => void;
+  addLog: (
+    level: 'info' | 'debug' | 'error' | 'warning',
+    message: string,
+    details?: string
+  ) => void;
 }
 
 export class ParameterManager {
@@ -15,47 +30,74 @@ export class ParameterManager {
   }
 
   prepareParameters(): Record<string, unknown> {
-    const parameterValues: Record<string, unknown> = {};
     const selectedEnvMapping = this.getSelectedEnvironmentMapping();
+    const resolvedParameters = resolveFlowParameterValues(
+      this.context.flowData,
+      this.context.environmentVariables
+    );
 
-    this.context.addLog('debug', `Evaluating parameters for execution. Environment mapping: ${selectedEnvMapping ? 
-      `${selectedEnvMapping.environmentName} (${Object.keys(selectedEnvMapping.parameterMappings).length} mappings)` : 'None'}`);
+    this.context.addLog(
+      'debug',
+      `Evaluating parameters for execution. Environment mapping: ${
+        selectedEnvMapping
+          ? `${selectedEnvMapping.environmentName} (${Object.keys(selectedEnvMapping.parameterMappings).length} mappings)`
+          : 'None'
+      }`
+    );
+
+    const parameterValues: Record<string, unknown> = {};
+    const resolvedByName = new Map(
+      resolvedParameters.map((parameter) => [parameter.name, parameter])
+    );
 
     this.context.flowData.parameters.forEach((parameter) => {
-      let resolvedValue = null;
-      let source = 'none';
+      const envVariableName = selectedEnvMapping?.parameterMappings[parameter.name];
+      const resolvedParameter = resolvedByName.get(parameter.name);
 
-      // Priority 1: Check if this parameter is mapped to an environment variable
-      if (selectedEnvMapping && selectedEnvMapping.parameterMappings[parameter.name]) {
-        const envVariableName = selectedEnvMapping.parameterMappings[parameter.name];
-        const envValue = this.context.environmentVariables[envVariableName];
-        
-        if (envValue !== undefined && envValue !== null) {
-          resolvedValue = envValue;
-          source = `environment variable '${envVariableName}'`;
-          this.context.addLog('debug', `Parameter '${parameter.name}' resolved from environment variable '${envVariableName}'`, String(envValue));
-        } else {
-          this.context.addLog('warning', `Environment variable '${envVariableName}' not found for parameter '${parameter.name}', falling back to default value`);
-        }
+      if (envVariableName && resolvedParameter?.source !== 'environment') {
+        this.context.addLog(
+          'warning',
+          `Environment variable '${envVariableName}' not found for parameter '${parameter.name}', falling back to default value`
+        );
       }
 
-      // Priority 2: Use default value if no environment value was found
-      if (resolvedValue === null && parameter.defaultValue !== undefined && parameter.defaultValue !== null) {
-        resolvedValue = parameter.defaultValue;
-        source = 'default value';
-        this.context.addLog('debug', `Parameter '${parameter.name}' using default value`, String(parameter.defaultValue));
+      if (resolvedParameter?.source === 'environment') {
+        this.context.addLog(
+          'debug',
+          `Parameter '${parameter.name}' resolved from environment variable '${resolvedParameter.sourceName}'`,
+          String(resolvedParameter.value)
+        );
+      } else if (resolvedParameter?.source === 'default') {
+        this.context.addLog(
+          'debug',
+          `Parameter '${parameter.name}' using default value`,
+          String(parameter.defaultValue)
+        );
       }
 
-      // Store the resolved value (ephemeral - not saved to database)
-      if (resolvedValue !== null) {
-        parameterValues[parameter.name] = resolvedValue;
-        this.context.addLog('info', `Parameter '${parameter.name}' = ${JSON.stringify(resolvedValue)} (from ${source})`);
+      if (resolvedParameter) {
+        parameterValues[parameter.name] = resolvedParameter.value;
+        const source =
+          resolvedParameter.source === 'environment'
+            ? `environment variable '${resolvedParameter.sourceName}'`
+            : 'default value';
+        this.context.addLog(
+          'info',
+          `Parameter '${parameter.name}' = ${JSON.stringify(resolvedParameter.value)} (from ${source})`
+        );
       } else {
-        this.context.addLog('warning', `Parameter '${parameter.name}' has no value - will be treated as missing if required`);
+        this.context.addLog(
+          'warning',
+          `Parameter '${parameter.name}' has no value - will be treated as missing if required`
+        );
       }
     });
 
-    this.context.addLog('debug', 'Final ephemeral parameter values for this execution', JSON.stringify(parameterValues, null, 2));
+    this.context.addLog(
+      'debug',
+      'Final ephemeral parameter values for this execution',
+      JSON.stringify(parameterValues, null, 2)
+    );
     return parameterValues;
   }
 
@@ -65,31 +107,44 @@ export class ParameterManager {
     this.context.flowData.parameters.forEach((parameter) => {
       if (parameter.required) {
         const resolvedValue = parameterValues[parameter.name];
-        
+
         if (resolvedValue === undefined || resolvedValue === null) {
-          parametersWithMissingValues.push({ 
+          parametersWithMissingValues.push({
             ...parameter,
             value: null
           });
-          this.context.addLog('warning', `Required parameter '${parameter.name}' is missing value after environment/default evaluation`);
+          this.context.addLog(
+            'warning',
+            `Required parameter '${parameter.name}' is missing value after environment/default evaluation`
+          );
         }
       }
     });
 
     if (parametersWithMissingValues.length > 0) {
-      this.context.addLog('info', `${parametersWithMissingValues.length} required parameters need manual input: ${parametersWithMissingValues.map(p => p.name).join(', ')}`);
+      this.context.addLog(
+        'info',
+        `${parametersWithMissingValues.length} required parameters need manual input: ${parametersWithMissingValues.map((p) => p.name).join(', ')}`
+      );
     }
 
     return parametersWithMissingValues;
   }
 
-  updateParameterValues(parametersWithMissingValues: FlowParameter[], parameterValues: Record<string, unknown>): Record<string, unknown> {
+  updateParameterValues(
+    parametersWithMissingValues: FlowParameter[],
+    parameterValues: Record<string, unknown>
+  ): Record<string, unknown> {
     const updatedValues = { ...parameterValues };
 
     parametersWithMissingValues.forEach((parameter) => {
       if (parameter.value !== undefined && parameter.value !== null) {
         updatedValues[parameter.name] = parameter.value;
-        this.context.addLog('info', `User provided value for required parameter '${parameter.name}'`, String(parameter.value));
+        this.context.addLog(
+          'info',
+          `User provided value for required parameter '${parameter.name}'`,
+          String(parameter.value)
+        );
       }
     });
 
@@ -97,7 +152,10 @@ export class ParameterManager {
   }
 
   private getSelectedEnvironmentMapping(): EnvironmentMapping | null {
-    if (!this.context.flowData.settings.linkedEnvironment || !this.context.flowData.settings.environment) {
+    if (
+      !this.context.flowData.settings.linkedEnvironment ||
+      !this.context.flowData.settings.environment
+    ) {
       return null;
     }
 
@@ -108,4 +166,51 @@ export class ParameterManager {
     }
     return null;
   }
+}
+
+export function resolveFlowParameterValues(
+  flowData: Pick<TestFlowData, 'parameters' | 'settings'>,
+  environmentVariables: Record<string, unknown>
+): ResolvedFlowParameter[] {
+  const selectedEnvMapping = getSelectedEnvironmentMapping(flowData);
+  const resolvedParameters: ResolvedFlowParameter[] = [];
+
+  for (const parameter of flowData.parameters || []) {
+    const envVariableName = selectedEnvMapping?.parameterMappings[parameter.name];
+    const envValue = envVariableName ? environmentVariables[envVariableName] : undefined;
+
+    if (envValue !== undefined && envValue !== null) {
+      resolvedParameters.push({
+        name: parameter.name,
+        value: envValue,
+        source: 'environment',
+        sourceName: envVariableName
+      });
+      continue;
+    }
+
+    if (parameter.defaultValue !== undefined && parameter.defaultValue !== null) {
+      resolvedParameters.push({
+        name: parameter.name,
+        value: parameter.defaultValue,
+        source: 'default'
+      });
+    }
+  }
+
+  return resolvedParameters;
+}
+
+function getSelectedEnvironmentMapping(
+  flowData: Pick<TestFlowData, 'settings'>
+): EnvironmentMapping | null {
+  if (!flowData.settings.linkedEnvironment || !flowData.settings.environment) {
+    return null;
+  }
+
+  const selectedEnvId = flowData.settings.environment.environmentId;
+  if (flowData.settings.linkedEnvironment.environmentId === selectedEnvId) {
+    return flowData.settings.linkedEnvironment;
+  }
+  return null;
 }

@@ -6,9 +6,15 @@
     };
   }
 
-    
   import type { Endpoint, StepEndpoint, Parameter } from './types';
   import { generateSampleBody } from './utils';
+  import {
+    hasTemplateExpressions,
+    previewTemplateObject,
+    previewTemplateValue,
+    type TemplatePreviewContext,
+    type TemplatePreviewResult
+  } from '$lib/template';
 
   interface Props {
     [key: string]: unknown;
@@ -20,6 +26,7 @@
     endpointIndex: number;
     duplicateCount?: number;
     instanceIndex?: number;
+    previewTemplateContext?: TemplatePreviewContext | null;
   }
 
   let {
@@ -30,13 +37,14 @@
     stepIndex,
     endpointIndex,
     duplicateCount = 1,
-    instanceIndex = 1
-  , ...callbackProps
+    instanceIndex = 1,
+    previewTemplateContext = null,
+    ...callbackProps
   }: Props & Record<string, unknown> = $props();
 
   function dispatch(eventName: string, detail?: unknown) {
-    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
-    if (typeof handler === "function") {
+    const handler = callbackProps['on' + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === 'function') {
       if (arguments.length > 1) {
         handler(detail);
       } else {
@@ -50,10 +58,11 @@
   let jsonBodyContent: string = $state('{}');
   let headers: { name: string; value: string; enabled: boolean }[] = $state([]);
   let initialized = $state(false); // Add a flag to track if we've already initialized
-  
+
   // Local copies to prevent cross-component interference
   let localQueryParams: Record<string, string | string[]> = $state({});
   let localPathParams: Record<string, string | string[]> = $state({});
+  let bodyPreview = $derived(getBodyPreview());
 
   // Initialize state when component mounts
   $effect(() => {
@@ -81,7 +90,10 @@
       headers = [...(stepEndpoint.headers || [])];
 
       // Add Content-Type header if not present and has body
-      if (endpoint?.requestSchema && !headers.some((h) => h.name.toLowerCase() === 'content-type')) {
+      if (
+        endpoint?.requestSchema &&
+        !headers.some((h) => h.name.toLowerCase() === 'content-type')
+      ) {
         headers.push({
           name: 'Content-Type',
           value: 'application/json',
@@ -182,7 +194,10 @@
   }
 
   // Helper functions for simplified array parameters
-  function getSimplifiedArrayValue(params: Record<string, string | string[]>, paramName: string): string {
+  function getSimplifiedArrayValue(
+    params: Record<string, string | string[]>,
+    paramName: string
+  ): string {
     const value = params[paramName];
     if (Array.isArray(value)) {
       return value.join(',');
@@ -190,7 +205,11 @@
     return value || '';
   }
 
-  function setSimplifiedArrayValue(params: Record<string, string | string[]>, paramName: string, value: string): void {
+  function setSimplifiedArrayValue(
+    params: Record<string, string | string[]>,
+    paramName: string,
+    value: string
+  ): void {
     if (value.trim() === '') {
       delete params[paramName];
     } else {
@@ -207,7 +226,7 @@
 
   // Helper functions for array parameters
   function isArrayParameter(param: Parameter): boolean {
-    return (param.schema?.type === 'array') || (param.type === 'array');
+    return param.schema?.type === 'array' || param.type === 'array';
   }
   function getCollectionFormatDescription(param: Parameter): string {
     const format = param.collectionFormat || param.style;
@@ -232,6 +251,71 @@
       default:
         return 'comma-separated (,)';
     }
+  }
+
+  function getValuePreview(value: unknown): TemplatePreviewResult | null {
+    if (!previewTemplateContext) {
+      return null;
+    }
+
+    const textValue = Array.isArray(value) ? value.join(',') : String(value ?? '');
+    if (!textValue || !hasTemplateExpressions(textValue)) {
+      return null;
+    }
+
+    return previewTemplateValue(textValue, previewTemplateContext);
+  }
+
+  function getBodyPreview(): TemplatePreviewResult | null {
+    if (!previewTemplateContext || !jsonBodyContent.trim()) {
+      return null;
+    }
+
+    const result = previewTemplateObject(jsonBodyContent, previewTemplateContext);
+    if (!result.success) {
+      return result;
+    }
+
+    if (typeof result.value === 'string') {
+      try {
+        result.value = JSON.parse(result.value);
+      } catch {
+        return {
+          ...result,
+          success: false,
+          error: 'Request body is not valid JSON after template resolution.'
+        };
+      }
+    }
+
+    return result;
+  }
+
+  function formatPreviewValue(value: unknown): string {
+    if (value === undefined) return 'undefined';
+    if (value === null) return 'null';
+    if (typeof value === 'string') return value;
+    try {
+      return JSON.stringify(value, null, 2);
+    } catch {
+      return String(value);
+    }
+  }
+
+  function getPreviewSourceLabel(preview: TemplatePreviewResult): string {
+    if (preview.sources.length === 0) {
+      return 'template';
+    }
+
+    return preview.sources.map((source) => source.label).join(', ');
+  }
+
+  function getPreviewSourceClass(preview: TemplatePreviewResult): string {
+    if (!preview.success) {
+      return 'border-red-200 bg-red-50 text-red-700';
+    }
+
+    return 'border-green-200 bg-green-50 text-green-700';
   }
 </script>
 
@@ -462,24 +546,49 @@
                   <span class="ml-1 text-xs text-gray-500">({param.description})</span>
                 {/if}
                 {#if isArrayParameter(param)}
-                  <span class="ml-1 text-xs text-blue-600">Array ({getCollectionFormatDescription(param)})</span>
+                  <span class="ml-1 text-xs text-blue-600"
+                    >Array ({getCollectionFormatDescription(param)})</span
+                  >
                 {/if}
               </label>
-              
+
               {#if isArrayParameter(param)}
                 <!-- Array parameter UI - simplified single input -->
                 <input
                   type="text"
                   class="rounded-md border px-3 py-2 text-sm"
-                  placeholder={param.example || `${param.name} values (comma-separated or template expression)`}
+                  placeholder={param.example ||
+                    `${param.name} values (comma-separated or template expression)`}
                   value={getSimplifiedArrayValue(localPathParams, param.name)}
                   oninput={(e) => {
-                    setSimplifiedArrayValue(localPathParams, param.name, (e.currentTarget as HTMLInputElement).value);
+                    setSimplifiedArrayValue(
+                      localPathParams,
+                      param.name,
+                      (e.currentTarget as HTMLInputElement).value
+                    );
                   }}
                 />
                 <div class="mt-1 text-xs text-gray-500">
-                  Enter multiple values separated by commas, or use template expressions like {'{{'} responses.step1.items {'}}'}
+                  Enter multiple values separated by commas, or use template expressions like {'{{'}
+                  responses.step1.items {'}}'}
                 </div>
+                {@const preview = getValuePreview(
+                  getSimplifiedArrayValue(localPathParams, param.name)
+                )}
+                {#if preview}
+                  <div
+                    class="mt-2 rounded border px-2 py-1.5 text-xs {getPreviewSourceClass(preview)}"
+                  >
+                    <div class="mb-1 flex items-center justify-between gap-2">
+                      <span class="font-medium">Preview</span>
+                      <span>{preview.success ? getPreviewSourceLabel(preview) : 'error'}</span>
+                    </div>
+                    <pre
+                      class="max-h-20 overflow-auto font-mono whitespace-pre-wrap">{preview.success
+                        ? formatPreviewValue(preview.value)
+                        : preview.error}</pre>
+                  </div>
+                {/if}
               {:else}
                 <!-- Single value parameter UI -->
                 <input
@@ -492,6 +601,21 @@
                     localPathParams[param.name] = (e.currentTarget as HTMLInputElement).value;
                   }}
                 />
+                {@const preview = getValuePreview(localPathParams[param.name])}
+                {#if preview}
+                  <div
+                    class="mt-2 rounded border px-2 py-1.5 text-xs {getPreviewSourceClass(preview)}"
+                  >
+                    <div class="mb-1 flex items-center justify-between gap-2">
+                      <span class="font-medium">Preview</span>
+                      <span>{preview.success ? getPreviewSourceLabel(preview) : 'error'}</span>
+                    </div>
+                    <pre
+                      class="max-h-20 overflow-auto font-mono whitespace-pre-wrap">{preview.success
+                        ? formatPreviewValue(preview.value)
+                        : preview.error}</pre>
+                  </div>
+                {/if}
               {/if}
             </div>
           {/each}
@@ -515,7 +639,9 @@
                     <span class="ml-1 text-xs text-gray-500">({param.description})</span>
                   {/if}
                   {#if isArrayParameter(param)}
-                    <span class="ml-1 text-xs text-blue-600">Array ({getCollectionFormatDescription(param)})</span>
+                    <span class="ml-1 text-xs text-blue-600"
+                      >Array ({getCollectionFormatDescription(param)})</span
+                    >
                   {/if}
                 </label>
                 <input
@@ -543,15 +669,40 @@
                   <input
                     type="text"
                     class="rounded-md border px-3 py-2 text-sm"
-                    placeholder={param.example || `${param.name} values (comma-separated or template expression)`}
+                    placeholder={param.example ||
+                      `${param.name} values (comma-separated or template expression)`}
                     value={getSimplifiedArrayValue(localQueryParams, param.name)}
                     oninput={(e) => {
-                      setSimplifiedArrayValue(localQueryParams, param.name, (e.currentTarget as HTMLInputElement).value);
+                      setSimplifiedArrayValue(
+                        localQueryParams,
+                        param.name,
+                        (e.currentTarget as HTMLInputElement).value
+                      );
                     }}
                   />
                   <div class="mt-1 text-xs text-gray-500">
-                    Enter multiple values separated by commas, or use template expressions like {'{{'} responses.step1.items {'}}'}
+                    Enter multiple values separated by commas, or use template expressions like {'{{'}
+                    responses.step1.items {'}}'}
                   </div>
+                  {@const preview = getValuePreview(
+                    getSimplifiedArrayValue(localQueryParams, param.name)
+                  )}
+                  {#if preview}
+                    <div
+                      class="mt-2 rounded border px-2 py-1.5 text-xs {getPreviewSourceClass(
+                        preview
+                      )}"
+                    >
+                      <div class="mb-1 flex items-center justify-between gap-2">
+                        <span class="font-medium">Preview</span>
+                        <span>{preview.success ? getPreviewSourceLabel(preview) : 'error'}</span>
+                      </div>
+                      <pre
+                        class="max-h-20 overflow-auto font-mono whitespace-pre-wrap">{preview.success
+                          ? formatPreviewValue(preview.value)
+                          : preview.error}</pre>
+                    </div>
+                  {/if}
                 {:else}
                   <!-- Single value parameter UI -->
                   <input
@@ -564,6 +715,23 @@
                       localQueryParams[param.name] = (e.currentTarget as HTMLInputElement).value;
                     }}
                   />
+                  {@const preview = getValuePreview(localQueryParams[param.name])}
+                  {#if preview}
+                    <div
+                      class="mt-2 rounded border px-2 py-1.5 text-xs {getPreviewSourceClass(
+                        preview
+                      )}"
+                    >
+                      <div class="mb-1 flex items-center justify-between gap-2">
+                        <span class="font-medium">Preview</span>
+                        <span>{preview.success ? getPreviewSourceLabel(preview) : 'error'}</span>
+                      </div>
+                      <pre
+                        class="max-h-20 overflow-auto font-mono whitespace-pre-wrap">{preview.success
+                          ? formatPreviewValue(preview.value)
+                          : preview.error}</pre>
+                    </div>
+                  {/if}
                 {/if}
               {/if}
             </div>
@@ -609,6 +777,22 @@
               <div class="absolute right-2 bottom-2 text-xs text-gray-400">JSON</div>
             </div>
           </div>
+          {#if bodyPreview}
+            <div
+              class="overflow-hidden rounded-md border shadow-sm {getPreviewSourceClass(
+                bodyPreview
+              )}"
+            >
+              <div class="flex items-center justify-between border-b px-3 py-2 text-xs">
+                <span class="font-medium">Resolved Preview</span>
+                <span>{bodyPreview.success ? getPreviewSourceLabel(bodyPreview) : 'error'}</span>
+              </div>
+              <pre
+                class="max-h-80 overflow-auto bg-white p-3 font-mono text-xs text-gray-800">{bodyPreview.success
+                  ? formatPreviewValue(bodyPreview.value)
+                  : bodyPreview.error}</pre>
+            </div>
+          {/if}
         </div>
       {/if}
 
@@ -635,17 +819,36 @@
 
           <div class="space-y-3">
             {#if headers.length === 0}
-              <div class="flex flex-col items-center justify-center rounded-md border-2 border-dashed border-gray-300 bg-gray-50 p-6 text-center">
-                <svg class="mb-2 h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+              <div
+                class="flex flex-col items-center justify-center rounded-md border-2 border-dashed border-gray-300 bg-gray-50 p-6 text-center"
+              >
+                <svg
+                  class="mb-2 h-8 w-8 text-gray-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="1.5"
+                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                  ></path>
                 </svg>
                 <p class="text-sm text-gray-500">No headers added yet.</p>
-                <p class="mt-1 text-xs text-gray-400">HTTP headers allow you to send additional information with your request</p>
+                <p class="mt-1 text-xs text-gray-400">
+                  HTTP headers allow you to send additional information with your request
+                </p>
                 <button
                   class="mt-3 flex items-center rounded bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700"
                   onclick={stopPropagation((e) => addHeader(e))}
                 >
-                  <svg class="mr-1 h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg
+                    class="mr-1 h-3.5 w-3.5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
                     <path
                       stroke-linecap="round"
                       stroke-linejoin="round"
@@ -685,12 +888,16 @@
                             type="text"
                             placeholder="Header Name"
                             bind:value={header.name}
-                            class="w-full rounded-md border-0 bg-transparent px-0 py-0 text-sm transition-colors focus:border-b-2 focus:border-blue-500 focus:outline-none focus:ring-0 {!header.enabled ? 'text-gray-400' : ''}"
+                            class="w-full rounded-md border-0 bg-transparent px-0 py-0 text-sm transition-colors focus:border-b-2 focus:border-blue-500 focus:ring-0 focus:outline-none {!header.enabled
+                              ? 'text-gray-400'
+                              : ''}"
                             aria-label="Header name"
                             onclick={(event) => event.stopPropagation()}
                             onkeydown={(event) => event.stopPropagation()}
                             oninput={(event) => event.stopPropagation()}
-                            onfocus={() => { activeTab = 'headers'; }}
+                            onfocus={() => {
+                              activeTab = 'headers';
+                            }}
                           />
                         </td>
                         <td class="px-3 py-2">
@@ -698,17 +905,21 @@
                             type="text"
                             placeholder="Value"
                             bind:value={header.value}
-                            class="w-full rounded-md border-0 bg-transparent px-0 py-0 text-sm transition-colors focus:border-b-2 focus:border-blue-500 focus:outline-none focus:ring-0 {!header.enabled ? 'text-gray-400' : ''}"
+                            class="w-full rounded-md border-0 bg-transparent px-0 py-0 text-sm transition-colors focus:border-b-2 focus:border-blue-500 focus:ring-0 focus:outline-none {!header.enabled
+                              ? 'text-gray-400'
+                              : ''}"
                             aria-label="Header value"
                             onclick={(event) => event.stopPropagation()}
                             onkeydown={(event) => event.stopPropagation()}
                             oninput={(event) => event.stopPropagation()}
-                            onfocus={() => { activeTab = 'headers'; }}
+                            onfocus={() => {
+                              activeTab = 'headers';
+                            }}
                           />
                         </td>
                         <td class="px-3 py-2 text-right">
                           <button
-                            class="text-gray-400 opacity-30 transition-all hover:text-red-600 group-hover:opacity-100 focus:opacity-100"
+                            class="text-gray-400 opacity-30 transition-all group-hover:opacity-100 hover:text-red-600 focus:opacity-100"
                             onclick={stopPropagation((e) => removeHeader(index, e))}
                             aria-label="Remove Header"
                           >
@@ -722,6 +933,32 @@
                           </button>
                         </td>
                       </tr>
+                      {@const preview = getValuePreview(header.value)}
+                      {#if preview}
+                        <tr class="border-b border-gray-200 last:border-0">
+                          <td></td>
+                          <td colspan="3" class="px-3 pb-3">
+                            <div
+                              class="rounded border px-2 py-1.5 text-xs {getPreviewSourceClass(
+                                preview
+                              )}"
+                            >
+                              <div class="mb-1 flex items-center justify-between gap-2">
+                                <span class="font-medium">Preview</span>
+                                <span
+                                  >{preview.success
+                                    ? getPreviewSourceLabel(preview)
+                                    : 'error'}</span
+                                >
+                              </div>
+                              <pre
+                                class="max-h-20 overflow-auto font-mono whitespace-pre-wrap">{preview.success
+                                  ? formatPreviewValue(preview.value)
+                                  : preview.error}</pre>
+                            </div>
+                          </td>
+                        </tr>
+                      {/if}
                     {/each}
                   </tbody>
                 </table>
@@ -731,7 +968,12 @@
                   class="inline-flex items-center rounded bg-gray-100 px-3 py-1.5 text-xs hover:bg-gray-200"
                   onclick={stopPropagation((e) => addHeader(e))}
                 >
-                  <svg class="mr-1 h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg
+                    class="mr-1 h-3.5 w-3.5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
                     <path
                       stroke-linecap="round"
                       stroke-linejoin="round"

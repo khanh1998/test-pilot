@@ -1,7 +1,7 @@
 <script lang="ts">
-    
   import type { Endpoint, StepEndpoint, ExecutionState } from './types';
   import type { TemplateContext } from '$lib/template/types';
+  import type { TemplatePreviewContext } from '$lib/template/preview';
   import EndpointCard from './EndpointCard.svelte';
   import ParameterEditor from './ParameterEditor.svelte';
   import ResponseViewer from './ResponseViewer.svelte';
@@ -11,11 +11,11 @@
   interface Props {
     [key: string]: unknown;
     step: {
-    step_id: string;
-    label: string;
-    endpoints: StepEndpoint[];
-    clearCookiesBeforeExecution?: boolean;
-  };
+      step_id: string;
+      label: string;
+      endpoints: StepEndpoint[];
+      clearCookiesBeforeExecution?: boolean;
+    };
     endpoints?: Endpoint[];
     apiHosts?: Record<string | number, { url: string; name?: string; description?: string }>;
     stepIndex: number;
@@ -24,6 +24,7 @@
     isRunning?: boolean; // Flag from parent to indicate if test flow execution is in progress
     executionStore?: ExecutionState; // Store from parent for better reactivity
     templateContext?: TemplateContext | null; // Template context for resolving template expressions
+    previewTemplateContext?: TemplatePreviewContext | null;
     endpointSelector?: import('svelte').Snippet;
   }
 
@@ -40,6 +41,7 @@
     isRunning = false,
     executionStore = {},
     templateContext = null,
+    previewTemplateContext = null,
     endpointSelector,
     ...callbackProps
   }: Props = $props();
@@ -47,8 +49,8 @@
   // Emitted events will be handled by the parent component
 
   function dispatch(eventName: string, detail?: unknown) {
-    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
-    if (typeof handler === "function") {
+    const handler = callbackProps['on' + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === 'function') {
       if (arguments.length > 1) {
         handler(detail);
       } else {
@@ -66,7 +68,7 @@
   let isResponseViewerOpen = $state(false);
   let isResponseViewerMounted = $state(false);
   let activeResponseEndpointIndex: number | null = $state(null);
-  
+
   // Transformation editor state
   let isTransformationEditorOpen = $state(false);
   let isTransformationEditorMounted = $state(false);
@@ -84,10 +86,6 @@
   // Step execution state
   let stepExecutionState = $state({ status: 'none' });
 
-
-
-
-
   // Helper to find an endpoint by ID
   function findEndpoint(id: string | number): Endpoint | undefined {
     return endpoints.find((e) => e.id === id);
@@ -95,14 +93,12 @@
 
   // Helper to calculate endpoint metrics
   function getEndpointMetrics(endpointId: string | number, currentIndex: number) {
-    const duplicateCount = step.endpoints.filter(
-      (e) => e.endpoint_id === endpointId
-    ).length;
-    
+    const duplicateCount = step.endpoints.filter((e) => e.endpoint_id === endpointId).length;
+
     const instanceIndex = step.endpoints
       .slice(0, currentIndex + 1)
       .filter((e) => e.endpoint_id === endpointId).length;
-    
+
     return { duplicateCount, instanceIndex };
   }
 
@@ -110,8 +106,11 @@
   function getEditorProps(endpointIndex: number) {
     const stepEndpoint = step.endpoints[endpointIndex];
     const endpoint = findEndpoint(stepEndpoint.endpoint_id);
-    const { duplicateCount, instanceIndex } = getEndpointMetrics(stepEndpoint.endpoint_id, endpointIndex);
-    
+    const { duplicateCount, instanceIndex } = getEndpointMetrics(
+      stepEndpoint.endpoint_id,
+      endpointIndex
+    );
+
     return {
       endpoint,
       stepEndpoint,
@@ -347,17 +346,17 @@
     const sortedEndpointsList = sortedEndpoints;
     const fromOriginalIndex = sortedEndpointsList[fromIndex].originalIndex;
     const toOriginalIndex = sortedEndpointsList[toIndex].originalIndex;
-    
+
     // Create a new array with reordered endpoints
     const newEndpoints = [...step.endpoints];
     const [movedEndpoint] = newEndpoints.splice(fromOriginalIndex, 1);
     newEndpoints.splice(toOriginalIndex, 0, movedEndpoint);
-    
+
     // Update order property for all endpoints to maintain consistent ordering
     newEndpoints.forEach((endpoint, index) => {
       endpoint.order = index;
     });
-    
+
     // Update the step endpoints
     step.endpoints = newEndpoints;
     dispatch('change');
@@ -366,7 +365,7 @@
   // Keyboard navigation handlers
   function handleMoveLeft(payload: EndpointIndexPayload) {
     const currentIndex = sortedEndpoints.findIndex(
-      item => item.originalIndex === payload.endpointIndex
+      (item) => item.originalIndex === payload.endpointIndex
     );
     if (currentIndex > 0) {
       reorderEndpoint(currentIndex, currentIndex - 1);
@@ -375,7 +374,7 @@
 
   function handleMoveRight(payload: EndpointIndexPayload) {
     const currentIndex = sortedEndpoints.findIndex(
-      item => item.originalIndex === payload.endpointIndex
+      (item) => item.originalIndex === payload.endpointIndex
     );
     if (currentIndex < sortedEndpoints.length - 1) {
       reorderEndpoint(currentIndex, currentIndex + 1);
@@ -384,13 +383,15 @@
   // Computed property to handle undefined clearCookiesBeforeExecution values
   let clearCookiesEnabled = $derived(step.clearCookiesBeforeExecution === true);
   // Sort endpoints by order field, fallback to array index
-  let sortedEndpoints = $derived(step.endpoints
-    .map((endpoint, index) => ({ endpoint, originalIndex: index }))
-    .sort((a, b) => {
-      const orderA = a.endpoint.order ?? a.originalIndex;
-      const orderB = b.endpoint.order ?? b.originalIndex;
-      return orderA - orderB;
-    }));
+  let sortedEndpoints = $derived(
+    step.endpoints
+      .map((endpoint, index) => ({ endpoint, originalIndex: index }))
+      .sort((a, b) => {
+        const orderA = a.endpoint.order ?? a.originalIndex;
+        const orderB = b.endpoint.order ?? b.originalIndex;
+        return orderA - orderB;
+      })
+  );
   // Ensure all endpoints have order values (migration for old flows)
   $effect(() => {
     let needsUpdate = false;
@@ -514,10 +515,14 @@
       <!-- Run step button - always visible, disabled during execution -->
       <button
         class="ml-2 inline-flex items-center rounded-md px-2 py-1 text-xs transition-colors
-          {stepExecutionState.status === 'running' ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'}"
+          {stepExecutionState.status === 'running'
+          ? 'cursor-not-allowed bg-gray-100 text-gray-400'
+          : 'bg-blue-100 text-blue-700 hover:bg-blue-200'}"
         onclick={() => dispatch('runStep', { stepIndex })}
         disabled={stepExecutionState.status === 'running'}
-        title={stepExecutionState.status === 'running' ? 'Step is currently running' : 'Run this step'}
+        title={stepExecutionState.status === 'running'
+          ? 'Step is currently running'
+          : 'Run this step'}
       >
         <svg class="mr-1 h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
           <path
@@ -532,11 +537,11 @@
       <!-- Clear Cookies Toggle - only show from step 2 onwards -->
       {#if stepIndex >= 1}
         <div class="ml-3 flex items-center">
-          <label class="relative inline-flex items-center cursor-pointer">
+          <label class="relative inline-flex cursor-pointer items-center">
             <input
               type="checkbox"
               bind:checked={clearCookiesEnabled}
-              class="sr-only peer"
+              class="peer sr-only"
               disabled={isRunning}
               onchange={() => {
                 step.clearCookiesBeforeExecution = clearCookiesEnabled;
@@ -544,7 +549,7 @@
               }}
             />
             <div
-              class="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-orange-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-orange-500"
+              class="peer h-5 w-9 rounded-full bg-gray-200 peer-checked:bg-orange-500 peer-focus:ring-2 peer-focus:ring-orange-300 peer-focus:outline-none after:absolute after:top-[2px] after:left-[2px] after:h-4 after:w-4 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:after:translate-x-full peer-checked:after:border-white"
               class:opacity-50={isRunning}
               class:cursor-not-allowed={isRunning}
             ></div>
@@ -657,77 +662,96 @@
     {:else}
       <!-- Show selector on the left (sticky), then all endpoint cards (scrollable) -->
       <div class="flex flex-row gap-3">
-        <div class="flex-shrink-0 sticky left-0 z-10 bg-white">
+        <div class="sticky left-0 z-10 flex-shrink-0 bg-white">
           {@render endpointSelector?.()}
         </div>
-        <div class="flex flex-row gap-3 overflow-x-auto pb-2 flex-1">
-        {#each sortedEndpoints as { endpoint: stepEndpoint, originalIndex }, sortedIndex (`${stepEndpoint.endpoint_id}-${originalIndex}`)}
-          {@const endpoint = findEndpoint(stepEndpoint.endpoint_id)}
-          {@const { duplicateCount, instanceIndex } = getEndpointMetrics(stepEndpoint.endpoint_id, originalIndex)}
-          
-          {#if endpoint}
-            <EndpointCard
-              {endpoint}
-              stepEndpoint={stepEndpoint}
-              endpointIndex={originalIndex}
-              {stepIndex}
-              stepId={step.step_id}
-              executionState={executionStore}
-              {duplicateCount}
-              {instanceIndex}
-              {apiHosts}
-              isDragging={draggedEndpointIndex === sortedIndex}
-              isDropTarget={dropTargetIndex === sortedIndex}
-              onOpenParamEditor={openParamEditor}
-              onOpenTransformationEditor={openTransformationEditor}
-              onOpenResponseViewer={openResponseViewer}
-              onOpenAssertionEditor={openAssertionEditor}
-              onRemoveEndpoint={() => removeEndpoint(originalIndex)}
-              onDragstart={handleEndpointDragStart}
-              onDragend={handleEndpointDragEnd}
-              onDragover={(payload: EndpointDragPayload) => handleEndpointDragOver(payload.event, sortedIndex)}
-              onDrop={(payload: EndpointDragPayload) => handleEndpointDrop(payload.event, sortedIndex)}
-              onMoveLeft={handleMoveLeft}
-              onMoveRight={handleMoveRight}
-            />
-          {:else}
-            <!-- Show error card for missing endpoint -->
-            <div class="flex-shrink-0 w-80 rounded-lg border-2 border-red-200 bg-red-50 p-4">
-              <div class="flex items-start justify-between">
-                <div class="flex-1">
-                  <div class="flex items-center">
-                    <svg class="h-4 w-4 text-red-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                      <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
-                    </svg>
-                    <span class="text-sm font-medium text-red-800">Missing Endpoint</span>
-                  </div>
-                  <p class="mt-1 text-xs text-red-700">
-                    Endpoint ID: <code class="bg-red-100 px-1 rounded">{stepEndpoint.endpoint_id}</code>
-                  </p>
-                  <p class="mt-1 text-xs text-red-600">
-                    This endpoint no longer exists in the API specification. 
-                    It may have been removed or renamed.
-                  </p>
-                  {#if duplicateCount > 1}
-                    <p class="mt-1 text-xs text-red-600">
-                      Instance {instanceIndex} of {duplicateCount}
+        <div class="flex flex-1 flex-row gap-3 overflow-x-auto pb-2">
+          {#each sortedEndpoints as { endpoint: stepEndpoint, originalIndex }, sortedIndex (`${stepEndpoint.endpoint_id}-${originalIndex}`)}
+            {@const endpoint = findEndpoint(stepEndpoint.endpoint_id)}
+            {@const { duplicateCount, instanceIndex } = getEndpointMetrics(
+              stepEndpoint.endpoint_id,
+              originalIndex
+            )}
+
+            {#if endpoint}
+              <EndpointCard
+                {endpoint}
+                {stepEndpoint}
+                endpointIndex={originalIndex}
+                {stepIndex}
+                stepId={step.step_id}
+                executionState={executionStore}
+                {duplicateCount}
+                {instanceIndex}
+                {apiHosts}
+                isDragging={draggedEndpointIndex === sortedIndex}
+                isDropTarget={dropTargetIndex === sortedIndex}
+                onOpenParamEditor={openParamEditor}
+                onOpenTransformationEditor={openTransformationEditor}
+                onOpenResponseViewer={openResponseViewer}
+                onOpenAssertionEditor={openAssertionEditor}
+                onRemoveEndpoint={() => removeEndpoint(originalIndex)}
+                onDragstart={handleEndpointDragStart}
+                onDragend={handleEndpointDragEnd}
+                onDragover={(payload: EndpointDragPayload) =>
+                  handleEndpointDragOver(payload.event, sortedIndex)}
+                onDrop={(payload: EndpointDragPayload) =>
+                  handleEndpointDrop(payload.event, sortedIndex)}
+                onMoveLeft={handleMoveLeft}
+                onMoveRight={handleMoveRight}
+              />
+            {:else}
+              <!-- Show error card for missing endpoint -->
+              <div class="w-80 flex-shrink-0 rounded-lg border-2 border-red-200 bg-red-50 p-4">
+                <div class="flex items-start justify-between">
+                  <div class="flex-1">
+                    <div class="flex items-center">
+                      <svg
+                        class="mr-2 h-4 w-4 text-red-500"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
+                        <path
+                          fill-rule="evenodd"
+                          d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                          clip-rule="evenodd"
+                        />
+                      </svg>
+                      <span class="text-sm font-medium text-red-800">Missing Endpoint</span>
+                    </div>
+                    <p class="mt-1 text-xs text-red-700">
+                      Endpoint ID: <code class="rounded bg-red-100 px-1"
+                        >{stepEndpoint.endpoint_id}</code
+                      >
                     </p>
-                  {/if}
+                    <p class="mt-1 text-xs text-red-600">
+                      This endpoint no longer exists in the API specification. It may have been
+                      removed or renamed.
+                    </p>
+                    {#if duplicateCount > 1}
+                      <p class="mt-1 text-xs text-red-600">
+                        Instance {instanceIndex} of {duplicateCount}
+                      </p>
+                    {/if}
+                  </div>
+                  <button
+                    class="ml-2 rounded p-1 text-red-600 hover:bg-red-100 hover:text-red-800"
+                    onclick={() => removeEndpoint(originalIndex)}
+                    title="Remove this missing endpoint"
+                    aria-label="Remove missing endpoint"
+                  >
+                    <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path
+                        fill-rule="evenodd"
+                        d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                        clip-rule="evenodd"
+                      />
+                    </svg>
+                  </button>
                 </div>
-                <button
-                  class="ml-2 p-1 text-red-600 hover:text-red-800 hover:bg-red-100 rounded"
-                  onclick={() => removeEndpoint(originalIndex)}
-                  title="Remove this missing endpoint"
-                  aria-label="Remove missing endpoint"
-                >
-                  <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
-                  </svg>
-                </button>
               </div>
-            </div>
-          {/if}
-        {/each}
+            {/if}
+          {/each}
         </div>
       </div>
     {/if}
@@ -738,7 +762,8 @@
 
 <!-- Parameter Editor Slide-out Panel -->
 {#if isParamEditorMounted && activeEndpointIndex !== null}
-  {@const { endpoint, stepEndpoint, duplicateCount, instanceIndex, endpointIndex } = getEditorProps(activeEndpointIndex)}
+  {@const { endpoint, stepEndpoint, duplicateCount, instanceIndex, endpointIndex } =
+    getEditorProps(activeEndpointIndex)}
 
   {#if endpoint}
     <ParameterEditor
@@ -750,6 +775,7 @@
       {endpointIndex}
       {duplicateCount}
       {instanceIndex}
+      {previewTemplateContext}
       onClose={closeParamEditor}
       onChange={handleParamChange}
     />
@@ -758,7 +784,9 @@
 
 <!-- Response Viewer Slide-out Panel -->
 {#if isResponseViewerMounted && activeResponseEndpointIndex !== null}
-  {@const { endpoint, stepEndpoint, duplicateCount, instanceIndex, endpointIndex } = getEditorProps(activeResponseEndpointIndex)}
+  {@const { endpoint, stepEndpoint, duplicateCount, instanceIndex, endpointIndex } = getEditorProps(
+    activeResponseEndpointIndex
+  )}
 
   {#if endpoint}
     <ResponseViewer
@@ -776,7 +804,9 @@
 
 <!-- Transformation Editor Slide-out Panel -->
 {#if isTransformationEditorMounted && activeTransformationEndpointIndex !== null}
-  {@const { endpoint, stepEndpoint, duplicateCount, instanceIndex, endpointIndex } = getEditorProps(activeTransformationEndpointIndex)}
+  {@const { endpoint, stepEndpoint, duplicateCount, instanceIndex, endpointIndex } = getEditorProps(
+    activeTransformationEndpointIndex
+  )}
 
   {#if endpoint}
     <TransformationEditor
@@ -786,9 +816,15 @@
       {stepEndpoint}
       {duplicateCount}
       {instanceIndex}
-      transformationResults={executionStore[`${step.step_id}-${endpointIndex}`]?.transformations || {}}
+      transformationResults={executionStore[`${step.step_id}-${endpointIndex}`]?.transformations ||
+        {}}
       rawResponse={executionStore[`${step.step_id}-${endpointIndex}`]?.response?.body}
       hasExecutionData={!!executionStore[`${step.step_id}-${endpointIndex}`]?.response}
+      previewResponse={previewTemplateContext?.responses[`${step.step_id}-${endpointIndex}`]}
+      hasPreviewData={!!previewTemplateContext?.responses[`${step.step_id}-${endpointIndex}`]}
+      previewSourceLabel={previewTemplateContext?.responseSources[
+        `${step.step_id}-${endpointIndex}`
+      ]?.label || 'schema sample'}
       {templateContext}
       onClose={closeTransformationEditor}
       onChange={handleTransformationChange}
@@ -798,7 +834,9 @@
 
 <!-- Assertion Editor Slide-out Panel -->
 {#if isAssertionEditorMounted && activeAssertionEndpointIndex !== null}
-  {@const { endpoint, stepEndpoint, duplicateCount, instanceIndex, endpointIndex } = getEditorProps(activeAssertionEndpointIndex)}
+  {@const { endpoint, stepEndpoint, duplicateCount, instanceIndex, endpointIndex } = getEditorProps(
+    activeAssertionEndpointIndex
+  )}
 
   {#if endpoint}
     <AssertionEditor
@@ -810,7 +848,10 @@
       {endpointIndex}
       {duplicateCount}
       {instanceIndex}
-      assertionResults={executionStore[`${step.step_id}-${endpointIndex}`]?.assertions || { passed: true, results: [] }}
+      assertionResults={executionStore[`${step.step_id}-${endpointIndex}`]?.assertions || {
+        passed: true,
+        results: []
+      }}
       hasExecutionData={!!executionStore[`${step.step_id}-${endpointIndex}`]?.response}
       onClose={closeAssertionEditor}
       onChange={handleParamChange}

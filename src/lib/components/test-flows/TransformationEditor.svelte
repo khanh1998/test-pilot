@@ -1,11 +1,9 @@
 <script lang="ts">
-    import { tick } from 'svelte';
+  import { tick } from 'svelte';
   import type { Endpoint, StepEndpoint } from './types';
   import { transformResponse } from '$lib/transform';
   import type { TemplateContext } from '$lib/template/types';
 
-  
-  
   interface Props {
     [key: string]: unknown;
     isOpen?: boolean;
@@ -19,6 +17,9 @@
     rawResponse?: unknown; // Raw response data for preview
     hasExecutionData?: boolean; // Whether we have execution data to show
     templateContext?: TemplateContext | null; // Template context for resolving template expressions
+    previewResponse?: unknown;
+    hasPreviewData?: boolean;
+    previewSourceLabel?: string;
   }
 
   let {
@@ -31,13 +32,16 @@
     transformationResults = {},
     rawResponse = null,
     hasExecutionData = false,
-    templateContext = null
-  , ...callbackProps
+    templateContext = null,
+    previewResponse = null,
+    hasPreviewData = false,
+    previewSourceLabel = 'schema sample',
+    ...callbackProps
   }: Props & Record<string, unknown> = $props();
 
   function dispatch(eventName: string, detail?: unknown) {
-    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
-    if (typeof handler === "function") {
+    const handler = callbackProps['on' + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === 'function') {
       if (arguments.length > 1) {
         handler(detail);
       } else {
@@ -55,10 +59,12 @@
   let transformations: Transformation[] = $state([]);
   let editingTransformationIndex: number | null = $state(null);
   let newTransformation: Transformation = $state({ alias: '', expression: '' });
-  
+
   // UI state for showing/hiding results
   let showResults = $state(false);
-  
+  let canPreview = $derived(hasExecutionData || hasPreviewData);
+  let responseForPreview = $derived(hasExecutionData ? rawResponse : previewResponse);
+
   // Live evaluation state
   let liveResults: Record<string, { result: unknown; error: string | null; type: string }> = {};
 
@@ -84,8 +90,8 @@
   function saveTransformationChanges() {
     try {
       // Validate each transformation
-      const validTransformations = transformations.filter(t => t.alias && t.expression);
-      
+      const validTransformations = transformations.filter((t) => t.alias && t.expression);
+
       // Save transformations
       stepEndpoint.transformations = [...validTransformations];
 
@@ -96,7 +102,7 @@
       // You might want to show an error message here
     }
   }
-  
+
   // Add a new transformation
   function addTransformation() {
     if (!newTransformation.alias || !newTransformation.expression) {
@@ -112,9 +118,9 @@
   function editTransformation(index: number) {
     editingTransformationIndex = index;
     newTransformation = { ...transformations[index] };
-    
+
     // Immediately evaluate the transformation when editing if we have execution data
-    if (hasExecutionData && newTransformation.alias && newTransformation.expression) {
+    if (canPreview && newTransformation.alias && newTransformation.expression) {
       evaluateExpression(newTransformation.expression, `new-${newTransformation.alias}`);
     }
   }
@@ -132,10 +138,10 @@
       return;
     }
 
-    transformations = transformations.map((t, i) => 
+    transformations = transformations.map((t, i) =>
       i === editingTransformationIndex ? { ...newTransformation } : t
     );
-    
+
     editingTransformationIndex = null;
     newTransformation = { alias: '', expression: '' };
   }
@@ -160,7 +166,7 @@
     if (value === undefined) return 'undefined';
     if (typeof value === 'string') return `"${value}"`;
     if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-    
+
     try {
       return JSON.stringify(value, null, 2);
     } catch {
@@ -189,7 +195,12 @@
 
   // Live evaluation functions - immediate evaluation, no debouncing
   function evaluateExpression(expression: string, alias: string) {
-    if (!hasExecutionData || !rawResponse || !expression.trim()) {
+    if (
+      !canPreview ||
+      responseForPreview === undefined ||
+      responseForPreview === null ||
+      !expression.trim()
+    ) {
       // Clear any existing result
       if (alias in liveResults) {
         const { [alias]: _, ...rest } = liveResults;
@@ -210,7 +221,7 @@
         functions: {}
       };
       const contextToUse = templateContext || defaultContext;
-      
+
       // Debug logging to understand what parameters are available
       if (expression.includes('{{param:')) {
         console.log('Evaluating expression with parameters:', {
@@ -221,8 +232,8 @@
           parameterValues: contextToUse.parameters
         });
       }
-      
-      const result = transformResponse(rawResponse, expression.trim(), contextToUse);
+
+      const result = transformResponse(responseForPreview, expression.trim(), contextToUse);
       liveResults = {
         ...liveResults,
         [alias]: {
@@ -247,7 +258,7 @@
   function handleExpressionInput(event: Event) {
     const target = event.target as HTMLTextAreaElement;
     const currentExpression = target.value;
-    
+
     if (newTransformation.alias) {
       evaluateExpression(currentExpression, `new-${newTransformation.alias}`);
     }
@@ -256,7 +267,7 @@
   function handleAliasInput(event: Event) {
     const target = event.target as HTMLInputElement;
     const currentAlias = target.value;
-    
+
     if (newTransformation.expression && currentAlias) {
       evaluateExpression(newTransformation.expression, `new-${currentAlias}`);
     }
@@ -264,10 +275,13 @@
 
   // Reactive evaluation for existing transformations when they change
   $effect(() => {
-    if (hasExecutionData) {
+    if (canPreview) {
       transformations.forEach((transformation, index) => {
         if (transformation.expression && transformation.alias) {
-          evaluateExpression(transformation.expression, `existing-${index}-${transformation.alias}`);
+          evaluateExpression(
+            transformation.expression,
+            `existing-${index}-${transformation.alias}`
+          );
         }
       });
     }
@@ -275,18 +289,21 @@
 
   // Reactive evaluation for new transformation when execution data becomes available
   $effect(() => {
-    if (hasExecutionData && newTransformation.alias && newTransformation.expression) {
+    if (canPreview && newTransformation.alias && newTransformation.expression) {
       evaluateExpression(newTransformation.expression, `new-${newTransformation.alias}`);
     }
   });
 
   // Get live result for a transformation
-  function getLiveResult(alias: string, index?: number): { result: unknown; error: string | null; type: string } | null {
+  function getLiveResult(
+    alias: string,
+    index?: number
+  ): { result: unknown; error: string | null; type: string } | null {
     // Try different key formats
     const keys = [
-      `new-${alias}`,        // For new transformations being typed
+      `new-${alias}`, // For new transformations being typed
       `existing-${index}-${alias}`, // For existing transformations
-      alias                  // Fallback
+      alias // Fallback
     ].filter(Boolean);
 
     for (const key of keys) {
@@ -332,7 +349,7 @@
           <span class="mr-2 rounded bg-purple-100 px-2 py-1 text-xs text-purple-800">
             Transformation
           </span>
-                    <span class="font-mono text-sm">{endpoint?.path}</span>
+          <span class="font-mono text-sm">{endpoint?.path}</span>
           {#if duplicateCount > 1}
             <span class="ml-2 rounded bg-blue-100 px-2 py-1 text-xs text-blue-800">
               Instance #{instanceIndex}
@@ -341,6 +358,10 @@
           {#if hasExecutionData}
             <span class="ml-2 rounded bg-green-100 px-2 py-1 text-xs text-green-800">
               Has Results
+            </span>
+          {:else if hasPreviewData}
+            <span class="ml-2 rounded bg-amber-100 px-2 py-1 text-xs text-amber-800">
+              Preview: {previewSourceLabel}
             </span>
           {/if}
         </h3>
@@ -410,7 +431,7 @@
         <h4 class="mb-3 text-sm font-medium text-gray-700">
           {editingTransformationIndex !== null ? 'Edit Transformation' : 'Add New Transformation'}
         </h4>
-        
+
         <!-- Alias input -->
         <div class="mb-3">
           <label for="alias" class="mb-1 block text-sm font-medium text-gray-700">Alias</label>
@@ -423,7 +444,7 @@
             oninput={handleAliasInput}
           />
         </div>
-        
+
         <!-- Expression input -->
         <div class="mb-3">
           <label for="expression" class="mb-1 block text-sm font-medium text-gray-700">
@@ -432,7 +453,7 @@
           <textarea
             id="expression"
             rows="3"
-            class="w-full rounded border border-gray-300 px-3 py-2 text-sm font-mono"
+            class="w-full rounded border border-gray-300 px-3 py-2 font-mono text-sm"
             placeholder="e.g., $.data[*].id or $.users | where($.active == true) | map($.name)"
             bind:value={newTransformation.expression}
             oninput={handleExpressionInput}
@@ -440,40 +461,68 @@
           <p class="mt-1 text-xs text-gray-500">
             Use JSONPath ($.field.path) or functional pipeline syntax (data | filter | transform)
           </p>
-          
+
           <!-- Live preview for new transformation -->
-          {#if hasExecutionData && newTransformation.alias && newTransformation.expression}
+          {#if canPreview && newTransformation.alias && newTransformation.expression}
             {@const liveResult = getLiveResult(newTransformation.alias)}
             {#if liveResult}
-              <div class="mt-2 rounded-lg border-2 {liveResult.error ? 'border-red-300 bg-red-50' : 'border-blue-300 bg-blue-50'} p-3">
-                <div class="flex items-center justify-between mb-2">
-                  <span class="text-xs font-semibold {liveResult.error ? 'text-red-800' : 'text-blue-800'} flex items-center">
+              <div
+                class="mt-2 rounded-lg border-2 {liveResult.error
+                  ? 'border-red-300 bg-red-50'
+                  : 'border-blue-300 bg-blue-50'} p-3"
+              >
+                <div class="mb-2 flex items-center justify-between">
+                  <span
+                    class="text-xs font-semibold {liveResult.error
+                      ? 'text-red-800'
+                      : 'text-blue-800'} flex items-center"
+                  >
                     {#if liveResult.error}
-                      <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                      <svg class="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                        <path
+                          fill-rule="evenodd"
+                          d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                          clip-rule="evenodd"
+                        />
                       </svg>
                       Error
                     {:else}
-                      <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                      <svg class="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                        <path
+                          fill-rule="evenodd"
+                          d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                          clip-rule="evenodd"
+                        />
                       </svg>
-                      Live Preview
+                      {hasExecutionData ? 'Live Preview' : 'Sample Preview'}
                     {/if}
                   </span>
                   {#if !liveResult.error}
-                    <span class="text-xs font-medium {liveResult.error ? 'text-red-700 bg-red-200 border-red-300' : 'text-blue-700 bg-blue-200 border-blue-300'} px-2 py-1 rounded-full border">
+                    <span
+                      class="text-xs font-medium {liveResult.error
+                        ? 'border-red-300 bg-red-200 text-red-700'
+                        : 'border-blue-300 bg-blue-200 text-blue-700'} rounded-full border px-2 py-1"
+                    >
                       {liveResult.type}
                     </span>
                   {/if}
                 </div>
-                <div class="rounded-md border {liveResult.error ? 'border-red-200 bg-white' : 'border-blue-200 bg-white'} p-2">
-                  <pre class="text-xs {liveResult.error ? 'text-red-800' : 'text-blue-800'} overflow-x-auto max-h-24 font-mono">{liveResult.error || formatValue(liveResult.result)}</pre>
+                <div
+                  class="rounded-md border {liveResult.error
+                    ? 'border-red-200 bg-white'
+                    : 'border-blue-200 bg-white'} p-2"
+                >
+                  <pre
+                    class="text-xs {liveResult.error
+                      ? 'text-red-800'
+                      : 'text-blue-800'} max-h-24 overflow-x-auto font-mono">{liveResult.error ||
+                      formatValue(liveResult.result)}</pre>
                 </div>
               </div>
             {/if}
           {/if}
         </div>
-        
+
         <div class="flex justify-end gap-2">
           {#if editingTransformationIndex !== null}
             <button
@@ -502,7 +551,7 @@
       <!-- Transformations List -->
       <div class="mb-4">
         <h4 class="mb-2 text-sm font-medium text-gray-700">Configured Transformations</h4>
-        
+
         {#if transformations.length === 0}
           <div class="rounded border border-gray-200 p-4 text-center text-sm text-gray-500">
             No transformations configured yet.
@@ -510,7 +559,11 @@
         {:else}
           <div class="space-y-3">
             {#each transformations as transformation, i}
-              <div class="rounded border border-gray-200 bg-white p-3 {hasResult(transformation.alias) ? 'border-green-300 bg-green-50' : ''}">
+              <div
+                class="rounded border border-gray-200 bg-white p-3 {hasResult(transformation.alias)
+                  ? 'border-green-300 bg-green-50'
+                  : ''}"
+              >
                 <div class="flex items-center justify-between">
                   <div class="flex items-center gap-2">
                     <span class="font-medium text-gray-700">{transformation.alias}</span>
@@ -556,55 +609,92 @@
                 <div class="mt-1 text-sm text-gray-500">
                   <span class="font-mono text-xs">{transformation.expression}</span>
                 </div>
-                
+
                 <!-- Show live preview if available and different from saved results -->
-                {#if hasExecutionData && transformation.expression}
+                {#if canPreview && transformation.expression}
                   {@const liveResult = getLiveResult(transformation.alias, i)}
                   {#if liveResult && (!hasResult(transformation.alias) || !showResults)}
-                    <div class="mt-2 rounded-lg border-2 {liveResult.error ? 'border-red-300 bg-red-50' : 'border-blue-300 bg-blue-50'} p-3">
-                      <div class="flex items-center justify-between mb-2">
-                        <span class="text-xs font-semibold {liveResult.error ? 'text-red-800' : 'text-blue-800'} flex items-center">
+                    <div
+                      class="mt-2 rounded-lg border-2 {liveResult.error
+                        ? 'border-red-300 bg-red-50'
+                        : 'border-blue-300 bg-blue-50'} p-3"
+                    >
+                      <div class="mb-2 flex items-center justify-between">
+                        <span
+                          class="text-xs font-semibold {liveResult.error
+                            ? 'text-red-800'
+                            : 'text-blue-800'} flex items-center"
+                        >
                           {#if liveResult.error}
-                            <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                              <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                            <svg class="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                              <path
+                                fill-rule="evenodd"
+                                d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                                clip-rule="evenodd"
+                              />
                             </svg>
                             Expression Error
                           {:else}
-                            <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                            <svg class="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                              <path
+                                fill-rule="evenodd"
+                                d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                                clip-rule="evenodd"
+                              />
                             </svg>
-                            Live Preview
+                            {hasExecutionData ? 'Live Preview' : 'Sample Preview'}
                           {/if}
                         </span>
                         {#if !liveResult.error}
-                          <span class="text-xs font-medium text-blue-700 bg-blue-200 px-2 py-1 rounded-full border border-blue-300">
+                          <span
+                            class="rounded-full border border-blue-300 bg-blue-200 px-2 py-1 text-xs font-medium text-blue-700"
+                          >
                             {liveResult.type}
                           </span>
                         {/if}
                       </div>
-                      <div class="rounded-md border {liveResult.error ? 'border-red-200 bg-white' : 'border-blue-200 bg-white'} p-2">
-                        <pre class="text-xs {liveResult.error ? 'text-red-800' : 'text-blue-800'} overflow-x-auto max-h-24 font-mono">{liveResult.error || formatValue(liveResult.result)}</pre>
+                      <div
+                        class="rounded-md border {liveResult.error
+                          ? 'border-red-200 bg-white'
+                          : 'border-blue-200 bg-white'} p-2"
+                      >
+                        <pre
+                          class="text-xs {liveResult.error
+                            ? 'text-red-800'
+                            : 'text-blue-800'} max-h-24 overflow-x-auto font-mono">{liveResult.error ||
+                            formatValue(liveResult.result)}</pre>
                       </div>
                     </div>
                   {/if}
                 {/if}
-                
+
                 <!-- Show transformation result inline if available -->
                 {#if hasResult(transformation.alias) && showResults}
-                  <div class="mt-2 rounded-lg border-2 border-green-300 bg-gradient-to-r from-green-50 to-green-100 p-3 shadow-sm">
-                    <div class="flex items-center justify-between mb-2">
-                      <span class="text-xs font-semibold text-green-800 flex items-center">
-                        <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                  <div
+                    class="mt-2 rounded-lg border-2 border-green-300 bg-gradient-to-r from-green-50 to-green-100 p-3 shadow-sm"
+                  >
+                    <div class="mb-2 flex items-center justify-between">
+                      <span class="flex items-center text-xs font-semibold text-green-800">
+                        <svg class="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                          <path
+                            fill-rule="evenodd"
+                            d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                            clip-rule="evenodd"
+                          />
                         </svg>
                         Result
                       </span>
-                      <span class="text-xs font-medium text-green-700 bg-green-200 px-2 py-1 rounded-full border border-green-300">
+                      <span
+                        class="rounded-full border border-green-300 bg-green-200 px-2 py-1 text-xs font-medium text-green-700"
+                      >
                         {getValueType(getTransformationResult(transformation.alias))}
                       </span>
                     </div>
                     <div class="rounded-md border border-green-200 bg-white p-2">
-                      <pre class="text-xs text-green-800 overflow-x-auto max-h-24 font-mono">{formatValue(getTransformationResult(transformation.alias))}</pre>
+                      <pre
+                        class="max-h-24 overflow-x-auto font-mono text-xs text-green-800">{formatValue(
+                          getTransformationResult(transformation.alias)
+                        )}</pre>
                     </div>
                   </div>
                 {/if}
