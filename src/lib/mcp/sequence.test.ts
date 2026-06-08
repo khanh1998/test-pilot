@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { TestFlow } from '$lib/types/test-flow';
 import type { FlowSequence } from '$lib/types/flow_sequence';
-import { explainFlowSequence, setSequenceParameterMapping, validateFlowSequence } from './sequence';
+import {
+  explainFlowSequence,
+  setSequenceLoopConfig,
+  setSequenceParameterMapping,
+  validateFlowSequence
+} from './sequence';
 
 type FlowParamFixture = {
   name: string;
@@ -131,6 +136,106 @@ describe('mcp sequence helpers', () => {
     expect(result.valid).toBe(true);
   });
 
+  it('validates loop config and loop value mappings', () => {
+    const seq = setSequenceParameterMapping(
+      setSequenceLoopConfig(sequence(), {
+        stepOrder: 1,
+        loopConfig: {
+          enabled: true,
+          source_type: 'environment_variable_array',
+          source_value: 'USERNAME_LIST'
+        }
+      }),
+      {
+        stepOrder: 1,
+        mapping: {
+          flow_parameter_name: 'username',
+          source_type: 'loop_value',
+          source_value: 'value'
+        }
+      }
+    );
+
+    const flowsById = new Map<number, TestFlow>([
+      [
+        1,
+        flow(
+          1,
+          'Create order',
+          [{ name: 'username', type: 'string', required: true, description: '' }],
+          [{ name: 'order_id', value: '{{res:step1-0.$.id}}', isTemplate: true, type: 'string' }]
+        )
+      ],
+      [2, flow(2, 'Get order')]
+    ]);
+
+    const result = validateFlowSequence(seq, flowsById, new Set(['USERNAME_LIST']));
+    expect(result.valid).toBe(true);
+  });
+
+  it('rejects loop value mappings when loop mode is disabled', () => {
+    const seq = setSequenceParameterMapping(sequence(), {
+      stepOrder: 1,
+      mapping: {
+        flow_parameter_name: 'username',
+        source_type: 'loop_value',
+        source_value: 'value'
+      }
+    });
+
+    const flowsById = new Map<number, TestFlow>([
+      [
+        1,
+        flow(1, 'Create order', [
+          { name: 'username', type: 'string', required: true, description: '' }
+        ])
+      ],
+      [2, flow(2, 'Get order')]
+    ]);
+
+    const result = validateFlowSequence(seq, flowsById);
+    expect(result.valid).toBe(false);
+    expect(result.errors.join(' ')).toContain('loop mode is not enabled');
+  });
+
+  it('validates previous output array loop sources from looped primitive outputs', () => {
+    const seq = setSequenceLoopConfig(
+      setSequenceLoopConfig(sequence(), {
+        stepOrder: 1,
+        loopConfig: {
+          enabled: true,
+          source_type: 'environment_variable_array',
+          source_value: 'USERNAME_LIST'
+        }
+      }),
+      {
+        stepOrder: 2,
+        loopConfig: {
+          enabled: true,
+          source_type: 'previous_output_array',
+          source_flow_step: 1,
+          source_output_field: 'order_id'
+        }
+      }
+    );
+
+    const flowsById = new Map<number, TestFlow>([
+      [
+        1,
+        flow(
+          1,
+          'Create order',
+          [],
+          [{ name: 'order_id', value: '{{res:step1-0.$.id}}', isTemplate: true, type: 'string' }]
+        )
+      ],
+      [2, flow(2, 'Get order')]
+    ]);
+
+    const result = validateFlowSequence(seq, flowsById, new Set(['USERNAME_LIST']));
+    expect(result.valid).toBe(true);
+  });
+
   it('rejects future output mappings and missing output names', () => {
     const seq = setSequenceParameterMapping(sequence(), {
       stepOrder: 1,
@@ -193,15 +298,26 @@ describe('mcp sequence helpers', () => {
   });
 
   it('explains sequence mappings', () => {
-    const seq = setSequenceParameterMapping(sequence(), {
-      stepOrder: 2,
-      mapping: {
-        flow_parameter_name: 'order_id',
-        source_type: 'previous_output',
-        source_value: 'order_id',
-        source_flow_step: 1
+    const seq = setSequenceParameterMapping(
+      setSequenceLoopConfig(sequence(), {
+        stepOrder: 2,
+        loopConfig: {
+          enabled: true,
+          source_type: 'previous_output_array',
+          source_flow_step: 1,
+          source_output_field: 'order_id'
+        }
+      }),
+      {
+        stepOrder: 2,
+        mapping: {
+          flow_parameter_name: 'order_id',
+          source_type: 'previous_output',
+          source_value: 'order_id',
+          source_flow_step: 1
+        }
       }
-    });
+    );
 
     const explanation = explainFlowSequence(
       seq,
@@ -212,6 +328,7 @@ describe('mcp sequence helpers', () => {
     );
 
     expect(explanation.summary).toContain('2 flow steps');
+    expect(explanation.steps.join(' ')).toContain('loop output order_id from step 1');
     expect(explanation.mappings.join(' ')).toContain('output order_id from step 1');
   });
 });

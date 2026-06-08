@@ -7,6 +7,10 @@ import type { Project } from '$lib/types/project';
 import { defaultTemplateFunctions } from '$lib/template/functions';
 
 export class SequenceParameterResolver {
+  static isPrimitiveLoopValue(value: unknown): value is string | number | boolean {
+    return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
+  }
+
   /**
    * Build concrete environment variables for sequence execution.
    * Sub-environment values override variable definition defaults when present.
@@ -48,7 +52,8 @@ export class SequenceParameterResolver {
       level: 'info' | 'debug' | 'error' | 'warning',
       message: string,
       details?: string
-    ) => void
+    ) => void,
+    loopValue?: string | number | boolean
   ): ResolvedFlowExecution {
     try {
       if (!flow.flowJson) {
@@ -107,7 +112,8 @@ export class SequenceParameterResolver {
             mapping,
             accumulatedOutputs,
             environmentVariables,
-            onLog
+            onLog,
+            loopValue
           );
 
           if (resolvedValue !== undefined) {
@@ -164,7 +170,8 @@ export class SequenceParameterResolver {
       level: 'info' | 'debug' | 'error' | 'warning',
       message: string,
       details?: string
-    ) => void
+    ) => void,
+    loopValue?: string | number | boolean
   ): unknown {
     try {
       switch (mapping.source_type) {
@@ -216,6 +223,18 @@ export class SequenceParameterResolver {
           }
 
           return mapping.source_value;
+
+        case 'loop_value':
+          if (loopValue !== undefined) {
+            onLog('debug', `Loop value resolved for parameter '${mapping.flow_parameter_name}'`);
+            return loopValue;
+          }
+
+          onLog(
+            'warning',
+            `Loop value requested for parameter '${mapping.flow_parameter_name}', but this flow is not running in loop mode`
+          );
+          return undefined;
 
         case 'function':
           // Execute template function
@@ -286,6 +305,97 @@ export class SequenceParameterResolver {
       );
       return undefined;
     }
+  }
+
+  static resolveLoopValues(
+    sequenceStep: FlowSequenceStep,
+    accumulatedOutputs: Record<string, unknown>,
+    environmentVariables: Record<string, unknown>,
+    onLog: (
+      level: 'info' | 'debug' | 'error' | 'warning',
+      message: string,
+      details?: string
+    ) => void
+  ): Array<string | number | boolean> {
+    const loopConfig = sequenceStep.loop_config;
+
+    if (!loopConfig?.enabled) {
+      return [];
+    }
+
+    switch (loopConfig.source_type) {
+      case 'fixed_count': {
+        const count = Number(loopConfig.count);
+        if (!Number.isInteger(count) || count < 1) {
+          throw new Error(
+            `Loop count for step ${sequenceStep.step_order} must be a positive integer`
+          );
+        }
+
+        return Array.from({ length: count }, (_, index) => index);
+      }
+
+      case 'environment_variable_array': {
+        if (!loopConfig.source_value) {
+          throw new Error(
+            `Loop environment variable is required for step ${sequenceStep.step_order}`
+          );
+        }
+
+        const value = environmentVariables[loopConfig.source_value];
+        return this.validatePrimitiveArray(
+          value,
+          `environment variable '${loopConfig.source_value}'`
+        );
+      }
+
+      case 'previous_output_array': {
+        if (!loopConfig.source_flow_step) {
+          throw new Error(`Loop source flow step is required for step ${sequenceStep.step_order}`);
+        }
+
+        const outputKey = `flow_${loopConfig.source_flow_step}`;
+        const flowOutputs = accumulatedOutputs[outputKey] as Record<string, unknown> | undefined;
+
+        if (!flowOutputs) {
+          throw new Error(`No outputs found from flow step ${loopConfig.source_flow_step}`);
+        }
+
+        const outputField = loopConfig.source_output_field || loopConfig.source_value;
+        if (!outputField) {
+          throw new Error(
+            `Loop source output field is required for step ${sequenceStep.step_order}`
+          );
+        }
+
+        const value = this.extractValueFromObject(flowOutputs, outputField, onLog);
+        return this.validatePrimitiveArray(
+          value,
+          `output '${outputField}' from step ${loopConfig.source_flow_step}`
+        );
+      }
+
+      default:
+        throw new Error(`Unknown loop source type: ${loopConfig.source_type}`);
+    }
+  }
+
+  private static validatePrimitiveArray(
+    value: unknown,
+    sourceDescription: string
+  ): Array<string | number | boolean> {
+    if (!Array.isArray(value)) {
+      throw new Error(`Loop source ${sourceDescription} must be an array`);
+    }
+
+    const invalidIndex = value.findIndex((item) => !this.isPrimitiveLoopValue(item));
+    if (invalidIndex !== -1) {
+      throw new Error(
+        `Loop source ${sourceDescription} must contain only string, number, or boolean values`
+      );
+    }
+
+    return value;
   }
 
   /**

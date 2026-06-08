@@ -23,11 +23,11 @@ export interface SequenceRunnerOptions {
     sequenceOutputs: Record<string, unknown>;
   }) => void;
   onFlowStart?: (data: { flowIndex: number; flow: TestFlow; stepOrder: number }) => void;
-  onFlowComplete?: (data: { 
-    flowIndex: number; 
-    flow: TestFlow; 
+  onFlowComplete?: (data: {
+    flowIndex: number;
+    flow: TestFlow;
     stepOrder: number;
-    success: boolean; 
+    success: boolean;
     error?: unknown;
     flowOutputs: Record<string, unknown>;
   }) => void;
@@ -41,6 +41,28 @@ export interface SequenceFlowResult {
   success: boolean; // Whether the flow executed successfully (technical success)
   expectsError: boolean; // Whether this flow was expected to fail
   matchedExpectation: boolean; // Whether the actual result matched the expectation
+  error?: unknown;
+  outputs: Record<string, unknown>;
+  responses: Record<string, unknown>;
+  parameterValues: Record<string, unknown>;
+  executionTime: number;
+  loop?: SequenceLoopResult;
+}
+
+export interface SequenceLoopResult {
+  enabled: boolean;
+  totalIterations: number;
+  completedIterations: number;
+  failedIterationIndex?: number;
+  iterationValues: Array<string | number | boolean>;
+  iterations: SequenceLoopIterationResult[];
+}
+
+export interface SequenceLoopIterationResult {
+  index: number;
+  value: string | number | boolean;
+  success: boolean;
+  matchedExpectation: boolean;
   error?: unknown;
   outputs: Record<string, unknown>;
   responses: Record<string, unknown>;
@@ -62,7 +84,12 @@ export interface SequenceExecutionState {
 
 export interface FlowParameterMapping {
   flowParameter: string; // Parameter name in the current flow
-  sourceType: 'environment' | 'previous_flow_output' | 'previous_flow_response' | 'fixed_value';
+  sourceType:
+    | 'environment'
+    | 'previous_flow_output'
+    | 'previous_flow_response'
+    | 'fixed_value'
+    | 'loop_value';
   sourceValue: string; // Environment variable name, JSONPath for previous flow, or fixed value
   sourceFlowStepOrder?: number; // Which previous flow step (only for previous_flow_* types)
 }

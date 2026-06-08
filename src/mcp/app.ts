@@ -24,6 +24,7 @@ import {
 } from '$lib/mcp/flow';
 import {
   explainFlowSequence,
+  setSequenceLoopConfig,
   setSequenceParameterMapping,
   validateFlowSequence
 } from '$lib/mcp/sequence';
@@ -2690,7 +2691,7 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
     {
       title: 'Add Flow To Sequence',
       description:
-        'Add an existing saved self-contained flow to a sequence. Use parameter mappings to supply the flow inputs from environment variables, previous flow outputs, static values, or functions.',
+        'Add an existing saved self-contained flow to a sequence. Use parameter mappings to supply the flow inputs from environment variables, previous flow outputs, static values, functions, or the current loop value after loop mode is enabled.',
       inputSchema: {
         projectId: z.number(),
         moduleId: z.number(),
@@ -2705,7 +2706,8 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
                 'environment_variable',
                 'previous_output',
                 'static_value',
-                'function'
+                'function',
+                'loop_value'
               ]),
               source_value: z.string(),
               data_type: z.enum(['string', 'number', 'boolean']).optional(),
@@ -2746,7 +2748,7 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
     {
       title: 'Set Sequence Parameter Mapping',
       description:
-        'Map one flow parameter in a sequence step from an environment variable, previous flow output, static primitive value, or function call. Sequence mappings use concrete source types, not flow template syntax.',
+        'Map one flow parameter in a sequence step from an environment variable, previous flow output, static primitive value, function call, or current loop value. Sequence mappings use concrete source types, not flow template syntax.',
       inputSchema: {
         projectId: z.number(),
         moduleId: z.number(),
@@ -2759,7 +2761,8 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
             'environment_variable',
             'previous_output',
             'static_value',
-            'function'
+            'function',
+            'loop_value'
           ]),
           source_value: z.string(),
           data_type: z.enum(['string', 'number', 'boolean']).optional(),
@@ -2774,6 +2777,48 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
         sequenceStepId,
         stepOrder,
         mapping: mapping as FlowParameterMapping
+      });
+      const saved = await updateSequenceForMcp(
+        updatedSequence,
+        { moduleId, projectId },
+        authContext
+      );
+      return asTextResult({ sequence: saved });
+    }
+  );
+
+  server.registerTool(
+    'set_sequence_loop_config',
+    {
+      title: 'Set Sequence Loop Config',
+      description:
+        'Enable, update, or disable loop mode for one sequence step. Loop sources are fixed count, environment array variables, or array outputs from previous steps. After enabling loop mode, use set_sequence_parameter_mapping with source_type loop_value to pass the current iteration value into the flow.',
+      inputSchema: {
+        projectId: z.number(),
+        moduleId: z.number(),
+        sequenceId: z.number(),
+        sequenceStepId: z.string().optional(),
+        stepOrder: z.number().optional(),
+        loopConfig: z.object({
+          enabled: z.boolean(),
+          source_type: z.enum([
+            'fixed_count',
+            'environment_variable_array',
+            'previous_output_array'
+          ]),
+          count: z.number().optional(),
+          source_value: z.string().optional(),
+          source_flow_step: z.number().optional(),
+          source_output_field: z.string().optional()
+        })
+      }
+    },
+    async ({ projectId, moduleId, sequenceId, sequenceStepId, stepOrder, loopConfig }) => {
+      const sequence = await getSequenceForMcp({ projectId, moduleId, sequenceId }, authContext);
+      const updatedSequence = setSequenceLoopConfig(sequence, {
+        sequenceStepId,
+        stepOrder,
+        loopConfig
       });
       const saved = await updateSequenceForMcp(
         updatedSequence,

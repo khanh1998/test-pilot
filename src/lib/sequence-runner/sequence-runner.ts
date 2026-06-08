@@ -196,27 +196,94 @@ export class SequenceRunner {
     );
 
     try {
-      // Prepare environment variables
-      const { selectedEnvironment, selectedSubEnvironment } = this.options;
-      let environmentVariables: Record<string, unknown> =
-        SequenceParameterResolver.getEnvironmentVariables(
-          selectedEnvironment,
-          selectedSubEnvironment
-        );
-      let apiHosts: Record<string, string> = {};
+      const { environmentVariables, apiHosts } = this.getExecutionContext();
+      const flowResult = sequenceStep.loop_config?.enabled
+        ? await this.executeLoopedFlow(
+            flow,
+            sequenceStep,
+            flowIndex,
+            environmentVariables,
+            apiHosts,
+            startTime
+          )
+        : await this.executeSingleFlowRun(
+            flow,
+            sequenceStep,
+            flowIndex,
+            environmentVariables,
+            apiHosts
+          );
 
-      if (selectedEnvironment.config.environments[selectedSubEnvironment]) {
-        const { api_hosts } = selectedEnvironment.config.environments[selectedSubEnvironment];
-        apiHosts = api_hosts;
-      }
-      // Resolve parameters for this flow
+      this.options.onFlowComplete?.({
+        flowIndex,
+        flow,
+        stepOrder: sequenceStep.step_order,
+        success: flowResult.success,
+        error: flowResult.error,
+        flowOutputs: flowResult.outputs
+      });
+
+      this.options.onLog(
+        flowResult.success ? 'info' : 'error',
+        `Flow ${flow.name} execution ${flowResult.success ? 'completed successfully' : 'failed'}`,
+        `Execution time: ${flowResult.executionTime}ms${flowResult.error ? `, Error: ${flowResult.error}` : ''}`
+      );
+
+      return flowResult;
+    } catch (err: unknown) {
+      const flowResult = this.createFailedFlowResult(flow, sequenceStep, startTime, err);
+
+      this.options.onFlowComplete?.({
+        flowIndex,
+        flow,
+        stepOrder: sequenceStep.step_order,
+        success: false,
+        error: err,
+        flowOutputs: {}
+      });
+
+      return flowResult;
+    }
+  }
+
+  private getExecutionContext(): {
+    environmentVariables: Record<string, unknown>;
+    apiHosts: Record<string, string>;
+  } {
+    const { selectedEnvironment, selectedSubEnvironment } = this.options;
+    const environmentVariables = SequenceParameterResolver.getEnvironmentVariables(
+      selectedEnvironment,
+      selectedSubEnvironment
+    );
+    let apiHosts: Record<string, string> = {};
+
+    if (selectedEnvironment.config.environments[selectedSubEnvironment]) {
+      const { api_hosts } = selectedEnvironment.config.environments[selectedSubEnvironment];
+      apiHosts = api_hosts;
+    }
+
+    return { environmentVariables, apiHosts };
+  }
+
+  private async executeSingleFlowRun(
+    flow: TestFlow,
+    sequenceStep: FlowSequenceStep,
+    flowIndex: number,
+    environmentVariables: Record<string, unknown>,
+    apiHosts: Record<string, string>,
+    loopValue?: string | number | boolean
+  ): Promise<SequenceFlowResult> {
+    const startTime = performance.now();
+
+    try {
       const resolvedExecution = SequenceParameterResolver.resolveFlowParameters(
         flow,
         sequenceStep,
         this.state.accumulatedOutputs,
         environmentVariables,
         apiHosts,
-        this.options.onLog
+        this.options.onLog,
+        loopValue
       );
 
       // Variables to capture flow execution results
@@ -284,7 +351,7 @@ export class SequenceRunner {
       const expectsError = sequenceStep.expects_error ?? false;
       const matchedExpectation = success !== expectsError; // success=true + expectsError=false = matched, success=false + expectsError=true = matched
 
-      const flowResult: SequenceFlowResult = {
+      return {
         flowId: parseInt(flow.id),
         flowName: flow.name,
         stepOrder: sequenceStep.step_order,
@@ -297,61 +364,178 @@ export class SequenceRunner {
         parameterValues: resolvedExecution.resolvedParameters,
         executionTime
       };
-
-      this.options.onFlowComplete?.({
-        flowIndex,
-        flow,
-        stepOrder: sequenceStep.step_order,
-        success,
-        error,
-        flowOutputs
-      });
-
-      this.options.onLog(
-        success ? 'info' : 'error',
-        `Flow ${flow.name} execution ${success ? 'completed successfully' : 'failed'}`,
-        `Execution time: ${executionTime}ms${error ? `, Error: ${error}` : ''}`
-      );
-
-      return flowResult;
     } catch (err: unknown) {
-      const endTime = performance.now();
-      const executionTime = Math.round(endTime - startTime);
-
       this.options.onLog(
         'error',
         `Flow ${flow.name} execution failed`,
         err instanceof Error ? err.message : String(err)
       );
 
-      const expectsError = sequenceStep.expects_error ?? false;
-      const matchedExpectation = expectsError; // If it failed and expects error, it matched; if it failed and doesn't expect error, it didn't match
-
-      const flowResult: SequenceFlowResult = {
-        flowId: parseInt(flow.id),
-        flowName: flow.name,
-        stepOrder: sequenceStep.step_order,
-        success: false,
-        expectsError,
-        matchedExpectation,
-        error: err,
-        outputs: {},
-        responses: {},
-        parameterValues: {},
-        executionTime
-      };
-
-      this.options.onFlowComplete?.({
-        flowIndex,
-        flow,
-        stepOrder: sequenceStep.step_order,
-        success: false,
-        error: err,
-        flowOutputs: {}
-      });
-
-      return flowResult;
+      return this.createFailedFlowResult(flow, sequenceStep, startTime, err);
     }
+  }
+
+  private async executeLoopedFlow(
+    flow: TestFlow,
+    sequenceStep: FlowSequenceStep,
+    flowIndex: number,
+    environmentVariables: Record<string, unknown>,
+    apiHosts: Record<string, string>,
+    startTime: number
+  ): Promise<SequenceFlowResult> {
+    const loopValues = SequenceParameterResolver.resolveLoopValues(
+      sequenceStep,
+      this.state.accumulatedOutputs,
+      environmentVariables,
+      this.options.onLog
+    );
+
+    this.options.onLog(
+      'info',
+      `Loop mode enabled for flow ${flow.name}`,
+      `${loopValues.length} iteration(s)`
+    );
+
+    const iterationResults: SequenceFlowResult[] = [];
+
+    for (let iterationIndex = 0; iterationIndex < loopValues.length; iterationIndex++) {
+      if (this.state.shouldStopExecution) {
+        this.options.onLog('info', 'Loop execution stopped by user');
+        break;
+      }
+
+      this.options.onLog(
+        'info',
+        `Running iteration ${iterationIndex + 1}/${loopValues.length} for flow ${flow.name}`,
+        `Loop value: ${String(loopValues[iterationIndex])}`
+      );
+
+      const iterationResult = await this.executeSingleFlowRun(
+        flow,
+        sequenceStep,
+        flowIndex,
+        environmentVariables,
+        apiHosts,
+        loopValues[iterationIndex]
+      );
+
+      iterationResults.push(iterationResult);
+
+      if (!iterationResult.matchedExpectation) {
+        return this.createLoopResult(
+          flow,
+          sequenceStep,
+          startTime,
+          loopValues,
+          iterationResults,
+          iterationIndex
+        );
+      }
+    }
+
+    return this.createLoopResult(flow, sequenceStep, startTime, loopValues, iterationResults);
+  }
+
+  private createLoopResult(
+    flow: TestFlow,
+    sequenceStep: FlowSequenceStep,
+    startTime: number,
+    loopValues: Array<string | number | boolean>,
+    iterationResults: SequenceFlowResult[],
+    failedIterationIndex?: number
+  ): SequenceFlowResult {
+    const lastResult = iterationResults[iterationResults.length - 1];
+    const completedResults = iterationResults.filter((result) => result.matchedExpectation);
+    const success =
+      iterationResults.length === loopValues.length &&
+      iterationResults.every((result) => result.success);
+    const expectsError = sequenceStep.expects_error ?? false;
+    const endTime = performance.now();
+
+    return {
+      flowId: parseInt(flow.id),
+      flowName: flow.name,
+      stepOrder: sequenceStep.step_order,
+      success,
+      expectsError,
+      matchedExpectation: failedIterationIndex === undefined,
+      error: failedIterationIndex !== undefined ? lastResult?.error : undefined,
+      outputs: this.aggregateRecords(completedResults.map((result) => result.outputs)),
+      responses: this.namespaceIterationRecords(iterationResults.map((result) => result.responses)),
+      parameterValues: this.namespaceIterationRecords(
+        iterationResults.map((result) => result.parameterValues)
+      ),
+      executionTime: Math.round(endTime - startTime),
+      loop: {
+        enabled: true,
+        totalIterations: loopValues.length,
+        completedIterations: completedResults.length,
+        failedIterationIndex,
+        iterationValues: loopValues,
+        iterations: iterationResults.map((result, index) => ({
+          index,
+          value: loopValues[index],
+          success: result.success,
+          matchedExpectation: result.matchedExpectation,
+          error: result.error,
+          outputs: result.outputs,
+          responses: result.responses,
+          parameterValues: result.parameterValues,
+          executionTime: result.executionTime
+        }))
+      }
+    };
+  }
+
+  private aggregateRecords(records: Array<Record<string, unknown>>): Record<string, unknown> {
+    const aggregated: Record<string, unknown[]> = {};
+
+    for (const record of records) {
+      for (const [key, value] of Object.entries(record)) {
+        if (!aggregated[key]) {
+          aggregated[key] = [];
+        }
+        aggregated[key].push(value);
+      }
+    }
+
+    return aggregated;
+  }
+
+  private namespaceIterationRecords(
+    records: Array<Record<string, unknown>>
+  ): Record<string, unknown> {
+    return Object.fromEntries(records.map((record, index) => [`iteration_${index}`, record]));
+  }
+
+  private createFailedFlowResult(
+    flow: TestFlow,
+    sequenceStep: FlowSequenceStep,
+    startTime: number,
+    error: unknown
+  ): SequenceFlowResult {
+    const endTime = performance.now();
+    const expectsError = sequenceStep.expects_error ?? false;
+
+    this.options.onLog(
+      'error',
+      `Flow ${flow.name} execution failed`,
+      error instanceof Error ? error.message : String(error)
+    );
+
+    return {
+      flowId: parseInt(flow.id),
+      flowName: flow.name,
+      stepOrder: sequenceStep.step_order,
+      success: false,
+      expectsError,
+      matchedExpectation: expectsError,
+      error,
+      outputs: {},
+      responses: {},
+      parameterValues: {},
+      executionTime: Math.round(endTime - startTime)
+    };
   }
 
   stopExecution(): void {

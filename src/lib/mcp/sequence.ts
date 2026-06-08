@@ -1,6 +1,7 @@
 import { defaultTemplateFunctions } from '$lib/template/functions';
 import type { TestFlow } from '$lib/types/test-flow';
 import type {
+  FlowLoopConfig,
   FlowParameterMapping,
   FlowSequence,
   FlowSequenceStep
@@ -18,6 +19,14 @@ function sortedSteps(sequence: FlowSequence): FlowSequenceStep[] {
 
 function getFlowOutputs(flow: TestFlow): Set<string> {
   return new Set((flow.flowJson?.outputs ?? []).map((output) => output.name));
+}
+
+function getFlowOutputType(flow: TestFlow, outputName: string): string | undefined {
+  return flow.flowJson?.outputs?.find((output) => output.name === outputName)?.type;
+}
+
+function isPrimitiveOutputType(type: string | undefined): boolean {
+  return type === 'string' || type === 'number' || type === 'boolean';
 }
 
 function getFlowParameterNames(flow: TestFlow): Set<string> {
@@ -94,6 +103,30 @@ export function setSequenceParameterMapping(
   return next;
 }
 
+export function setSequenceLoopConfig(
+  sequence: FlowSequence,
+  input: {
+    sequenceStepId?: string;
+    stepOrder?: number;
+    loopConfig: FlowLoopConfig;
+  }
+): FlowSequence {
+  if (!input.sequenceStepId && input.stepOrder === undefined) {
+    throw new Error('sequenceStepId or stepOrder is required.');
+  }
+
+  const next = structuredClone(sequence);
+  const step = resolveStep(next, input);
+  step.loop_config = input.loopConfig.enabled
+    ? input.loopConfig
+    : {
+        ...input.loopConfig,
+        enabled: false
+      };
+  next.sequenceConfig.steps = sortedSteps(next);
+  return next;
+}
+
 export function validateFlowSequence(
   sequence: FlowSequence,
   flowsById: Map<number, TestFlow>,
@@ -115,6 +148,66 @@ export function validateFlowSequence(
 
     const parameterNames = getFlowParameterNames(flow);
     const mappings = step.parameter_mappings ?? [];
+    const loopConfig = step.loop_config;
+
+    if (loopConfig?.enabled) {
+      if (loopConfig.source_type === 'fixed_count') {
+        if (!Number.isInteger(loopConfig.count) || Number(loopConfig.count) < 1) {
+          errors.push(`Sequence step ${step.step_order} loop count must be a positive integer.`);
+        }
+      } else if (loopConfig.source_type === 'environment_variable_array') {
+        if (!loopConfig.source_value) {
+          errors.push(
+            `Sequence step ${step.step_order} loop source environment variable is missing.`
+          );
+        } else if (
+          environmentVariableNames.size > 0 &&
+          !environmentVariableNames.has(loopConfig.source_value)
+        ) {
+          errors.push(
+            `Sequence step ${step.step_order} loops from unknown environment variable "${loopConfig.source_value}".`
+          );
+        }
+      } else if (loopConfig.source_type === 'previous_output_array') {
+        if (loopConfig.source_flow_step === undefined) {
+          errors.push(`Sequence step ${step.step_order} loop source_flow_step is missing.`);
+        } else if (!stepOrders.has(loopConfig.source_flow_step)) {
+          errors.push(
+            `Sequence step ${step.step_order} loops from missing flow step ${loopConfig.source_flow_step}.`
+          );
+        } else if (loopConfig.source_flow_step >= step.step_order) {
+          errors.push(
+            `Sequence step ${step.step_order} loops from step ${loopConfig.source_flow_step}, which does not run earlier.`
+          );
+        } else {
+          const sourceStep = steps.find((item) => item.step_order === loopConfig.source_flow_step);
+          const sourceFlow = sourceStep ? flowsById.get(sourceStep.test_flow_id) : undefined;
+          const outputField = loopConfig.source_output_field || loopConfig.source_value;
+          if (!outputField) {
+            errors.push(`Sequence step ${step.step_order} loop output field is missing.`);
+          } else if (sourceFlow && !getFlowOutputs(sourceFlow).has(outputField)) {
+            errors.push(
+              `Sequence step ${step.step_order} loops from missing output "${outputField}" on flow step ${loopConfig.source_flow_step}.`
+            );
+          } else if (sourceFlow && sourceStep) {
+            const outputType = getFlowOutputType(sourceFlow, outputField);
+            const sourceOutputIsPrimitiveArray =
+              sourceStep.loop_config?.enabled && isPrimitiveOutputType(outputType);
+            const sourceOutputIsDeclaredArray = outputType === 'array';
+
+            if (!sourceOutputIsPrimitiveArray && !sourceOutputIsDeclaredArray) {
+              errors.push(
+                `Sequence step ${step.step_order} loop source "${outputField}" must be an array output or a primitive output from a looped previous step.`
+              );
+            }
+          }
+        }
+      } else {
+        errors.push(
+          `Sequence step ${step.step_order} uses unsupported loop source_type "${loopConfig.source_type}".`
+        );
+      }
+    }
 
     for (const mapping of mappings) {
       if (!parameterNames.has(mapping.flow_parameter_name)) {
@@ -166,6 +259,12 @@ export function validateFlowSequence(
             `Sequence step ${step.step_order} static mapping for "${mapping.flow_parameter_name}" uses unsupported data_type "${mapping.data_type}".`
           );
         }
+      } else if (mapping.source_type === 'loop_value') {
+        if (!loopConfig?.enabled) {
+          errors.push(
+            `Sequence step ${step.step_order} maps "${mapping.flow_parameter_name}" from loop_value but loop mode is not enabled.`
+          );
+        }
       } else {
         errors.push(
           `Sequence step ${step.step_order} mapping for "${mapping.flow_parameter_name}" uses unsupported source_type "${mapping.source_type}".`
@@ -206,13 +305,24 @@ export function explainFlowSequence(
     if (!flow) {
       warnings.push(`Step ${step.step_order} references missing flow ${step.test_flow_id}.`);
     }
-    return `Step ${step.step_order}: ${flow?.name ?? `Flow ${step.test_flow_id}`}`;
+    const loopConfig = step.loop_config;
+    const loopText = loopConfig?.enabled
+      ? loopConfig.source_type === 'fixed_count'
+        ? ` (loop ${loopConfig.count ?? 0} time${loopConfig.count === 1 ? '' : 's'})`
+        : loopConfig.source_type === 'environment_variable_array'
+          ? ` (loop env ${loopConfig.source_value})`
+          : ` (loop output ${loopConfig.source_output_field || loopConfig.source_value} from step ${loopConfig.source_flow_step})`
+      : '';
+    return `Step ${step.step_order}: ${flow?.name ?? `Flow ${step.test_flow_id}`}${loopText}`;
   });
 
   const mappings = steps.flatMap((step) =>
     (step.parameter_mappings ?? []).map((mapping) => {
       if (mapping.source_type === 'previous_output') {
         return `Step ${step.step_order}.${mapping.flow_parameter_name} <= output ${mapping.source_output_field || mapping.source_value} from step ${mapping.source_flow_step}`;
+      }
+      if (mapping.source_type === 'loop_value') {
+        return `Step ${step.step_order}.${mapping.flow_parameter_name} <= current loop value`;
       }
       return `Step ${step.step_order}.${mapping.flow_parameter_name} <= ${mapping.source_type} ${mapping.source_value}`;
     })

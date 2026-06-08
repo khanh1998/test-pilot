@@ -33,14 +33,29 @@ export interface FlowSequenceStep {
   test_flow_id: number;
   step_order: number;
   parameter_mappings: FlowParameterMapping[];
+  loop_config?: FlowLoopConfig; // Optional: execute this flow multiple times
   conditions?: ExecutionCondition[]; // Optional: conditional execution
   retry_config?: RetryConfig; // Optional: retry settings
   expects_error?: boolean; // Whether this step is expected to fail (default: false)
 }
 
+export interface FlowLoopConfig {
+  enabled: boolean;
+  source_type: 'fixed_count' | 'environment_variable_array' | 'previous_output_array';
+  count?: number;
+  source_value?: string;
+  source_flow_step?: number;
+  source_output_field?: string;
+}
+
 export interface FlowParameterMapping {
   flow_parameter_name: string;
-  source_type: 'environment_variable' | 'previous_output' | 'static_value' | 'function';
+  source_type:
+    | 'environment_variable'
+    | 'previous_output'
+    | 'static_value'
+    | 'function'
+    | 'loop_value';
   source_value: string; // For environment_variable: variable name, for previous_output: output field name, for static_value: the actual value, for function: function call expression
   data_type?: 'string' | 'number' | 'boolean'; // Only used for static_value
   source_flow_step?: number; // Only used for previous_output

@@ -1,12 +1,13 @@
 <script lang="ts">
-  
   import VariableDefinitionEditor from './VariableDefinitionEditor.svelte';
   import SubEnvironmentEditor from './SubEnvironmentEditor.svelte';
   import ApiHostEditor from './ApiHostEditor.svelte';
   import type {
     Environment,
     CreateEnvironmentData,
-    EnvironmentConfig
+    EnvironmentConfig,
+    SubEnvironment,
+    VariableDefinition
   } from '$lib/types/environment';
 
   interface Props {
@@ -16,12 +17,16 @@
     disabled?: boolean;
   }
 
-  let { environment = null, isEditing = false, disabled = false , ...callbackProps
+  let {
+    environment = null,
+    isEditing = false,
+    disabled = false,
+    ...callbackProps
   }: Props & Record<string, unknown> = $props();
 
   function dispatch(eventName: string, detail?: unknown) {
-    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
-    if (typeof handler === "function") {
+    const handler = callbackProps['on' + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === 'function') {
       if (arguments.length > 1) {
         handler(detail);
       } else {
@@ -33,8 +38,9 @@
   // Form data
   let name = $state(environment?.name || '');
   let description = $state(environment?.description || '');
-  let environmentType: 'environment_set' | 'single_environment' =
-    $state(environment?.config.type || 'environment_set');
+  let environmentType: 'environment_set' | 'single_environment' = $state(
+    environment?.config.type || 'environment_set'
+  );
 
   // Configuration data
   let variableDefinitions = $state(environment?.config.variable_definitions || {});
@@ -82,13 +88,20 @@
     isSubmitting = true;
 
     try {
+      const normalizedVariableDefinitions = normalizeVariableDefinitions();
+      const normalizedSubEnvironments = normalizeSubEnvironments(normalizedVariableDefinitions);
+
+      if (validationErrors.length > 0) {
+        return;
+      }
+
       const environmentData: CreateEnvironmentData = {
         name: name.trim(),
         description: description.trim() || undefined,
         config: {
           type: environmentType,
-          environments: subEnvironments,
-          variable_definitions: variableDefinitions,
+          environments: normalizedSubEnvironments,
+          variable_definitions: normalizedVariableDefinitions,
           linked_apis: linkedApis
         }
       };
@@ -144,9 +157,123 @@
 
   let hasInitializedDefaultSubEnvironments = $state(false);
 
+  function isUnsetStructuredValue(value: unknown): boolean {
+    return value === undefined || value === null || value === '';
+  }
+
+  function parseStructuredValue(
+    value: unknown,
+    expectedType: VariableDefinition['type'],
+    label: string
+  ): unknown {
+    if (expectedType !== 'array' && expectedType !== 'object') {
+      return value;
+    }
+
+    if (isUnsetStructuredValue(value)) {
+      return undefined;
+    }
+
+    if (expectedType === 'array' && Array.isArray(value)) {
+      return value;
+    }
+
+    if (
+      expectedType === 'object' &&
+      typeof value === 'object' &&
+      value !== null &&
+      !Array.isArray(value)
+    ) {
+      return value;
+    }
+
+    if (typeof value !== 'string') {
+      validationErrors.push(`${label} must be a ${expectedType}.`);
+      return value;
+    }
+
+    try {
+      const parsed = JSON.parse(value);
+      if (expectedType === 'array' && !Array.isArray(parsed)) {
+        validationErrors.push(`${label} must be a JSON array.`);
+        return value;
+      }
+
+      if (
+        expectedType === 'object' &&
+        (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed))
+      ) {
+        validationErrors.push(`${label} must be a JSON object.`);
+        return value;
+      }
+
+      return parsed;
+    } catch {
+      validationErrors.push(`${label} must be valid JSON.`);
+      return value;
+    }
+  }
+
+  function normalizeVariableDefinitions(): Record<string, VariableDefinition> {
+    return Object.fromEntries(
+      Object.entries(variableDefinitions).map(([varName, varDef]) => [
+        varName,
+        {
+          ...varDef,
+          default_value: parseStructuredValue(
+            varDef.default_value,
+            varDef.type,
+            `Default value for "${varName}"`
+          )
+        }
+      ])
+    );
+  }
+
+  function normalizeSubEnvironments(
+    normalizedDefinitions: Record<string, VariableDefinition>
+  ): Record<string, SubEnvironment> {
+    return Object.fromEntries(
+      Object.entries(subEnvironments).map(([subEnvName, subEnv]) => {
+        const variables = { ...(subEnv.variables || {}) };
+
+        for (const [varName, varDef] of Object.entries(normalizedDefinitions)) {
+          if (!(varName in variables)) continue;
+
+          const normalizedValue = parseStructuredValue(
+            variables[varName],
+            varDef.type,
+            `Value for "${varName}" in "${subEnvName}"`
+          );
+
+          if (
+            normalizedValue === undefined &&
+            (varDef.type === 'array' || varDef.type === 'object')
+          ) {
+            delete variables[varName];
+          } else {
+            variables[varName] = normalizedValue;
+          }
+        }
+
+        return [
+          subEnvName,
+          {
+            ...subEnv,
+            variables
+          }
+        ];
+      })
+    );
+  }
+
   // Initialize default sub-environments if creating new environment
   $effect(() => {
-    if (!hasInitializedDefaultSubEnvironments && !isEditing && Object.keys(subEnvironments).length === 0) {
+    if (
+      !hasInitializedDefaultSubEnvironments &&
+      !isEditing &&
+      Object.keys(subEnvironments).length === 0
+    ) {
       hasInitializedDefaultSubEnvironments = true;
       createDefaultSubEnvironments();
     }

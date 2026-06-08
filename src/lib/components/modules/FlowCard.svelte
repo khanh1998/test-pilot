@@ -7,10 +7,9 @@
     };
   }
 
-    import type { TestFlow } from '../../types/test-flow.js';
+  import type { TestFlow } from '../../types/test-flow.js';
   import type { SequenceFlowResult } from '$lib/sequence-runner/types';
   import type { FlowSequenceStep } from '../../types/flow_sequence.js';
-  
 
   interface Props {
     [key: string]: unknown;
@@ -34,16 +33,16 @@
     isFirst = false,
     isLast = false,
     isMoving = false,
-    sequenceStep = undefined
-  , ...callbackProps
+    sequenceStep = undefined,
+    ...callbackProps
   }: Props & Record<string, unknown> = $props();
 
   // State for toggling between inputs and outputs
   let activeTab: 'outputs' | 'inputs' = $state('outputs');
 
   function dispatch(eventName: string, detail?: unknown) {
-    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
-    if (typeof handler === "function") {
+    const handler = callbackProps['on' + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === 'function') {
       if (arguments.length > 1) {
         handler(detail);
       } else {
@@ -63,11 +62,11 @@
       event.preventDefault();
       return;
     }
-    
+
     if (event.dataTransfer) {
       event.dataTransfer.effectAllowed = 'move';
       event.dataTransfer.setData('text/plain', JSON.stringify({ flowId: flow.id, stepOrder }));
-      
+
       // Set the entire card as the drag image instead of just the handle
       const cardElement = target.closest('.flow-card') as HTMLElement;
       if (cardElement) {
@@ -76,10 +75,14 @@
         dragImage.style.position = 'absolute';
         dragImage.style.top = '-9999px';
         document.body.appendChild(dragImage);
-        
+
         // Set the drag image to the card clone
-        event.dataTransfer.setDragImage(dragImage, cardElement.offsetWidth / 2, cardElement.offsetHeight / 2);
-        
+        event.dataTransfer.setDragImage(
+          dragImage,
+          cardElement.offsetWidth / 2,
+          cardElement.offsetHeight / 2
+        );
+
         // Clean up the clone after a brief delay
         setTimeout(() => {
           document.body.removeChild(dragImage);
@@ -133,47 +136,87 @@
     dispatch('toggleExpectsError', { stepOrder, expectsError: newExpectsError });
   }
 
+  function getLoopSummary(step: FlowSequenceStep | undefined): string {
+    const loopConfig = step?.loop_config;
+    if (!loopConfig?.enabled) return '';
+
+    if (loopConfig.source_type === 'fixed_count') {
+      return `Loop: ${loopConfig.count || 0}`;
+    }
+
+    if (loopConfig.source_type === 'environment_variable_array') {
+      return `Loop: env.${loopConfig.source_value || '?'}`;
+    }
+
+    if (loopConfig.source_type === 'previous_output_array') {
+      return `Loop: Step ${loopConfig.source_flow_step || '?'}.${loopConfig.source_output_field || loopConfig.source_value || '?'}[]`;
+    }
+
+    return 'Loop';
+  }
+
   // Find execution result for this flow and step
-  let executionResult = $derived(executionResults.find(result => {
-    const flowIdNum = parseInt(flow.id);
-    const match = result.flowId === flowIdNum && result.stepOrder === stepOrder;
-    return match;
-  }) || null);
+  let executionResult = $derived(
+    executionResults.find((result) => {
+      const flowIdNum = parseInt(flow.id);
+      const match = result.flowId === flowIdNum && result.stepOrder === stepOrder;
+      return match;
+    }) || null
+  );
 
   // Get expects error state from sequence step
   let expectsError = $derived(sequenceStep?.expects_error ?? false);
+  let loopSummary = $derived(getLoopSummary(sequenceStep));
 
   // Determine execution status for visual indicators
-  let executionStatus = $derived(executionResult ? (
-    executionResult.matchedExpectation !== undefined ? (
-      executionResult.matchedExpectation ? 'expected' : 'unexpected'
-    ) : (
-      executionResult.success ? 'success' : 'error'
-    )
-  ) : 'none');
+  let executionStatus = $derived(
+    executionResult
+      ? executionResult.matchedExpectation !== undefined
+        ? executionResult.matchedExpectation
+          ? 'expected'
+          : 'unexpected'
+        : executionResult.success
+          ? 'success'
+          : 'error'
+      : 'none'
+  );
   let hasResults = $derived(executionResult !== null);
-  
+  let loopResult = $derived(executionResult?.loop || null);
+
   // Debug logging
   $effect(() => {
     const flowIdNum = parseInt(flow.id);
-    console.log(`🎯 FlowCard ${flow.name} (flowId=${flowIdNum}, stepOrder=${stepOrder}): executionResult=`, executionResult);
-    console.log(`🎯 FlowCard ${flow.name}: hasResults=${hasResults}, executionStatus=${executionStatus}`);
+    console.log(
+      `🎯 FlowCard ${flow.name} (flowId=${flowIdNum}, stepOrder=${stepOrder}): executionResult=`,
+      executionResult
+    );
+    console.log(
+      `🎯 FlowCard ${flow.name}: hasResults=${hasResults}, executionStatus=${executionStatus}`
+    );
     if (executionResults.length > 0) {
-      console.log(`🎯 FlowCard ${flow.name}: Available results:`, executionResults.map(r => ({ flowId: r.flowId, stepOrder: r.stepOrder, success: r.success })));
+      console.log(
+        `🎯 FlowCard ${flow.name}: Available results:`,
+        executionResults.map((r) => ({
+          flowId: r.flowId,
+          stepOrder: r.stepOrder,
+          success: r.success
+        }))
+      );
     }
   });
 </script>
 
 <div
-  class="flow-card group relative bg-white border rounded-lg overflow-hidden hover:shadow-md transition-all duration-200 w-80 h-[240px] flex flex-col {executionStatus === 'expected' 
-    ? 'border-green-300 bg-green-50' 
-    : executionStatus === 'unexpected' 
-    ? 'border-red-300 bg-red-50'
-    : executionStatus === 'success'
+  class="flow-card group relative flex h-[240px] w-80 flex-col overflow-hidden rounded-lg border bg-white transition-all duration-200 hover:shadow-md {executionStatus ===
+  'expected'
     ? 'border-green-300 bg-green-50'
-    : executionStatus === 'error'
-    ? 'border-red-300 bg-red-50'
-    : 'border-gray-200'}"
+    : executionStatus === 'unexpected'
+      ? 'border-red-300 bg-red-50'
+      : executionStatus === 'success'
+        ? 'border-green-300 bg-green-50'
+        : executionStatus === 'error'
+          ? 'border-red-300 bg-red-50'
+          : 'border-gray-200'}"
   class:opacity-50={isDragging}
   class:border-blue-400={isDropTarget}
   class:bg-blue-50={isDropTarget}
@@ -184,51 +227,88 @@
 >
   <!-- Status Bar at Top -->
   {#if executionStatus !== 'none'}
-    <div class="h-1 w-full flex-shrink-0 {
-      executionStatus === 'expected' ? 'bg-green-500' : 
-      executionStatus === 'unexpected' ? 'bg-red-500' :
-      executionStatus === 'success' ? 'bg-green-500' : 
-      'bg-red-500'
-    }"></div>
+    <div
+      class="h-1 w-full flex-shrink-0 {executionStatus === 'expected'
+        ? 'bg-green-500'
+        : executionStatus === 'unexpected'
+          ? 'bg-red-500'
+          : executionStatus === 'success'
+            ? 'bg-green-500'
+            : 'bg-red-500'}"
+    ></div>
   {:else}
     <div class="h-1 w-full flex-shrink-0"></div>
   {/if}
 
   <!-- Card Content -->
-  <div class="p-4 flex-1 flex flex-col min-h-0">
+  <div class="flex min-h-0 flex-1 flex-col p-4">
     <!-- Header Section -->
     <div class="mb-3 flex-shrink-0">
       <!-- Flow Name -->
-      <div class="flex items-start justify-between gap-2 mb-1">
-        <h4 class="text-base font-semibold text-gray-900 truncate flex-1" title={flow.name}>
+      <div class="mb-1 flex items-start justify-between gap-2">
+        <h4 class="flex-1 truncate text-base font-semibold text-gray-900" title={flow.name}>
           {flow.name}
         </h4>
         {#if expectsError}
-          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 flex-shrink-0" title="This step is expected to fail">
-            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          <span
+            class="inline-flex flex-shrink-0 items-center rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-800"
+            title="This step is expected to fail"
+          >
+            <svg class="mr-1 h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
             </svg>
             Expects Error
           </span>
         {/if}
+        {#if loopSummary}
+          <span
+            class="inline-flex flex-shrink-0 items-center rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-800"
+            title={loopSummary}
+          >
+            <svg class="mr-1 h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M17 1l4 4-4 4M3 11V9a4 4 0 014-4h14M7 23l-4-4 4-4m14-2v2a4 4 0 01-4 4H3"
+              />
+            </svg>
+            {loopSummary}
+          </span>
+        {/if}
       </div>
-      
+
       <!-- Folder Tabs and Action Buttons -->
-      <div class="flex items-end justify-between gap-3 -mb-3">
+      <div class="-mb-3 flex items-end justify-between gap-3">
         <!-- Folder Tabs -->
         <div class="flex items-end gap-1 text-xs">
           <button
             type="button"
-            class="folder-tab px-3 py-1.5 cursor-pointer transition-all {activeTab === 'inputs' ? 'folder-tab-active' : 'folder-tab-inactive'}"
-            onclick={(e) => { e.stopPropagation(); activeTab = 'inputs'; }}
+            class="folder-tab cursor-pointer px-3 py-1.5 transition-all {activeTab === 'inputs'
+              ? 'folder-tab-active'
+              : 'folder-tab-inactive'}"
+            onclick={(e) => {
+              e.stopPropagation();
+              activeTab = 'inputs';
+            }}
             title="Click to view input parameters"
           >
             Inputs
           </button>
           <button
             type="button"
-            class="folder-tab px-3 py-1.5 cursor-pointer transition-all {activeTab === 'outputs' ? 'folder-tab-active' : 'folder-tab-inactive'}"
-            onclick={(e) => { e.stopPropagation(); activeTab = 'outputs'; }}
+            class="folder-tab cursor-pointer px-3 py-1.5 transition-all {activeTab === 'outputs'
+              ? 'folder-tab-active'
+              : 'folder-tab-inactive'}"
+            onclick={(e) => {
+              e.stopPropagation();
+              activeTab = 'outputs';
+            }}
             title="Click to view outputs"
           >
             Outputs
@@ -236,54 +316,77 @@
         </div>
 
         <!-- Action Buttons - Horizontal Row -->
-        <div class="flex items-center gap-1 flex-shrink-0 mb-1">
+        <div class="mb-1 flex flex-shrink-0 items-center gap-1">
           <!-- Expects Error Toggle -->
           <button
             type="button"
-            class="w-7 h-7 rounded hover:bg-opacity-80 transition-colors flex items-center justify-center shadow-sm {expectsError ? 'bg-orange-500 text-white hover:bg-orange-600' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'}"
+            class="hover:bg-opacity-80 flex h-7 w-7 items-center justify-center rounded shadow-sm transition-colors {expectsError
+              ? 'bg-orange-500 text-white hover:bg-orange-600'
+              : 'bg-gray-200 text-gray-600 hover:bg-gray-300'}"
             onclick={handleToggleExpectsError}
             aria-label="Toggle expects error"
-            title={expectsError ? "Currently expecting this step to fail/return error. Click to expect success." : "Currently expecting this step to succeed. Click to expect failure/error."}
+            title={expectsError
+              ? 'Currently expecting this step to fail/return error. Click to expect success.'
+              : 'Currently expecting this step to succeed. Click to expect failure/error.'}
           >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
             </svg>
           </button>
 
           <button
             type="button"
-            class="w-7 h-7 bg-amber-500 text-white rounded hover:bg-amber-600 transition-colors flex items-center justify-center shadow-sm"
+            class="flex h-7 w-7 items-center justify-center rounded bg-amber-500 text-white shadow-sm transition-colors hover:bg-amber-600"
             onclick={handleEdit}
             aria-label="Edit flow parameters"
             title="Edit Parameters"
           >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+              />
             </svg>
           </button>
 
           <button
             type="button"
-            class="w-7 h-7 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors flex items-center justify-center shadow-sm"
+            class="flex h-7 w-7 items-center justify-center rounded bg-blue-500 text-white shadow-sm transition-colors hover:bg-blue-600"
             onclick={handleViewDetails}
             aria-label="View flow details"
             title="View Details"
           >
-            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/>
-              <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/>
+            <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+              <path
+                fill-rule="evenodd"
+                d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z"
+                clip-rule="evenodd"
+              />
             </svg>
           </button>
-          
+
           <button
             type="button"
-            class="w-7 h-7 bg-red-500 text-white rounded hover:bg-red-600 transition-colors flex items-center justify-center shadow-sm"
+            class="flex h-7 w-7 items-center justify-center rounded bg-red-500 text-white shadow-sm transition-colors hover:bg-red-600"
             onclick={handleRemove}
             aria-label="Remove flow"
             title="Remove from Sequence"
           >
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M6 18L18 6M6 6l12 12"
+              />
             </svg>
           </button>
         </div>
@@ -291,15 +394,18 @@
     </div>
 
     <!-- Scrollable Content Area - Show either Inputs or Outputs based on active tab -->
-    <div class="flex-1 overflow-y-auto min-h-0 scrollable-content pt-3 border-t-2 border-blue-200">
+    <div class="scrollable-content min-h-0 flex-1 overflow-y-auto border-t-2 border-blue-200 pt-3">
       {#if activeTab === 'outputs'}
         <!-- Outputs Section -->
         {#if flow.flowJson?.outputs && flow.flowJson.outputs.length > 0}
           <div class="space-y-1.5">
             {#each flow.flowJson.outputs as output}
-              <div class="text-xs text-gray-700 truncate flex items-center gap-1.5" title={output.name}>
+              <div
+                class="flex items-center gap-1.5 truncate text-xs text-gray-700"
+                title={output.name}
+              >
                 <span class="text-blue-500">→</span>
-                <span class="font-mono">{output.name}</span>
+                <span class="font-mono">{output.name}{loopSummary ? '[]' : ''}</span>
               </div>
             {/each}
           </div>
@@ -311,7 +417,10 @@
         {#if flow.flowJson?.parameters && flow.flowJson.parameters.length > 0}
           <div class="space-y-1.5">
             {#each flow.flowJson.parameters as param}
-              <div class="text-xs text-gray-700 truncate flex items-center gap-1.5" title={param.name}>
+              <div
+                class="flex items-center gap-1.5 truncate text-xs text-gray-700"
+                title={param.name}
+              >
                 <span class="text-blue-500">←</span>
                 <span class="font-mono">{param.name}</span>
               </div>
@@ -328,19 +437,35 @@
       <!-- View Results Button (shown after execution) -->
       {#if hasResults}
         <div class="mb-3">
+          {#if loopResult}
+            <div
+              class="mb-1 text-center text-xs font-medium {executionStatus === 'expected' ||
+              executionStatus === 'success'
+                ? 'text-green-700'
+                : 'text-red-700'}"
+            >
+              {loopResult.completedIterations}/{loopResult.totalIterations} iterations
+            </div>
+          {/if}
           <button
             type="button"
-            class="w-full py-2 px-3 {
-              executionStatus === 'expected' ? 'bg-green-500 hover:bg-green-600' : 
-              executionStatus === 'unexpected' ? 'bg-red-500 hover:bg-red-600' :
-              executionStatus === 'success' ? 'bg-green-500 hover:bg-green-600' : 
-              'bg-red-500 hover:bg-red-600'
-            } text-white rounded-md transition-colors flex items-center justify-center gap-2 font-medium text-sm shadow-sm"
+            class="w-full px-3 py-2 {executionStatus === 'expected'
+              ? 'bg-green-500 hover:bg-green-600'
+              : executionStatus === 'unexpected'
+                ? 'bg-red-500 hover:bg-red-600'
+                : executionStatus === 'success'
+                  ? 'bg-green-500 hover:bg-green-600'
+                  : 'bg-red-500 hover:bg-red-600'} flex items-center justify-center gap-2 rounded-md text-sm font-medium text-white shadow-sm transition-colors"
             onclick={handleShowResults}
             aria-label="View execution results"
           >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              />
             </svg>
             {#if executionStatus === 'expected'}
               Behaved as Expected
@@ -354,26 +479,31 @@
       {/if}
 
       <!-- Drag Handle and Move Buttons -->
-      <div class="pt-2 border-t border-gray-100">
+      <div class="border-t border-gray-100 pt-2">
         <div class="flex items-center justify-center gap-2">
           <!-- Move Left Button -->
           {#if !isFirst}
             <button
               type="button"
-              class="move-btn px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-800 rounded transition-all flex items-center gap-1 text-xs font-medium"
+              class="move-btn flex items-center gap-1 rounded bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600 transition-all hover:bg-gray-200 hover:text-gray-800"
               onclick={handleMoveLeft}
               aria-label="Move left"
               title="Move left"
             >
-              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+              <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M15 19l-7-7 7-7"
+                />
               </svg>
             </button>
           {/if}
-          
+
           <!-- Drag Handle -->
-          <div 
-            class="drag-handle text-gray-400 hover:text-gray-600 transition-colors cursor-grab active:cursor-grabbing p-1 rounded hover:bg-gray-100"
+          <div
+            class="drag-handle cursor-grab rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 active:cursor-grabbing"
             draggable="true"
             ondragstart={handleDragStart}
             ondragend={handleDragEnd}
@@ -382,22 +512,29 @@
             aria-label="Drag to reorder"
             title="Drag to reorder"
           >
-            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M7 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 2zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 14zm6-8a2 2 0 1 0-.001-4.001A2 2 0 0 0 13 6zm0 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 14z"/>
+            <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+              <path
+                d="M7 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 2zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 14zm6-8a2 2 0 1 0-.001-4.001A2 2 0 0 0 13 6zm0 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 14z"
+              />
             </svg>
           </div>
-          
+
           <!-- Move Right Button -->
           {#if !isLast}
             <button
               type="button"
-              class="move-btn px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-800 rounded transition-all flex items-center gap-1 text-xs font-medium"
+              class="move-btn flex items-center gap-1 rounded bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600 transition-all hover:bg-gray-200 hover:text-gray-800"
               onclick={handleMoveRight}
               aria-label="Move right"
               title="Move right"
             >
-              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+              <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M9 5l7 7-7 7"
+                />
               </svg>
             </button>
           {/if}

@@ -264,6 +264,127 @@ describe('SequenceParameterResolver', () => {
         debug_mode: true
       });
     });
+
+    it('resolves current loop value parameters', () => {
+      const step: FlowSequenceStep = {
+        id: 'loop-step',
+        test_flow_id: 2,
+        step_order: 2,
+        parameter_mappings: [
+          {
+            flow_parameter_name: 'user_email',
+            source_type: 'loop_value',
+            source_value: 'value'
+          }
+        ],
+        loop_config: {
+          enabled: true,
+          source_type: 'environment_variable_array',
+          source_value: 'emails'
+        }
+      };
+
+      const result = SequenceParameterResolver.resolveFlowParameters(
+        createUserFlow,
+        step,
+        {},
+        {},
+        {},
+        mockOnLog,
+        'testuser@example.com'
+      );
+
+      expect(result.resolvedParameters).toMatchObject({
+        user_email: 'testuser@example.com'
+      });
+    });
+
+    it('resolves fixed count loop values as numeric indexes', () => {
+      const step: FlowSequenceStep = {
+        id: 'fixed-loop-step',
+        test_flow_id: 1,
+        step_order: 1,
+        parameter_mappings: [],
+        loop_config: {
+          enabled: true,
+          source_type: 'fixed_count',
+          count: 3
+        }
+      };
+
+      expect(SequenceParameterResolver.resolveLoopValues(step, {}, {}, mockOnLog)).toEqual([
+        0, 1, 2
+      ]);
+    });
+
+    it('resolves environment primitive array loop values', () => {
+      const step: FlowSequenceStep = {
+        id: 'env-loop-step',
+        test_flow_id: 1,
+        step_order: 1,
+        parameter_mappings: [],
+        loop_config: {
+          enabled: true,
+          source_type: 'environment_variable_array',
+          source_value: 'order_ids'
+        }
+      };
+
+      expect(
+        SequenceParameterResolver.resolveLoopValues(
+          step,
+          {},
+          { order_ids: ['ord_1', 'ord_2'] },
+          mockOnLog
+        )
+      ).toEqual(['ord_1', 'ord_2']);
+    });
+
+    it('resolves previous output primitive array loop values', () => {
+      const step: FlowSequenceStep = {
+        id: 'previous-loop-step',
+        test_flow_id: 2,
+        step_order: 2,
+        parameter_mappings: [],
+        loop_config: {
+          enabled: true,
+          source_type: 'previous_output_array',
+          source_flow_step: 1,
+          source_output_field: 'order_id'
+        }
+      };
+
+      expect(
+        SequenceParameterResolver.resolveLoopValues(
+          step,
+          { flow_1: { order_id: [101, 102] } },
+          {},
+          mockOnLog
+        )
+      ).toEqual([101, 102]);
+    });
+
+    it('rejects object and null loop array values', () => {
+      const step: FlowSequenceStep = {
+        id: 'invalid-loop-step',
+        test_flow_id: 1,
+        step_order: 1,
+        parameter_mappings: [],
+        loop_config: {
+          enabled: true,
+          source_type: 'environment_variable_array',
+          source_value: 'items'
+        }
+      };
+
+      expect(() =>
+        SequenceParameterResolver.resolveLoopValues(step, {}, { items: [{ id: 1 }] }, mockOnLog)
+      ).toThrow(/string, number, or boolean/);
+
+      expect(() =>
+        SequenceParameterResolver.resolveLoopValues(step, {}, { items: [null] }, mockOnLog)
+      ).toThrow(/string, number, or boolean/);
+    });
   });
 
   describe('error response utils', () => {
