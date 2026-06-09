@@ -1,7 +1,7 @@
 <script lang="ts">
-  
   import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
   import type { VariableDefinition } from '$lib/types/environment';
+  import { formatEnvironmentValueForInput } from './value-format';
 
   interface Props {
     [key: string]: unknown;
@@ -9,12 +9,15 @@
     disabled?: boolean;
   }
 
-  let { variableDefinitions = $bindable({}), disabled = false , ...callbackProps
+  let {
+    variableDefinitions = $bindable({}),
+    disabled = false,
+    ...callbackProps
   }: Props & Record<string, unknown> = $props();
 
   function dispatch(eventName: string, detail?: unknown) {
-    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
-    if (typeof handler === "function") {
+    const handler = callbackProps['on' + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === 'function') {
       if (arguments.length > 1) {
         handler(detail);
       } else {
@@ -97,6 +100,11 @@
 
   function handleNewVariableTypeChange() {
     newVariableDefaultValue = newVariableType === 'boolean' ? false : '';
+  }
+
+  function updateDefinitionDefaultValue(definition: VariableDefinition, value: string) {
+    definition.default_value = value;
+    updateVariableDefinitions();
   }
 
   let variableEntries = $derived(Object.entries(variableDefinitions));
@@ -212,8 +220,9 @@
                   <input
                     id="default-{name}"
                     type="text"
-                    bind:value={definition.default_value}
-                    oninput={updateVariableDefinitions}
+                    value={formatEnvironmentValueForInput(definition.default_value)}
+                    oninput={(event) =>
+                      updateDefinitionDefaultValue(definition, event.currentTarget.value)}
                     placeholder={definition.type === 'object'
                       ? '{}'
                       : definition.type === 'array'

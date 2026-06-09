@@ -1,7 +1,10 @@
 <script lang="ts">
-    
   import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
   import type { SubEnvironment, VariableDefinition } from '$lib/types/environment';
+  import {
+    formatEnvironmentDefaultPlaceholder,
+    formatEnvironmentValueForInput
+  } from './value-format';
 
   interface Props {
     [key: string]: unknown;
@@ -10,12 +13,16 @@
     disabled?: boolean;
   }
 
-  let { subEnvironments = $bindable({}), variableDefinitions = {}, disabled = false , ...callbackProps
+  let {
+    subEnvironments = $bindable({}),
+    variableDefinitions = {},
+    disabled = false,
+    ...callbackProps
   }: Props & Record<string, unknown> = $props();
 
   function dispatch(eventName: string, detail?: unknown) {
-    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
-    if (typeof handler === "function") {
+    const handler = callbackProps['on' + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === 'function') {
       if (arguments.length > 1) {
         handler(detail);
       } else {
@@ -83,6 +90,15 @@
     dispatch('change', { subEnvironments });
   }
 
+  function updateSubEnvironmentVariable(
+    subEnv: SubEnvironment,
+    variableName: string,
+    value: string
+  ) {
+    subEnv.variables[variableName] = value;
+    updateSubEnvironments();
+  }
+
   function toggleAddForm() {
     showAddForm = !showAddForm;
     if (!showAddForm) {
@@ -108,7 +124,9 @@
   }
 
   let subEnvEntries = $derived(Object.entries(subEnvironments));
-  let availableCommonEnvs = $derived(commonSubEnvNames.filter((name) => !(name in subEnvironments)));
+  let availableCommonEnvs = $derived(
+    commonSubEnvNames.filter((name) => !(name in subEnvironments))
+  );
 </script>
 
 <div
@@ -166,7 +184,10 @@
   {#if showAddForm}
     <form
       class="border-b border-gray-100 bg-gray-50 p-6"
-      onsubmit={(event) => { event.preventDefault(); addSubEnvironment(); }}
+      onsubmit={(event) => {
+        event.preventDefault();
+        addSubEnvironment();
+      }}
     >
       <div class="flex items-center gap-4">
         <input
@@ -311,7 +332,7 @@
                             type="number"
                             bind:value={subEnv.variables[varName]}
                             oninput={updateSubEnvironments}
-                            placeholder={`Default: ${varDef.default_value}`}
+                            placeholder={formatEnvironmentDefaultPlaceholder(varDef.default_value)}
                             class="w-full rounded border border-gray-300 px-2 py-2 text-sm transition-colors focus:border-blue-500 focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)] focus:outline-none"
                             {disabled}
                           />
@@ -319,9 +340,14 @@
                           <input
                             id="var-{subEnvKey}-{varName}"
                             type="text"
-                            bind:value={subEnv.variables[varName]}
-                            oninput={updateSubEnvironments}
-                            placeholder={`Default: ${varDef.default_value}`}
+                            value={formatEnvironmentValueForInput(subEnv.variables[varName])}
+                            oninput={(event) =>
+                              updateSubEnvironmentVariable(
+                                subEnv,
+                                varName,
+                                event.currentTarget.value
+                              )}
+                            placeholder={formatEnvironmentDefaultPlaceholder(varDef.default_value)}
                             class="w-full rounded border border-gray-300 px-2 py-2 text-sm transition-colors focus:border-blue-500 focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)] focus:outline-none"
                             {disabled}
                           />
