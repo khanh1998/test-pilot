@@ -21,12 +21,16 @@ function getFlowOutputs(flow: TestFlow): Set<string> {
   return new Set((flow.flowJson?.outputs ?? []).map((output) => output.name));
 }
 
-function getFlowOutputType(flow: TestFlow, outputName: string): string | undefined {
-  return flow.flowJson?.outputs?.find((output) => output.name === outputName)?.type;
+function getFlowOutputDefinition(flow: TestFlow, outputName: string) {
+  return flow.flowJson?.outputs?.find((output) => output.name === outputName);
 }
 
 function isPrimitiveOutputType(type: string | undefined): boolean {
   return type === 'string' || type === 'number' || type === 'boolean';
+}
+
+function isPrimitiveArrayOutput(output: ReturnType<typeof getFlowOutputDefinition>): boolean {
+  return output?.type === 'array' && isPrimitiveOutputType(output.arrayItemType);
 }
 
 function getFlowParameterNames(flow: TestFlow): Set<string> {
@@ -190,14 +194,14 @@ export function validateFlowSequence(
               `Sequence step ${step.step_order} loops from missing output "${outputField}" on flow step ${loopConfig.source_flow_step}.`
             );
           } else if (sourceFlow && sourceStep) {
-            const outputType = getFlowOutputType(sourceFlow, outputField);
+            const outputDefinition = getFlowOutputDefinition(sourceFlow, outputField);
             const sourceOutputIsPrimitiveArray =
-              sourceStep.loop_config?.enabled && isPrimitiveOutputType(outputType);
-            const sourceOutputIsDeclaredArray = outputType === 'array';
+              sourceStep.loop_config?.enabled && isPrimitiveOutputType(outputDefinition?.type);
+            const sourceOutputIsDeclaredPrimitiveArray = isPrimitiveArrayOutput(outputDefinition);
 
-            if (!sourceOutputIsPrimitiveArray && !sourceOutputIsDeclaredArray) {
+            if (!sourceOutputIsPrimitiveArray && !sourceOutputIsDeclaredPrimitiveArray) {
               errors.push(
-                `Sequence step ${step.step_order} loop source "${outputField}" must be an array output or a primitive output from a looped previous step.`
+                `Sequence step ${step.step_order} loop source "${outputField}" must be a primitive array output or a primitive output from a looped previous step.`
               );
             }
           }

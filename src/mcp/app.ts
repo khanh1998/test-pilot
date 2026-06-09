@@ -66,7 +66,16 @@ function asTextResult(structuredContent: Record<string, unknown>) {
 }
 
 const primitiveParameterTypeSchema = z.enum(['string', 'number', 'boolean', 'null']);
-const primitiveOutputTypeSchema = z.enum(['string', 'number', 'boolean', 'null']);
+const flowOutputTypeSchema = z.enum([
+  'string',
+  'number',
+  'boolean',
+  'object',
+  'array',
+  'null',
+  'unknown'
+]);
+const arrayItemTypeSchema = z.enum(['string', 'number', 'boolean', 'object', 'unknown']);
 const transformationExpressionDescription =
   'Pipeline-only transformation expression. Use value | fn(args...), for example $.items | count(), $.items | map({ id: $.id, total: $.price * $.qty }), $.email | contains("@company.com"), $.amount | round(2), or $.items | take({{param:limit}} | int(10)). Do not use direct function calls such as length($.items), round($.amount, 2), or contains($.email, "@"). Arguments may be JSONPath, templates, constants, object/array literals, operator expressions, or parenthesized nested pipelines.';
 const transformationReference = {
@@ -1621,7 +1630,7 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
     {
       title: 'Set Flow Output',
       description:
-        'Add or update a primitive flow output. Outputs make a self-contained flow usable in sequences where later flow parameters can be mapped from previous flow outputs.',
+        'Add or update a flow output. For array outputs, set arrayItemType; sequence loop mode can use only string, number, or boolean arrays.',
       inputSchema: {
         draftId: z.string().optional(),
         sessionId: z.string().optional(),
@@ -1631,7 +1640,8 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
           description: z.string().optional(),
           value: z.string(),
           isTemplate: z.boolean().optional(),
-          type: primitiveOutputTypeSchema.optional(),
+          type: flowOutputTypeSchema.optional(),
+          arrayItemType: arrayItemTypeSchema.optional(),
           castToType: z.boolean().optional()
         })
       }

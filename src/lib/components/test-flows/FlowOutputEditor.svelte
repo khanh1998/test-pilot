@@ -1,9 +1,6 @@
 <script lang="ts">
-    
   import type { FlowOutput } from './types';
 
-  
-  
   interface Props {
     [key: string]: unknown;
     isOpen?: boolean;
@@ -21,13 +18,13 @@
     outputs = [],
     outputResults = {},
     executionError = null,
-    hasExecutionData = false
-  , ...callbackProps
+    hasExecutionData = false,
+    ...callbackProps
   }: Props & Record<string, unknown> = $props();
 
   function dispatch(eventName: string, detail?: unknown) {
-    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
-    if (typeof handler === "function") {
+    const handler = callbackProps['on' + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === 'function') {
       if (arguments.length > 1) {
         handler(detail);
       } else {
@@ -39,21 +36,45 @@
   // Output editor state
   let localOutputs: FlowOutput[] = $state([]);
   let editingOutputIndex: number | null = $state(null);
-  let newOutput: FlowOutput = $state({ name: '', description: '', value: '', isTemplate: false, type: 'string', castToType: false });
-  
+  let newOutput: FlowOutput = $state(createDefaultOutput());
+
   // UI state for showing/hiding results
   let showResults = $state(false);
 
   // Initialize state when component mounts
   $effect(() => {
     if (isMounted) {
-      localOutputs = [...(outputs || [])].map(output => ({
+      localOutputs = [...(outputs || [])].map((output) => ({
         ...output,
         type: output.type || 'string',
+        arrayItemType: output.type === 'array' ? output.arrayItemType || 'unknown' : undefined,
         castToType: output.castToType || false
       }));
     }
   });
+
+  function createDefaultOutput(): FlowOutput {
+    return {
+      name: '',
+      description: '',
+      value: '',
+      isTemplate: false,
+      type: 'string',
+      castToType: false
+    };
+  }
+
+  function normalizeOutput(output: FlowOutput): FlowOutput {
+    if (output.type !== 'array') {
+      const { arrayItemType, ...rest } = output;
+      return rest;
+    }
+
+    return {
+      ...output,
+      arrayItemType: output.arrayItemType || 'unknown'
+    };
+  }
 
   // Auto-show results if we have execution data
   $effect(() => {
@@ -66,10 +87,12 @@
   function saveOutputChanges() {
     try {
       // Validate each output
-      const validOutputs = localOutputs.filter(o => {
-        return o.name && o.value;
-      });
-      
+      const validOutputs = localOutputs
+        .filter((o) => {
+          return o.name && o.value;
+        })
+        .map(normalizeOutput);
+
       dispatch('save', { outputs: validOutputs });
       closeOutputEditor();
     } catch (e: unknown) {
@@ -83,17 +106,18 @@
       return;
     }
 
-    localOutputs = [...localOutputs, { ...newOutput }];
-    newOutput = { name: '', description: '', value: '', isTemplate: false, type: 'string', castToType: false };
+    localOutputs = [...localOutputs, normalizeOutput({ ...newOutput })];
+    newOutput = createDefaultOutput();
   }
 
   // Edit an output
   function editOutput(index: number) {
     editingOutputIndex = index;
     const output = localOutputs[index];
-    newOutput = { 
+    newOutput = {
       ...output,
       type: output.type || 'string',
+      arrayItemType: output.type === 'array' ? output.arrayItemType || 'unknown' : undefined,
       castToType: output.castToType || false
     };
   }
@@ -106,16 +130,16 @@
 
     if (!newOutput.name || !newOutput.value) {
       editingOutputIndex = null;
-      newOutput = { name: '', description: '', value: '', isTemplate: false, type: 'string', castToType: false };
+      newOutput = createDefaultOutput();
       return;
     }
 
-    localOutputs = localOutputs.map((o, i) => 
-      i === editingOutputIndex ? { ...newOutput } : o
+    localOutputs = localOutputs.map((o, i) =>
+      i === editingOutputIndex ? normalizeOutput({ ...newOutput }) : o
     );
-    
+
     editingOutputIndex = null;
-    newOutput = { name: '', description: '', value: '', isTemplate: false, type: 'string', castToType: false };
+    newOutput = createDefaultOutput();
   }
 
   // Remove an output
@@ -125,11 +149,28 @@
 
   function cancelEdit() {
     editingOutputIndex = null;
-    newOutput = { name: '', description: '', value: '', isTemplate: false, type: 'string', castToType: false };
+    newOutput = createDefaultOutput();
   }
 
   function closeOutputEditor() {
     dispatch('close');
+  }
+
+  function handleOutputTypeChange(event: Event) {
+    const target = event.currentTarget as HTMLSelectElement;
+    newOutput = {
+      ...newOutput,
+      type: target.value as FlowOutput['type'],
+      arrayItemType: target.value === 'array' ? newOutput.arrayItemType || 'string' : undefined
+    };
+  }
+
+  function formatOutputType(output: FlowOutput): string {
+    if (output.type === 'array') {
+      return `${output.arrayItemType || 'unknown'}[]`;
+    }
+
+    return output.type || 'unknown';
   }
 
   // Helper function to safely stringify values for display
@@ -138,7 +179,7 @@
     if (value === undefined) return 'undefined';
     if (typeof value === 'string') return value;
     if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-    
+
     try {
       return JSON.stringify(value, null, 2);
     } catch {
@@ -201,7 +242,9 @@
     aria-hidden="false"
   >
     <!-- Header -->
-    <div class="sticky top-0 z-10 flex w-full items-center justify-between border-b bg-gray-50 px-6 py-4 shadow-sm">
+    <div
+      class="sticky top-0 z-10 flex w-full items-center justify-between border-b bg-gray-50 px-6 py-4 shadow-sm"
+    >
       <div class="flex-1">
         <h2 class="text-lg font-medium text-gray-900">Flow Outputs</h2>
         <p class="mt-1 text-sm text-gray-500">
@@ -214,7 +257,12 @@
         aria-label="Close"
       >
         <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M6 18L18 6M6 6l12 12"
+          ></path>
         </svg>
       </button>
     </div>
@@ -230,7 +278,12 @@
         >
           <div class="flex items-center">
             <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M9 12h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              ></path>
             </svg>
             Configuration
           </div>
@@ -245,7 +298,12 @@
           >
             <div class="flex items-center">
               <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                ></path>
               </svg>
               Results
               {#if executionError}
@@ -283,7 +341,9 @@
               </div>
 
               <div>
-                <label for="outputDescription" class="block text-sm font-medium text-gray-700">Description (optional)</label>
+                <label for="outputDescription" class="block text-sm font-medium text-gray-700"
+                  >Description (optional)</label
+                >
                 <input
                   type="text"
                   id="outputDescription"
@@ -294,7 +354,9 @@
               </div>
 
               <div>
-                <label for="outputValue" class="block text-sm font-medium text-gray-700">Value</label>
+                <label for="outputValue" class="block text-sm font-medium text-gray-700"
+                  >Value</label
+                >
                 <div class="mt-1">
                   <textarea
                     id="outputValue"
@@ -318,11 +380,14 @@
 
               <!-- Data Type Selection -->
               <div>
-                <label for="outputDataType" class="block text-sm font-medium text-gray-700">Data Type</label>
+                <label for="outputDataType" class="block text-sm font-medium text-gray-700"
+                  >Data Type</label
+                >
                 <select
                   id="outputDataType"
                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                   bind:value={newOutput.type}
+                  onchange={handleOutputTypeChange}
                 >
                   <option value="string">String</option>
                   <option value="number">Number</option>
@@ -340,6 +405,28 @@
                 </p>
               </div>
 
+              {#if newOutput.type === 'array'}
+                <div>
+                  <label for="outputArrayItemType" class="block text-sm font-medium text-gray-700"
+                    >Array Item Type</label
+                  >
+                  <select
+                    id="outputArrayItemType"
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    bind:value={newOutput.arrayItemType}
+                  >
+                    <option value="string">String items</option>
+                    <option value="number">Number items</option>
+                    <option value="boolean">Boolean items</option>
+                    <option value="object">Object items</option>
+                    <option value="unknown">Unknown items</option>
+                  </select>
+                  <p class="mt-1 text-xs text-gray-500">
+                    Sequence loop mode can use only string, number, or boolean arrays.
+                  </p>
+                </div>
+              {/if}
+
               <!-- Type Casting Option (only for templates) -->
               {#if newOutput.isTemplate}
                 <div>
@@ -349,10 +436,13 @@
                       class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                       bind:checked={newOutput.castToType}
                     />
-                    <span class="ml-2 text-sm text-gray-600">Cast result to specified data type</span>
+                    <span class="ml-2 text-sm text-gray-600"
+                      >Cast result to specified data type</span
+                    >
                   </label>
                   <p class="mt-1 text-xs text-gray-500">
-                    When enabled, the template result will be automatically converted to the specified data type
+                    When enabled, the template result will be automatically converted to the
+                    specified data type
                   </p>
                 </div>
               {/if}
@@ -361,14 +451,14 @@
                 {#if editingOutputIndex !== null}
                   <button
                     type="button"
-                    class="inline-flex items-center rounded-md border border-transparent bg-blue-600 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                    class="inline-flex items-center rounded-md border border-transparent bg-blue-600 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none"
                     onclick={updateOutput}
                   >
                     Update Output
                   </button>
                   <button
                     type="button"
-                    class="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                    class="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none"
                     onclick={cancelEdit}
                   >
                     Cancel
@@ -376,7 +466,7 @@
                 {:else}
                   <button
                     type="button"
-                    class="inline-flex items-center rounded-md border border-transparent bg-blue-600 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                    class="inline-flex items-center rounded-md border border-transparent bg-blue-600 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none"
                     onclick={addOutput}
                   >
                     Add Output
@@ -395,7 +485,8 @@
               {/each}
             </div>
             <p class="mt-2 text-xs text-blue-600">
-              Use template expressions to reference response data, transformations, parameters, or functions.
+              Use template expressions to reference response data, transformations, parameters, or
+              functions.
             </p>
           </div>
 
@@ -403,11 +494,17 @@
           <div class="rounded-lg border border-purple-200 bg-purple-50 p-4">
             <h4 class="mb-2 text-sm font-medium text-purple-800">Data Type & Casting Guidelines</h4>
             <div class="space-y-2 text-sm text-purple-700">
-              <div><strong>Data Type:</strong> Specify the expected data type of the output value</div>
-              <div><strong>Auto-cast (Templates only):</strong> When enabled, template results will be automatically converted to the specified data type</div>
-              <div class="text-xs text-purple-600 mt-2">
-                Use auto-casting when template expressions might return strings but you need numbers, booleans, or other types.
-                Example: {`{{res:step1.$.count}}`} might return "123" (string) but you want 123 (number).
+              <div>
+                <strong>Data Type:</strong> Specify the expected data type of the output value
+              </div>
+              <div>
+                <strong>Auto-cast (Templates only):</strong> When enabled, template results will be automatically
+                converted to the specified data type
+              </div>
+              <div class="mt-2 text-xs text-purple-600">
+                Use auto-casting when template expressions might return strings but you need
+                numbers, booleans, or other types. Example: {`{{res:step1.$.count}}`} might return "123"
+                (string) but you want 123 (number).
               </div>
             </div>
           </div>
@@ -424,15 +521,27 @@
                         <div class="flex items-center gap-2">
                           <h5 class="font-medium text-gray-900">{output.name}</h5>
                           {#if output.isTemplate}
-                            <span class="inline-flex rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-800">Template</span>
+                            <span
+                              class="inline-flex rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-800"
+                              >Template</span
+                            >
                           {:else}
-                            <span class="inline-flex rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-800">Static</span>
+                            <span
+                              class="inline-flex rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-800"
+                              >Static</span
+                            >
                           {/if}
                           {#if output.type}
-                            <span class="inline-flex rounded-full bg-purple-100 px-2 py-1 text-xs font-semibold text-purple-800">{output.type}</span>
+                            <span
+                              class="inline-flex rounded-full bg-purple-100 px-2 py-1 text-xs font-semibold text-purple-800"
+                              >{formatOutputType(output)}</span
+                            >
                           {/if}
                           {#if output.isTemplate && output.castToType}
-                            <span class="inline-flex rounded-full bg-orange-100 px-2 py-1 text-xs font-semibold text-orange-800">Auto-cast</span>
+                            <span
+                              class="inline-flex rounded-full bg-orange-100 px-2 py-1 text-xs font-semibold text-orange-800"
+                              >Auto-cast</span
+                            >
                           {/if}
                         </div>
                         {#if output.description}
@@ -448,8 +557,18 @@
                           onclick={() => editOutput(index)}
                           aria-label="Edit output"
                         >
-                          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                          <svg
+                            class="h-4 w-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="2"
+                              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                            ></path>
                           </svg>
                         </button>
                         <button
@@ -457,8 +576,18 @@
                           onclick={() => removeOutput(index)}
                           aria-label="Remove output"
                         >
-                          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                          <svg
+                            class="h-4 w-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="2"
+                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                            ></path>
                           </svg>
                         </button>
                       </div>
@@ -469,8 +598,18 @@
             </div>
           {:else}
             <div class="rounded-lg border border-yellow-200 bg-yellow-50 p-4 text-center">
-              <svg class="mx-auto h-12 w-12 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+              <svg
+                class="mx-auto h-12 w-12 text-yellow-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                ></path>
               </svg>
               <p class="mt-2 text-sm text-yellow-800">No outputs defined yet</p>
               <p class="text-xs text-yellow-600">Add outputs above to get started</p>
@@ -487,13 +626,25 @@
           {#if executionError}
             <div class="rounded-lg border border-red-200 bg-red-50 p-4">
               <div class="flex items-start">
-                <svg class="mt-0.5 h-5 w-5 flex-shrink-0 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                <svg
+                  class="mt-0.5 h-5 w-5 flex-shrink-0 text-red-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z"
+                  ></path>
                 </svg>
                 <div class="ml-3">
                   <h3 class="text-sm font-medium text-red-800">Flow Execution Error</h3>
                   <p class="mt-1 text-sm text-red-700">
-                    {typeof executionError === 'string' ? executionError : 'An error occurred during flow execution'}
+                    {typeof executionError === 'string'
+                      ? executionError
+                      : 'An error occurred during flow execution'}
                   </p>
                 </div>
               </div>
@@ -508,12 +659,16 @@
                     <div class="flex-1">
                       <h5 class="font-medium text-gray-900">{name}</h5>
                       <div class="mt-2 flex items-center gap-2">
-                        <span class="inline-flex rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-800">
+                        <span
+                          class="inline-flex rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-800"
+                        >
                           {getValueType(value)}
                         </span>
                       </div>
                       <div class="mt-3 rounded bg-gray-100 p-3">
-                        <pre class="whitespace-pre-wrap text-sm text-gray-800">{formatValue(value)}</pre>
+                        <pre class="text-sm whitespace-pre-wrap text-gray-800">{formatValue(
+                            value
+                          )}</pre>
                       </div>
                     </div>
                   </div>
@@ -522,8 +677,18 @@
             </div>
           {:else if !executionError}
             <div class="rounded-lg border border-gray-200 bg-gray-50 p-4 text-center">
-              <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+              <svg
+                class="mx-auto h-12 w-12 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                ></path>
               </svg>
               <p class="mt-2 text-sm text-gray-500">No output results available</p>
               <p class="text-xs text-gray-400">Run the flow to see output results</p>
@@ -537,13 +702,13 @@
     <div class="sticky bottom-0 border-t bg-gray-50 px-6 py-4">
       <div class="flex justify-end gap-3">
         <button
-          class="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+          class="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none"
           onclick={closeOutputEditor}
         >
           Cancel
         </button>
         <button
-          class="inline-flex items-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+          class="inline-flex items-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none"
           onclick={saveOutputChanges}
         >
           Save Changes

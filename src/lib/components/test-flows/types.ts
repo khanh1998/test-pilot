@@ -40,7 +40,7 @@ export type StepEndpoint = {
   body?: unknown;
   headers?: { name: string; value: string; enabled: boolean }[];
   transformations?: Array<{
-    alias: string;      // Name used for referencing the transformed value
+    alias: string; // Name used for referencing the transformed value
     expression: string; // Will store the transformation expression as string in Phase 1
   }>;
   assertions?: Array<import('$lib/assertions/types').Assertion>;
@@ -66,7 +66,8 @@ export type EndpointExecutionState = {
   error?: string;
   timing?: number;
   transformations?: Record<string, unknown>; // Add transformations results
-  assertions?: { // Add assertion results
+  assertions?: {
+    // Add assertion results
     passed: boolean;
     results: Array<import('$lib/assertions/types').AssertionResult>;
     failureMessage?: string;
@@ -93,6 +94,7 @@ export type FlowOutput = {
   value: string; // JSON template expression or hardcoded value
   isTemplate?: boolean; // Whether the value is a template expression
   type?: 'string' | 'number' | 'boolean' | 'object' | 'array' | 'null' | 'unknown'; // Expected data type
+  arrayItemType?: 'string' | 'number' | 'boolean' | 'object' | 'unknown'; // Expected item type when type is array
   castToType?: boolean; // Whether to cast template expression result to the specified type
 };
 

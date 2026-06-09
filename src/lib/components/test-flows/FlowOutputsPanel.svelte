@@ -1,8 +1,6 @@
 <script lang="ts">
   import type { FlowOutput } from './types';
-  
 
-  
   interface Props {
     [key: string]: unknown;
     // Props
@@ -10,12 +8,15 @@
     isRunning?: boolean;
   }
 
-  let { outputs = [], isRunning = false , ...callbackProps
+  let {
+    outputs = [],
+    isRunning = false,
+    ...callbackProps
   }: Props & Record<string, unknown> = $props();
 
   function dispatch(eventName: string, detail?: unknown) {
-    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
-    if (typeof handler === "function") {
+    const handler = callbackProps['on' + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === 'function') {
       if (arguments.length > 1) {
         handler(detail);
       } else {
@@ -27,6 +28,14 @@
   function openOutputEditor() {
     dispatch('openOutputEditor');
   }
+
+  function formatOutputType(output: FlowOutput): string {
+    if (output.type === 'array') {
+      return `${output.arrayItemType || 'unknown'}[]`;
+    }
+
+    return output.type || 'unknown';
+  }
 </script>
 
 <!-- Flow Outputs Section -->
@@ -37,15 +46,25 @@
       <p class="mt-1 text-sm text-gray-500">
         Define values that will be extracted when the flow completes successfully
       </p>
-      
+
       {#if outputs && outputs.length > 0}
         <div class="mt-3 flex flex-wrap gap-2">
           {#each outputs as output}
-            <span class="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800">
+            <span
+              class="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800"
+            >
               {output.name}
+              {#if output.type}
+                <span class="ml-1 text-blue-600">({formatOutputType(output)})</span>
+              {/if}
               {#if output.isTemplate}
                 <svg class="ml-1 h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
+                  ></path>
                 </svg>
               {/if}
             </span>
@@ -53,14 +72,19 @@
         </div>
       {/if}
     </div>
-    
+
     <button
-      class="inline-flex items-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+      class="inline-flex items-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none"
       onclick={openOutputEditor}
       disabled={isRunning}
     >
       <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+        ></path>
       </svg>
       {outputs && outputs.length > 0 ? 'Manage Outputs' : 'Define Outputs'}
     </button>
@@ -68,11 +92,23 @@
 
   {#if !outputs || outputs.length === 0}
     <div class="mt-4 text-center">
-      <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+      <svg
+        class="mx-auto h-12 w-12 text-gray-400"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+        ></path>
       </svg>
       <p class="mt-2 text-sm text-gray-500">No outputs defined</p>
-      <p class="text-xs text-gray-400">Click "Define Outputs" to extract values from your flow execution</p>
+      <p class="text-xs text-gray-400">
+        Click "Define Outputs" to extract values from your flow execution
+      </p>
     </div>
   {/if}
 </div>

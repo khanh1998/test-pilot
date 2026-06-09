@@ -73,7 +73,6 @@ export interface AssertionResult extends Assertion {
   actual?: any;
 }
 
-
 // Define TestFlow type based on the JSON schema structure
 export interface TestFlowJson {
   steps: Array<{
@@ -91,10 +90,29 @@ export interface TestFlowJson {
         id: string;
         data_id: string;
         enabled: boolean;
-        operator: 'equals' | 'not_equals' | 'contains' | 'exists' | 'greater_than' | 'less_than' |
-                 'starts_with' | 'ends_with' | 'matches_regex' | 'is_empty' | 'greater_than_or_equal' |
-                 'less_than_or_equal' | 'between' | 'not_between' | 'has_length' | 'length_greater_than' |
-                 'length_less_than' | 'contains_all' | 'contains_any' | 'is_type' | 'is_null' | 'is_not_null';
+        operator:
+          | 'equals'
+          | 'not_equals'
+          | 'contains'
+          | 'exists'
+          | 'greater_than'
+          | 'less_than'
+          | 'starts_with'
+          | 'ends_with'
+          | 'matches_regex'
+          | 'is_empty'
+          | 'greater_than_or_equal'
+          | 'less_than_or_equal'
+          | 'between'
+          | 'not_between'
+          | 'has_length'
+          | 'length_greater_than'
+          | 'length_less_than'
+          | 'contains_all'
+          | 'contains_any'
+          | 'is_type'
+          | 'is_null'
+          | 'is_not_null';
         data_source: 'response' | 'transformed_data';
         assertion_type: 'status_code' | 'json_body' | 'response_time' | 'header';
         expected_value: string | number | boolean | Array<string | number | boolean | null> | null;
@@ -123,12 +141,16 @@ export interface TestFlowJson {
     description?: string;
     isTemplate: boolean;
     type: 'string' | 'number' | 'boolean' | 'object' | 'unknown' | 'array' | 'null';
+    arrayItemType?: 'string' | 'number' | 'boolean' | 'object' | 'unknown';
   }>;
   settings?: {
-    api_hosts: Record<string, {
-      url: string;
-      name: string;
-    }>;
+    api_hosts: Record<
+      string,
+      {
+        url: string;
+        name: string;
+      }
+    >;
     environment_id?: number; // Link to environment
   };
 }

@@ -43,6 +43,7 @@
     outputs: {
       name: string;
       type: 'string' | 'number' | 'boolean' | 'object' | 'unknown' | 'array' | 'null';
+      arrayItemType?: 'string' | 'number' | 'boolean' | 'object' | 'unknown';
       source: 'flow_output' | 'response';
     }[];
   }
@@ -75,6 +76,18 @@
 
   function isPrimitiveValue(value: unknown): value is string | number | boolean {
     return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
+  }
+
+  function isPrimitiveType(type: unknown): type is 'string' | 'number' | 'boolean' {
+    return type === 'string' || type === 'number' || type === 'boolean';
+  }
+
+  function isPrimitiveArrayOutput(output: FlowOutput['outputs'][number]) {
+    return output.type === 'array' && isPrimitiveType(output.arrayItemType);
+  }
+
+  function formatArrayOutputLabel(output: FlowOutput['outputs'][number]) {
+    return `${output.name} (${output.arrayItemType || 'unknown'}[])`;
   }
 
   function getPrimitiveArrayPreview(value: unknown) {
@@ -272,7 +285,7 @@
     availableFlowOutputs
       .map((flowOutput) => ({
         ...flowOutput,
-        outputs: flowOutput.outputs.filter((output) => output.type === 'array')
+        outputs: flowOutput.outputs.filter(isPrimitiveArrayOutput)
       }))
       .filter((flowOutput) => flowOutput.outputs.length > 0)
   );
@@ -522,7 +535,7 @@
                     <option value="">Select output...</option>
                     {#if selectedLoopFlow}
                       {#each selectedLoopFlow.outputs as output}
-                        <option value={output.name}>{output.name}</option>
+                        <option value={output.name}>{formatArrayOutputLabel(output)}</option>
                       {/each}
                     {/if}
                   </select>

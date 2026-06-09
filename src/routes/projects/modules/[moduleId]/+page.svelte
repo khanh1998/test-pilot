@@ -993,9 +993,22 @@
         flow.flowJson.outputs.length > 0
       ) {
         for (const output of flow.flowJson.outputs) {
+          const outputType = output.type || 'unknown';
+          const loopedPrimitiveOutput =
+            sequenceStep?.loop_config?.enabled &&
+            (outputType === 'string' || outputType === 'number' || outputType === 'boolean');
+          const loopedArrayOutput = sequenceStep?.loop_config?.enabled && outputType === 'array';
+
           flowOutputs.push({
             name: output.name,
-            type: sequenceStep?.loop_config?.enabled ? 'array' : output.type,
+            type: loopedPrimitiveOutput ? 'array' : outputType,
+            arrayItemType: loopedPrimitiveOutput
+              ? outputType
+              : loopedArrayOutput
+                ? 'unknown'
+                : output.type === 'array'
+                  ? output.arrayItemType
+                  : undefined,
             source: 'flow_output' as const
           });
         }

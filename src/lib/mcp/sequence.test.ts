@@ -20,6 +20,7 @@ type FlowOutputFixture = {
   value: string;
   isTemplate: boolean;
   type: 'string' | 'number' | 'boolean' | 'object' | 'unknown' | 'array' | 'null';
+  arrayItemType?: 'string' | 'number' | 'boolean' | 'object' | 'unknown';
 };
 
 function flow(
@@ -234,6 +235,79 @@ describe('mcp sequence helpers', () => {
 
     const result = validateFlowSequence(seq, flowsById, new Set(['USERNAME_LIST']));
     expect(result.valid).toBe(true);
+  });
+
+  it('validates previous output array loop sources from declared primitive array outputs', () => {
+    const seq = setSequenceLoopConfig(sequence(), {
+      stepOrder: 2,
+      loopConfig: {
+        enabled: true,
+        source_type: 'previous_output_array',
+        source_flow_step: 1,
+        source_output_field: 'order_ids'
+      }
+    });
+
+    const flowsById = new Map<number, TestFlow>([
+      [
+        1,
+        flow(
+          1,
+          'List orders',
+          [],
+          [
+            {
+              name: 'order_ids',
+              value: '{{res:step1-0.$.ids}}',
+              isTemplate: true,
+              type: 'array',
+              arrayItemType: 'string'
+            }
+          ]
+        )
+      ],
+      [2, flow(2, 'Get order')]
+    ]);
+
+    const result = validateFlowSequence(seq, flowsById);
+    expect(result.valid).toBe(true);
+  });
+
+  it('rejects previous output array loop sources from object arrays', () => {
+    const seq = setSequenceLoopConfig(sequence(), {
+      stepOrder: 2,
+      loopConfig: {
+        enabled: true,
+        source_type: 'previous_output_array',
+        source_flow_step: 1,
+        source_output_field: 'orders'
+      }
+    });
+
+    const flowsById = new Map<number, TestFlow>([
+      [
+        1,
+        flow(
+          1,
+          'List orders',
+          [],
+          [
+            {
+              name: 'orders',
+              value: '{{res:step1-0.$.orders}}',
+              isTemplate: true,
+              type: 'array',
+              arrayItemType: 'object'
+            }
+          ]
+        )
+      ],
+      [2, flow(2, 'Get order')]
+    ]);
+
+    const result = validateFlowSequence(seq, flowsById);
+    expect(result.valid).toBe(false);
+    expect(result.errors.join(' ')).toContain('primitive array output');
   });
 
   it('rejects future output mappings and missing output names', () => {

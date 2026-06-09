@@ -442,11 +442,17 @@ export function setFlowOutput(document: FlowDocument, output: FlowOutput): FlowD
   const next = cloneDocument(document);
   const outputs = next.flowData.outputs ?? [];
   const existingIndex = outputs.findIndex((item) => item.name === output.name);
+  const normalizedOutput: FlowOutput = { ...output };
+  if (normalizedOutput.type === 'array') {
+    normalizedOutput.arrayItemType = normalizedOutput.arrayItemType ?? 'unknown';
+  } else {
+    delete normalizedOutput.arrayItemType;
+  }
 
   if (existingIndex >= 0) {
-    outputs[existingIndex] = output;
+    outputs[existingIndex] = normalizedOutput;
   } else {
-    outputs.push(output);
+    outputs.push(normalizedOutput);
   }
 
   next.flowData.outputs = outputs;
