@@ -43,7 +43,7 @@ import {
   explainTransformationExpression,
   suggestTemplateExpression
 } from '$lib/mcp/explain';
-import type { FlowParameterMapping, FlowSequence } from '$lib/types/flow_sequence';
+import type { FlowLoopConfig, FlowParameterMapping, FlowSequence } from '$lib/types/flow_sequence';
 import type { TestFlow } from '$lib/types/test-flow';
 
 export interface McpAuthContext {
@@ -76,6 +76,43 @@ const flowOutputTypeSchema = z.enum([
   'unknown'
 ]);
 const arrayItemTypeSchema = z.enum(['string', 'number', 'boolean', 'object', 'unknown']);
+const sequenceLoopSourceSchema: z.ZodTypeAny = z.object({
+  id: z.string(),
+  alias: z.string(),
+  source_type: z.enum(['fixed_count', 'environment_variable_array', 'previous_output_array']),
+  count: z.number().optional(),
+  source_value: z.string().optional(),
+  source_flow_step: z.number().optional(),
+  source_output_field: z.string().optional()
+});
+const sequenceLoopDefinitionSchema: z.ZodTypeAny = z.lazy(() =>
+  z.object({
+    id: z.string(),
+    name: z.string(),
+    sources: z.array(sequenceLoopSourceSchema),
+    children: z.array(sequenceLoopDefinitionSchema).optional()
+  })
+);
+const sequenceLoopConfigSchema = z.object({
+  enabled: z.boolean(),
+  root: sequenceLoopDefinitionSchema.optional()
+});
+const sequenceParameterMappingSchema = z.object({
+  flow_parameter_name: z.string(),
+  source_type: z.enum([
+    'environment_variable',
+    'previous_output',
+    'static_value',
+    'function',
+    'loop_value'
+  ]),
+  source_value: z.string(),
+  data_type: z.enum(['string', 'number', 'boolean']).optional(),
+  source_flow_step: z.number().optional(),
+  source_output_field: z.string().optional(),
+  loop_id: z.string().optional(),
+  loop_source_id: z.string().optional()
+});
 const transformationExpressionDescription =
   'Pipeline-only transformation expression. Use value | fn(args...), for example $.items | count(), $.items | map({ id: $.id, total: $.price * $.qty }), $.email | contains("@company.com"), $.amount | round(2), or $.items | take({{param:limit}} | int(10)). Do not use direct function calls such as length($.items), round($.amount, 2), or contains($.email, "@"). Arguments may be JSONPath, templates, constants, object/array literals, operator expressions, or parenthesized nested pipelines.';
 const transformationReference = {
@@ -2708,24 +2745,7 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
         sequenceId: z.number(),
         testFlowId: z.number(),
         stepOrder: z.number(),
-        parameterMappings: z
-          .array(
-            z.object({
-              flow_parameter_name: z.string(),
-              source_type: z.enum([
-                'environment_variable',
-                'previous_output',
-                'static_value',
-                'function',
-                'loop_value'
-              ]),
-              source_value: z.string(),
-              data_type: z.enum(['string', 'number', 'boolean']).optional(),
-              source_flow_step: z.number().optional(),
-              source_output_field: z.string().optional()
-            })
-          )
-          .optional()
+        parameterMappings: z.array(sequenceParameterMappingSchema).optional()
       }
     },
     async ({ projectId, moduleId, sequenceId, testFlowId, stepOrder, parameterMappings = [] }) => {
@@ -2765,20 +2785,7 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
         sequenceId: z.number(),
         sequenceStepId: z.string().optional(),
         stepOrder: z.number().optional(),
-        mapping: z.object({
-          flow_parameter_name: z.string(),
-          source_type: z.enum([
-            'environment_variable',
-            'previous_output',
-            'static_value',
-            'function',
-            'loop_value'
-          ]),
-          source_value: z.string(),
-          data_type: z.enum(['string', 'number', 'boolean']).optional(),
-          source_flow_step: z.number().optional(),
-          source_output_field: z.string().optional()
-        })
+        mapping: sequenceParameterMappingSchema
       }
     },
     async ({ projectId, moduleId, sequenceId, sequenceStepId, stepOrder, mapping }) => {
@@ -2802,25 +2809,14 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
     {
       title: 'Set Sequence Loop Config',
       description:
-        'Enable, update, or disable loop mode for one sequence step. Loop sources are fixed count, environment array variables, or array outputs from previous steps. After enabling loop mode, use set_sequence_parameter_mapping with source_type loop_value to pass the current iteration value into the flow.',
+        'Enable, update, or disable loop mode for one sequence step. Loop config uses one recursive root loop, source rows for zip values, and optional one-level nested child loop for the current MVP.',
       inputSchema: {
         projectId: z.number(),
         moduleId: z.number(),
         sequenceId: z.number(),
         sequenceStepId: z.string().optional(),
         stepOrder: z.number().optional(),
-        loopConfig: z.object({
-          enabled: z.boolean(),
-          source_type: z.enum([
-            'fixed_count',
-            'environment_variable_array',
-            'previous_output_array'
-          ]),
-          count: z.number().optional(),
-          source_value: z.string().optional(),
-          source_flow_step: z.number().optional(),
-          source_output_field: z.string().optional()
-        })
+        loopConfig: sequenceLoopConfigSchema
       }
     },
     async ({ projectId, moduleId, sequenceId, sequenceStepId, stepOrder, loopConfig }) => {
@@ -2828,7 +2824,7 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
       const updatedSequence = setSequenceLoopConfig(sequence, {
         sequenceStepId,
         stepOrder,
-        loopConfig
+        loopConfig: loopConfig as FlowLoopConfig
       });
       const saved = await updateSequenceForMcp(
         updatedSequence,

@@ -2,16 +2,21 @@
 <script lang="ts">
   import type { TestFlow } from '../../types/test-flow.js';
   import type { Environment } from '$lib/types/environment.js';
-  import type { FlowLoopConfig } from '$lib/types/flow_sequence.js';
+  import type {
+    FlowLoopConfig,
+    FlowLoopDefinition,
+    FlowLoopSource
+  } from '$lib/types/flow_sequence.js';
+  import { clonePlain, normalizeFlowLoopConfig } from '$lib/types/flow_sequence.js';
 
   interface Props {
     [key: string]: unknown;
     isOpen?: boolean;
     flow?: TestFlow | null;
-    sequence?: any; // Using any for now since FlowSequence type doesn't exist
+    sequence?: any;
     stepOrder?: number;
     previousFlowOutputs?: FlowOutput[];
-    selectedEnvironment?: Environment | null; // Environment with variables
+    selectedEnvironment?: Environment | null;
     selectedSubEnvironment?: string | null;
   }
 
@@ -29,11 +34,8 @@
   function dispatch(eventName: string, detail?: unknown) {
     const handler = callbackProps['on' + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
     if (typeof handler === 'function') {
-      if (arguments.length > 1) {
-        handler(detail);
-      } else {
-        handler();
-      }
+      if (arguments.length > 1) handler(detail);
+      else handler();
     }
   }
 
@@ -56,25 +58,119 @@
       | 'environment_variable'
       | 'function'
       | 'loop_value';
-    source_value: string; // For previous_output: output field name, for static_value: the actual value, for environment_variable: variable name, for function: function call expression
-    data_type?: 'string' | 'number' | 'boolean' | 'array' | 'null'; // Only used for static_value
-    source_flow_step?: number; // Only used for previous_output
-    source_output_field?: string; // Only used for previous_output
+    source_value: string;
+    data_type?: 'string' | 'number' | 'boolean' | 'array' | 'null';
+    source_flow_step?: number;
+    source_output_field?: string;
+    loop_id?: string;
+    loop_source_id?: string;
   }
 
-  // Initialize parameter mappings
+  type Primitive = string | number | boolean;
+
   let parameterMappings: ParameterMapping[] = $state([]);
   let loopConfig: FlowLoopConfig = $state(createDefaultLoopConfig());
+  let initializedPanelKey = $state('');
+
+  function createId(prefix: string) {
+    return `${prefix}_${crypto.randomUUID()}`;
+  }
 
   function createDefaultLoopConfig(): FlowLoopConfig {
+    return { enabled: false };
+  }
+
+  function createLoop(name: string): FlowLoopDefinition {
     return {
-      enabled: false,
+      id: createId('loop'),
+      name,
+      sources: [createLoopSource('value')],
+      children: []
+    };
+  }
+
+  function createLoopSource(alias: string): FlowLoopSource {
+    return {
+      id: createId('source'),
+      alias,
       source_type: 'fixed_count',
       count: 1
     };
   }
 
-  function isPrimitiveValue(value: unknown): value is string | number | boolean {
+  function cloneLoopConfig() {
+    loopConfig = clonePlain(loopConfig);
+  }
+
+  function ensureRootLoop() {
+    if (!loopConfig.root) {
+      loopConfig.root = createLoop('user');
+      cloneLoopConfig();
+    }
+  }
+
+  function toggleLoopEnabled(enabled: boolean) {
+    loopConfig.enabled = enabled;
+    if (enabled) ensureRootLoop();
+    else loopConfig = { enabled: false };
+  }
+
+  function addInnerLoop() {
+    ensureRootLoop();
+    if (!loopConfig.root) return;
+    loopConfig.root.children = [createLoop('item')];
+    cloneLoopConfig();
+  }
+
+  function removeInnerLoop() {
+    if (!loopConfig.root) return;
+    loopConfig.root.children = [];
+    parameterMappings = parameterMappings.map((mapping) =>
+      mapping.source_type === 'loop_value' &&
+      !flattenLoops(loopConfig.root).some((loop) => loop.id === mapping.loop_id)
+        ? { ...mapping, source_type: 'static_value', source_value: '' }
+        : mapping
+    );
+    cloneLoopConfig();
+  }
+
+  function addZipSource(loop: FlowLoopDefinition) {
+    loop.sources = [...loop.sources, createLoopSource(`value_${loop.sources.length + 1}`)];
+    cloneLoopConfig();
+  }
+
+  function removeLoopSource(loop: FlowLoopDefinition, sourceId: string) {
+    if (loop.sources.length <= 1) return;
+    loop.sources = loop.sources.filter((source) => source.id !== sourceId);
+    parameterMappings = parameterMappings.map((mapping) =>
+      mapping.source_type === 'loop_value' && mapping.loop_source_id === sourceId
+        ? { ...mapping, source_type: 'static_value', source_value: '' }
+        : mapping
+    );
+    cloneLoopConfig();
+  }
+
+  function handleLoopSourceTypeChange(source: FlowLoopSource) {
+    source.count = source.source_type === 'fixed_count' ? source.count || 1 : undefined;
+    source.source_value = undefined;
+    source.source_flow_step = undefined;
+    source.source_output_field = undefined;
+    cloneLoopConfig();
+  }
+
+  function handleLoopSourceFlowChange(source: FlowLoopSource, value: string) {
+    source.source_flow_step = value ? Number(value) : undefined;
+    source.source_output_field = undefined;
+    source.source_value = undefined;
+    cloneLoopConfig();
+  }
+
+  function handleLoopOutputChange(source: FlowLoopSource) {
+    source.source_value = source.source_output_field;
+    cloneLoopConfig();
+  }
+
+  function isPrimitiveValue(value: unknown): value is Primitive {
     return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
   }
 
@@ -90,39 +186,23 @@
     return `${output.name} (${output.arrayItemType || 'unknown'}[])`;
   }
 
-  function getPrimitiveArrayPreview(value: unknown) {
-    if (!Array.isArray(value)) {
-      return { valid: false, values: [] as Array<string | number | boolean> };
-    }
-
-    if (!value.every(isPrimitiveValue)) {
-      return { valid: false, values: [] as Array<string | number | boolean> };
-    }
-
-    return { valid: true, values: value as Array<string | number | boolean> };
-  }
-
   function getFlowParameters(flow: TestFlow) {
-    if (!flow.flowJson?.parameters) {
-      return [];
-    }
+    if (!flow.flowJson?.parameters) return [];
 
     return flow.flowJson.parameters.map((param: any) => ({
       name: param.name,
       type: param.type,
       description: param.description,
       required: param.required,
-      in: 'parameter', // Flow parameters are user-defined parameters
+      in: 'parameter',
       example:
-        typeof param.value === 'string'
-          ? param.value
-          : typeof param.value === 'number'
-            ? param.value.toString()
-            : typeof param.value === 'boolean'
-              ? param.value.toString()
-              : param.defaultValue
-                ? String(param.defaultValue)
-                : ''
+        typeof param.value === 'string' ||
+        typeof param.value === 'number' ||
+        typeof param.value === 'boolean'
+          ? String(param.value)
+          : param.defaultValue
+            ? String(param.defaultValue)
+            : ''
     }));
   }
 
@@ -130,57 +210,97 @@
     environment: Environment | null,
     subEnvironmentName: string | null
   ) {
-    if (!environment || !environment.config) {
-      return [];
-    }
+    if (!environment || !environment.config) return [];
 
-    // Always get variable list from environment.config.variable_definitions
     const variableDefinitions = environment.config.variable_definitions || {};
-
-    // If no sub-environment is selected, return variables without preview values
-    if (!subEnvironmentName) {
-      return Object.entries(variableDefinitions).map(([name, definition]) => ({
-        name,
-        value: null, // No preview value when no sub-env selected
-        type: definition.type
-      }));
-    }
-
-    // With sub-environment selected, get concrete values for preview
-    const subEnv = environment.config.environments?.[subEnvironmentName];
+    const subEnv = subEnvironmentName
+      ? environment.config.environments?.[subEnvironmentName]
+      : undefined;
     const subEnvVariables = subEnv?.variables || {};
 
     return Object.entries(variableDefinitions).map(([name, definition]) => ({
       name,
-      value: subEnvVariables[name] ?? definition.default_value ?? null, // Preview value from sub-env or default
+      value: subEnvironmentName
+        ? (subEnvVariables[name] ?? definition.default_value ?? null)
+        : null,
       type: definition.type
     }));
+  }
+
+  function getPrimitiveArrayPreview(value: unknown) {
+    if (!Array.isArray(value) || !value.every(isPrimitiveValue)) {
+      return { valid: false, values: [] as Primitive[] };
+    }
+
+    return { valid: true, values: value as Primitive[] };
+  }
+
+  function flattenLoops(root?: FlowLoopDefinition): FlowLoopDefinition[] {
+    if (!root) return [];
+    return [root, ...(root.children ?? []).flatMap((child) => flattenLoops(child))];
+  }
+
+  function getSourceSelectedFlow(source: FlowLoopSource) {
+    return availableArrayOutputs.find(
+      (flowOutput) => flowOutput.stepOrder === source.source_flow_step
+    );
+  }
+
+  function getLoopSourcePreview(source: FlowLoopSource) {
+    if (source.source_type === 'fixed_count') {
+      const count = Number(source.count || 0);
+      if (!Number.isInteger(count) || count < 1) return 'Invalid count';
+      return `${count} value${count === 1 ? '' : 's'}: ${Array.from({ length: Math.min(count, 3) }, (_, index) => index).join(', ')}`;
+    }
+
+    if (source.source_type === 'environment_variable_array') {
+      const selected = environmentVariables.find(
+        (variable) => variable.name === source.source_value
+      );
+      if (!selected) return 'Select environment array';
+      if (!selectedSubEnvironment || selected.value === null) return 'Preview at runtime';
+      const preview = getPrimitiveArrayPreview(selected.value);
+      if (!preview.valid) return 'Must be primitive array';
+      return `${preview.values.length} value${preview.values.length === 1 ? '' : 's'}: ${preview.values.map(String).join(', ')}`;
+    }
+
+    if (!source.source_flow_step || !source.source_output_field)
+      return 'Select previous output array';
+    return `Runtime: Step ${source.source_flow_step}.${source.source_output_field}[]`;
   }
 
   function initializeParameterMappings() {
     if (!flow || !sequence) return;
 
-    // Get existing mappings from sequence config
     const existingStep = sequence.sequenceConfig?.steps?.find(
       (s: any) => s.step_order === stepOrder
     );
     const existingMappings = existingStep?.parameter_mappings || [];
     loopConfig = existingStep?.loop_config
-      ? { ...createDefaultLoopConfig(), ...existingStep.loop_config }
+      ? normalizeFlowLoopConfig(existingStep.loop_config)
       : createDefaultLoopConfig();
+    const normalizedLoops = flattenLoops(loopConfig.root);
+    const firstLoop = normalizedLoops[0];
+    const firstSource = firstLoop?.sources[0];
 
-    // Initialize mappings for all parameters
     parameterMappings = flowParameters.map((param: any) => {
       const existing = existingMappings.find((m: any) => m.flow_parameter_name === param.name);
+      const isLegacyLoopMapping =
+        existing?.source_type === 'loop_value' && (!existing.loop_id || !existing.loop_source_id);
 
       if (existing) {
         return {
           flow_parameter_name: param.name,
           source_type: existing.source_type || 'static_value',
-          source_value: existing.source_value || '',
+          source_value: isLegacyLoopMapping
+            ? firstSource?.alias || existing.source_value || ''
+            : existing.source_value || '',
           data_type: existing.data_type,
           source_flow_step: existing.source_flow_step,
-          source_output_field: existing.source_output_field
+          source_output_field: existing.source_output_field,
+          loop_id: existing.loop_id || (isLegacyLoopMapping ? firstLoop?.id : undefined),
+          loop_source_id:
+            existing.loop_source_id || (isLegacyLoopMapping ? firstSource?.id : undefined)
         };
       }
 
@@ -201,65 +321,87 @@
   }
 
   function updateParameterMapping(index: number, field: keyof ParameterMapping, value: any) {
-    if (!parameterMappings[index]) {
-      return;
-    }
+    if (!parameterMappings[index]) return;
 
     parameterMappings[index] = { ...parameterMappings[index], [field]: value };
 
-    // Clear related fields when source_type changes
     if (field === 'source_type') {
       if (value !== 'previous_output') {
         parameterMappings[index].source_flow_step = undefined;
         parameterMappings[index].source_output_field = undefined;
       }
-      if (value !== 'static_value') {
-        parameterMappings[index].data_type = undefined;
-      }
-      if (value !== 'environment_variable') {
-        parameterMappings[index].source_value = '';
+      if (value !== 'static_value') parameterMappings[index].data_type = undefined;
+      if (value !== 'environment_variable') parameterMappings[index].source_value = '';
+      if (value !== 'loop_value') {
+        parameterMappings[index].loop_id = undefined;
+        parameterMappings[index].loop_source_id = undefined;
       }
       if (value === 'loop_value') {
-        parameterMappings[index].source_value = 'value';
+        const firstLoop = loopOptions[0];
+        const firstSource = firstLoop?.sources[0];
+        parameterMappings[index].loop_id = firstLoop?.id;
+        parameterMappings[index].loop_source_id = firstSource?.id;
+        parameterMappings[index].source_value = firstSource?.alias || '';
       }
     }
 
-    // Set source_value to "null" when data_type is null
     if (field === 'data_type' && value === 'null') {
       parameterMappings[index].source_value = 'null';
     }
   }
 
+  function updateLoopSelection(index: number, loopId: string) {
+    const loop = loopOptions.find((item) => item.id === loopId);
+    const source = loop?.sources[0];
+    parameterMappings[index] = {
+      ...parameterMappings[index],
+      loop_id: loopId,
+      loop_source_id: source?.id,
+      source_value: source?.alias || ''
+    };
+  }
+
+  function updateLoopSourceSelection(index: number, sourceId: string) {
+    const loop = loopOptions.find((item) => item.id === parameterMappings[index].loop_id);
+    const source = loop?.sources.find((item) => item.id === sourceId);
+    parameterMappings[index] = {
+      ...parameterMappings[index],
+      loop_source_id: sourceId,
+      source_value: source?.alias || ''
+    };
+  }
+
+  function getSelectedMappingLoop(index: number) {
+    return loopOptions.find((item) => item.id === parameterMappings[index]?.loop_id);
+  }
+
   function handleSelectChange(event: Event, index: number, field: keyof ParameterMapping) {
     const target = event.target as HTMLSelectElement;
-    if (target) {
-      const value = field === 'source_flow_step' ? parseInt(target.value) : target.value;
-      updateParameterMapping(index, field, value);
-    }
+    if (!target) return;
+
+    const value = field === 'source_flow_step' ? parseInt(target.value) : target.value;
+    updateParameterMapping(index, field, value);
   }
 
   function handleInputChange(event: Event, index: number, field: keyof ParameterMapping) {
     const target = event.target as HTMLInputElement;
-    if (target) {
-      updateParameterMapping(index, field, target.value);
-    }
+    if (target) updateParameterMapping(index, field, target.value);
   }
 
   function handleSave() {
     dispatch('save', {
       stepOrder,
-      loopConfig: loopConfig.enabled
-        ? {
-            ...loopConfig,
-            count:
-              loopConfig.source_type === 'fixed_count' ? Number(loopConfig.count || 1) : undefined
-          }
-        : { ...loopConfig, enabled: false },
+      loopConfig: loopConfig.enabled ? clonePlain(loopConfig) : { enabled: false },
       parameterMappings: parameterMappings.filter(
-        (m) =>
-          m.source_value ||
-          (m.source_type === 'previous_output' && m.source_flow_step && m.source_output_field) ||
-          (m.source_type === 'loop_value' && loopConfig.enabled)
+        (mapping) =>
+          mapping.source_value ||
+          (mapping.source_type === 'previous_output' &&
+            mapping.source_flow_step &&
+            mapping.source_output_field) ||
+          (mapping.source_type === 'loop_value' &&
+            loopConfig.enabled &&
+            mapping.loop_id &&
+            mapping.loop_source_id)
       )
     });
   }
@@ -267,14 +409,11 @@
   function handleClose() {
     dispatch('close');
   }
-  // Extract flow parameters from the actual flow JSON
+
   let flowParameters = $derived(flow ? getFlowParameters(flow) : []);
   let availableFlowOutputs = $derived(
-    previousFlowOutputs.filter((output) => {
-      return output.stepOrder < stepOrder;
-    })
+    previousFlowOutputs.filter((output) => output.stepOrder < stepOrder)
   );
-  // Get environment variables from the selected environment and sub-environment
   let environmentVariables = $derived(
     getEnvironmentVariables(selectedEnvironment, selectedSubEnvironment)
   );
@@ -289,80 +428,26 @@
       }))
       .filter((flowOutput) => flowOutput.outputs.length > 0)
   );
-  let loopPreview = $derived.by(() => {
-    if (!loopConfig.enabled) return null;
-
-    if (loopConfig.source_type === 'fixed_count') {
-      const count = Number(loopConfig.count || 0);
-      if (!Number.isInteger(count) || count < 1) {
-        return { type: 'error', message: 'Loop count must be a positive integer.' };
-      }
-
-      return {
-        type: 'values',
-        message: `${count} iteration${count === 1 ? '' : 's'}`,
-        values: Array.from({ length: Math.min(count, 5) }, (_, index) => index),
-        total: count
-      };
-    }
-
-    if (loopConfig.source_type === 'environment_variable_array') {
-      const selectedEnvVar = environmentVariables.find(
-        (variable) => variable.name === loopConfig.source_value
-      );
-      if (!selectedEnvVar) {
-        return { type: 'warning', message: 'Select an array environment variable.' };
-      }
-
-      if (!selectedSubEnvironment || selectedEnvVar.value === null) {
-        return { type: 'warning', message: 'Select a sub-environment to preview values.' };
-      }
-
-      const preview = getPrimitiveArrayPreview(selectedEnvVar.value);
-      if (!preview.valid) {
-        return {
-          type: 'error',
-          message: 'Selected variable must be an array of strings, numbers, or booleans.'
-        };
-      }
-
-      return {
-        type: 'values',
-        message: `${preview.values.length} iteration${preview.values.length === 1 ? '' : 's'}`,
-        values: preview.values.slice(0, 5),
-        total: preview.values.length
-      };
-    }
-
-    if (loopConfig.source_type === 'previous_output_array') {
-      if (!loopConfig.source_flow_step || !loopConfig.source_output_field) {
-        return { type: 'warning', message: 'Select a previous array output.' };
-      }
-
-      return {
-        type: 'warning',
-        message: `Runtime loop source: Step ${loopConfig.source_flow_step}.${loopConfig.source_output_field}[]`
-      };
-    }
-
-    return null;
-  });
-  let selectedLoopFlow = $derived(
-    availableArrayOutputs.find((flowOutput) => flowOutput.stepOrder === loopConfig.source_flow_step)
-  );
-  let loopPreviewValues = $derived(loopPreview?.type === 'values' ? loopPreview.values || [] : []);
-  let loopPreviewTotal = $derived(loopPreview?.type === 'values' ? loopPreview.total || 0 : 0);
+  let loopOptions = $derived(flattenLoops(loopConfig.root));
   let hasInitializedMappings = $derived(
     flowParameters.length === 0 || parameterMappings.length === flowParameters.length
   );
+  let panelInitializationKey = $derived(
+    isOpen && flow && sequence ? `${sequence.id}:${flow.id}:${stepOrder}` : ''
+  );
+
   $effect(() => {
-    if (flow && isOpen) {
+    if (panelInitializationKey && panelInitializationKey !== initializedPanelKey) {
+      initializedPanelKey = panelInitializationKey;
       initializeParameterMappings();
+    }
+
+    if (!panelInitializationKey) {
+      initializedPanelKey = '';
     }
   });
 </script>
 
-<!-- Backdrop -->
 {#if isOpen}
   <div
     class="fixed inset-0 z-40 bg-transparent transition-opacity"
@@ -373,15 +458,13 @@
   ></div>
 {/if}
 
-<!-- Sliding Panel -->
 <div
-  class="fixed top-0 right-0 z-50 h-full w-[800px] transform overflow-y-auto bg-white shadow-xl transition-transform duration-300 ease-in-out"
+  class="fixed top-0 right-0 z-50 h-full w-[860px] transform overflow-y-auto bg-white shadow-xl transition-transform duration-300 ease-in-out"
   class:translate-x-full={!isOpen}
   class:translate-x-0={isOpen}
 >
   {#if isOpen && flow}
     <div class="p-6">
-      <!-- Header -->
       <div class="mb-6 flex items-center justify-between border-b border-gray-200 pb-4">
         <div>
           <h2 class="text-lg font-semibold text-gray-900">Configure Parameters</h2>
@@ -404,13 +487,12 @@
         </button>
       </div>
 
-      <!-- Loop Configuration -->
       <div class="mb-6 rounded-lg border border-gray-200 p-4">
         <div class="mb-4 flex items-center justify-between gap-4">
           <div>
             <h3 class="text-sm font-semibold text-gray-900">Loop</h3>
             <p class="text-xs text-gray-500">
-              Run this flow multiple times from a primitive value list.
+              Run this flow from zipped primitive arrays. Add one nested loop when needed.
             </p>
           </div>
           <label
@@ -421,163 +503,359 @@
               id="loop-enabled"
               type="checkbox"
               class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-              bind:checked={loopConfig.enabled}
+              checked={loopConfig.enabled}
+              onchange={(event) => toggleLoopEnabled(event.currentTarget.checked)}
             />
             Enable loop
           </label>
         </div>
 
-        {#if loopConfig.enabled}
-          <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <div>
-              <label for="loop-source" class="mb-2 block text-sm font-medium text-gray-700"
-                >Loop Source</label
-              >
-              <select
-                id="loop-source"
-                bind:value={loopConfig.source_type}
-                onchange={() => {
-                  loopConfig = {
-                    ...loopConfig,
-                    count:
-                      loopConfig.source_type === 'fixed_count' ? loopConfig.count || 1 : undefined,
-                    source_value: undefined,
-                    source_flow_step: undefined,
-                    source_output_field: undefined
-                  };
-                }}
-                class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              >
-                <option value="fixed_count">Fixed Count</option>
-                <option value="environment_variable_array">Environment Array</option>
-                {#if availableArrayOutputs.length > 0}
-                  <option value="previous_output_array">Previous Output Array</option>
-                {/if}
-              </select>
-            </div>
-
-            {#if loopConfig.source_type === 'fixed_count'}
-              <div>
-                <label for="loop-count" class="mb-2 block text-sm font-medium text-gray-700"
-                  >Count</label
-                >
-                <input
-                  id="loop-count"
-                  type="number"
-                  min="1"
-                  step="1"
-                  bind:value={loopConfig.count}
-                  class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                />
-              </div>
-            {:else if loopConfig.source_type === 'environment_variable_array'}
-              <div>
-                <label for="loop-env-var" class="mb-2 block text-sm font-medium text-gray-700"
-                  >Environment Array</label
-                >
-                <select
-                  id="loop-env-var"
-                  bind:value={loopConfig.source_value}
-                  class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                >
-                  <option value="">Select variable...</option>
-                  {#each environmentArrayVariables as envVar}
-                    <option value={envVar.name}>{envVar.name}</option>
-                  {/each}
-                </select>
-              </div>
-            {:else if loopConfig.source_type === 'previous_output_array'}
-              <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-                <div>
-                  <label for="loop-source-flow" class="mb-2 block text-sm font-medium text-gray-700"
-                    >Source Flow</label
-                  >
-                  <select
-                    id="loop-source-flow"
-                    bind:value={loopConfig.source_flow_step}
-                    onchange={(event) => {
-                      const target = event.currentTarget;
-                      loopConfig = {
-                        ...loopConfig,
-                        source_flow_step: target.value ? Number(target.value) : undefined,
-                        source_output_field: undefined,
-                        source_value: undefined
-                      };
-                    }}
-                    class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  >
-                    <option value="">Select flow...</option>
-                    {#each availableArrayOutputs as flowOutput}
-                      <option value={flowOutput.stepOrder}
-                        >Step {flowOutput.stepOrder}: {flowOutput.flowName}</option
-                      >
-                    {/each}
-                  </select>
-                </div>
-
+        {#if loopConfig.enabled && loopConfig.root}
+          {#each [loopConfig.root] as loop, loopIndex}
+            <div class="mb-4 rounded-md border border-gray-200 p-3">
+              <div class="mb-3 flex items-end justify-between gap-3">
                 <div>
                   <label
-                    for="loop-output-field"
-                    class="mb-2 block text-sm font-medium text-gray-700">Array Output</label
+                    for="loop-name-{loop.id}"
+                    class="mb-1 block text-sm font-medium text-gray-700">Outer Loop Name</label
                   >
-                  <select
-                    id="loop-output-field"
-                    bind:value={loopConfig.source_output_field}
-                    onchange={() => {
-                      loopConfig = {
-                        ...loopConfig,
-                        source_value: loopConfig.source_output_field
-                      };
-                    }}
-                    disabled={!selectedLoopFlow}
-                    class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:bg-gray-100"
-                  >
-                    <option value="">Select output...</option>
-                    {#if selectedLoopFlow}
-                      {#each selectedLoopFlow.outputs as output}
-                        <option value={output.name}>{formatArrayOutputLabel(output)}</option>
-                      {/each}
-                    {/if}
-                  </select>
+                  <input
+                    id="loop-name-{loop.id}"
+                    type="text"
+                    bind:value={loop.name}
+                    oninput={cloneLoopConfig}
+                    class="w-56 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  />
                 </div>
+                <button
+                  type="button"
+                  class="rounded-md border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                  onclick={() => addZipSource(loop)}
+                >
+                  Add Zip Source
+                </button>
               </div>
-            {/if}
-          </div>
 
-          {#if loopPreview}
-            <div
-              class="mt-3 rounded-md border px-3 py-2 text-xs {loopPreview.type === 'error'
-                ? 'border-red-200 bg-red-50 text-red-700'
-                : loopPreview.type === 'warning'
-                  ? 'border-amber-200 bg-amber-50 text-amber-700'
-                  : 'border-blue-200 bg-blue-50 text-blue-700'}"
-            >
-              <div class="font-medium">{loopPreview.message}</div>
-              {#if loopPreview.type === 'values'}
-                <div class="mt-1 flex flex-wrap gap-1">
-                  {#each loopPreviewValues as value, index}
-                    <span class="rounded bg-white px-2 py-0.5 font-mono text-gray-700"
-                      >[{index}] {String(value)}</span
+              {#each loop.sources as source, sourceIndex}
+                <div class="mb-3 grid grid-cols-12 gap-3 rounded-md bg-gray-50 p-3">
+                  <div class="col-span-2">
+                    <label
+                      for="source-alias-{source.id}"
+                      class="mb-1 block text-xs font-medium text-gray-700"
+                      >{sourceIndex === 0 ? 'Primary Alias' : 'Zip Alias'}</label
                     >
-                  {/each}
-                  {#if loopPreviewTotal > loopPreviewValues.length}
-                    <span class="px-2 py-0.5 text-gray-500"
-                      >+{loopPreviewTotal - loopPreviewValues.length} more</span
+                    <input
+                      id="source-alias-{source.id}"
+                      type="text"
+                      bind:value={source.alias}
+                      oninput={cloneLoopConfig}
+                      class="w-full rounded-md border border-gray-300 px-2 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+                  <div class="col-span-3">
+                    <label
+                      for="source-type-{source.id}"
+                      class="mb-1 block text-xs font-medium text-gray-700">Source</label
                     >
-                  {/if}
+                    <select
+                      id="source-type-{source.id}"
+                      bind:value={source.source_type}
+                      onchange={() => handleLoopSourceTypeChange(source)}
+                      class="w-full rounded-md border border-gray-300 px-2 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    >
+                      <option value="fixed_count">Fixed Count</option>
+                      <option value="environment_variable_array">Environment Array</option>
+                      {#if availableArrayOutputs.length > 0}
+                        <option value="previous_output_array">Previous Output Array</option>
+                      {/if}
+                    </select>
+                  </div>
+                  <div class="col-span-5">
+                    {#if source.source_type === 'fixed_count'}
+                      <label
+                        for="source-count-{source.id}"
+                        class="mb-1 block text-xs font-medium text-gray-700">Count</label
+                      >
+                      <input
+                        id="source-count-{source.id}"
+                        type="number"
+                        min="1"
+                        step="1"
+                        bind:value={source.count}
+                        oninput={cloneLoopConfig}
+                        class="w-full rounded-md border border-gray-300 px-2 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      />
+                    {:else if source.source_type === 'environment_variable_array'}
+                      <label
+                        for="source-env-{source.id}"
+                        class="mb-1 block text-xs font-medium text-gray-700"
+                        >Environment Array</label
+                      >
+                      <select
+                        id="source-env-{source.id}"
+                        bind:value={source.source_value}
+                        onchange={cloneLoopConfig}
+                        class="w-full rounded-md border border-gray-300 px-2 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      >
+                        <option value="">Select variable...</option>
+                        {#each environmentArrayVariables as envVar}
+                          <option value={envVar.name}>{envVar.name}</option>
+                        {/each}
+                      </select>
+                    {:else}
+                      <div class="grid grid-cols-2 gap-2">
+                        <div>
+                          <label
+                            for="source-flow-{source.id}"
+                            class="mb-1 block text-xs font-medium text-gray-700">Flow</label
+                          >
+                          <select
+                            id="source-flow-{source.id}"
+                            value={source.source_flow_step ?? ''}
+                            onchange={(event) =>
+                              handleLoopSourceFlowChange(source, event.currentTarget.value)}
+                            class="w-full rounded-md border border-gray-300 px-2 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                          >
+                            <option value="">Select flow...</option>
+                            {#each availableArrayOutputs as flowOutput}
+                              <option value={flowOutput.stepOrder}
+                                >Step {flowOutput.stepOrder}: {flowOutput.flowName}</option
+                              >
+                            {/each}
+                          </select>
+                        </div>
+                        <div>
+                          <label
+                            for="source-output-{source.id}"
+                            class="mb-1 block text-xs font-medium text-gray-700">Output</label
+                          >
+                          <select
+                            id="source-output-{source.id}"
+                            bind:value={source.source_output_field}
+                            onchange={() => handleLoopOutputChange(source)}
+                            disabled={!getSourceSelectedFlow(source)}
+                            class="w-full rounded-md border border-gray-300 px-2 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:bg-gray-100"
+                          >
+                            <option value="">Select output...</option>
+                            {#if getSourceSelectedFlow(source)}
+                              {#each getSourceSelectedFlow(source)?.outputs || [] as output}
+                                <option value={output.name}>{formatArrayOutputLabel(output)}</option
+                                >
+                              {/each}
+                            {/if}
+                          </select>
+                        </div>
+                      </div>
+                    {/if}
+                  </div>
+                  <div class="col-span-2 flex items-end justify-end gap-2">
+                    {#if sourceIndex > 0}
+                      <button
+                        type="button"
+                        class="rounded-md border border-red-200 px-2 py-1 text-xs text-red-700 hover:bg-red-50"
+                        onclick={() => removeLoopSource(loop, source.id)}
+                      >
+                        Remove
+                      </button>
+                    {/if}
+                  </div>
+                  <div
+                    class="col-span-12 rounded-md border border-gray-200 bg-white px-3 py-2 text-xs break-words whitespace-normal text-gray-600"
+                  >
+                    {getLoopSourcePreview(source)}
+                  </div>
                 </div>
+              {/each}
+
+              {#if loopIndex === 0}
+                {#if !loop.children?.length}
+                  <button
+                    type="button"
+                    class="rounded-md border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                    onclick={addInnerLoop}
+                  >
+                    Add Nested Loop
+                  </button>
+                {/if}
               {/if}
             </div>
-          {/if}
+
+            {#if loop.children?.[0]}
+              {@const innerLoop = loop.children[0]}
+              <div class="mb-4 rounded-md border border-blue-200 p-3">
+                <div class="mb-3 flex items-end justify-between gap-3">
+                  <div>
+                    <label
+                      for="loop-name-{innerLoop.id}"
+                      class="mb-1 block text-sm font-medium text-gray-700">Inner Loop Name</label
+                    >
+                    <input
+                      id="loop-name-{innerLoop.id}"
+                      type="text"
+                      bind:value={innerLoop.name}
+                      oninput={cloneLoopConfig}
+                      class="w-56 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+                  <div class="flex gap-2">
+                    <button
+                      type="button"
+                      class="rounded-md border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                      onclick={() => addZipSource(innerLoop)}
+                    >
+                      Add Zip Source
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded-md border border-red-200 bg-white px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-50"
+                      onclick={removeInnerLoop}
+                    >
+                      Remove Nested Loop
+                    </button>
+                  </div>
+                </div>
+
+                {#each innerLoop.sources as source, sourceIndex}
+                  <div class="mb-3 grid grid-cols-12 gap-3 rounded-md bg-blue-50 p-3">
+                    <div class="col-span-2">
+                      <label
+                        for="source-alias-{source.id}"
+                        class="mb-1 block text-xs font-medium text-gray-700"
+                        >{sourceIndex === 0 ? 'Primary Alias' : 'Zip Alias'}</label
+                      >
+                      <input
+                        id="source-alias-{source.id}"
+                        type="text"
+                        bind:value={source.alias}
+                        oninput={cloneLoopConfig}
+                        class="w-full rounded-md border border-gray-300 px-2 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      />
+                    </div>
+                    <div class="col-span-3">
+                      <label
+                        for="source-type-{source.id}"
+                        class="mb-1 block text-xs font-medium text-gray-700">Source</label
+                      >
+                      <select
+                        id="source-type-{source.id}"
+                        bind:value={source.source_type}
+                        onchange={() => handleLoopSourceTypeChange(source)}
+                        class="w-full rounded-md border border-gray-300 px-2 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      >
+                        <option value="fixed_count">Fixed Count</option>
+                        <option value="environment_variable_array">Environment Array</option>
+                        {#if availableArrayOutputs.length > 0}
+                          <option value="previous_output_array">Previous Output Array</option>
+                        {/if}
+                      </select>
+                    </div>
+                    <div class="col-span-5">
+                      {#if source.source_type === 'fixed_count'}
+                        <label
+                          for="source-count-{source.id}"
+                          class="mb-1 block text-xs font-medium text-gray-700">Count</label
+                        >
+                        <input
+                          id="source-count-{source.id}"
+                          type="number"
+                          min="1"
+                          step="1"
+                          bind:value={source.count}
+                          oninput={cloneLoopConfig}
+                          class="w-full rounded-md border border-gray-300 px-2 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        />
+                      {:else if source.source_type === 'environment_variable_array'}
+                        <label
+                          for="source-env-{source.id}"
+                          class="mb-1 block text-xs font-medium text-gray-700"
+                          >Environment Array</label
+                        >
+                        <select
+                          id="source-env-{source.id}"
+                          bind:value={source.source_value}
+                          onchange={cloneLoopConfig}
+                          class="w-full rounded-md border border-gray-300 px-2 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        >
+                          <option value="">Select variable...</option>
+                          {#each environmentArrayVariables as envVar}
+                            <option value={envVar.name}>{envVar.name}</option>
+                          {/each}
+                        </select>
+                      {:else}
+                        <div class="grid grid-cols-2 gap-2">
+                          <div>
+                            <label
+                              for="source-flow-{source.id}"
+                              class="mb-1 block text-xs font-medium text-gray-700">Flow</label
+                            >
+                            <select
+                              id="source-flow-{source.id}"
+                              value={source.source_flow_step ?? ''}
+                              onchange={(event) =>
+                                handleLoopSourceFlowChange(source, event.currentTarget.value)}
+                              class="w-full rounded-md border border-gray-300 px-2 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                            >
+                              <option value="">Select flow...</option>
+                              {#each availableArrayOutputs as flowOutput}
+                                <option value={flowOutput.stepOrder}
+                                  >Step {flowOutput.stepOrder}: {flowOutput.flowName}</option
+                                >
+                              {/each}
+                            </select>
+                          </div>
+                          <div>
+                            <label
+                              for="source-output-{source.id}"
+                              class="mb-1 block text-xs font-medium text-gray-700">Output</label
+                            >
+                            <select
+                              id="source-output-{source.id}"
+                              bind:value={source.source_output_field}
+                              onchange={() => handleLoopOutputChange(source)}
+                              disabled={!getSourceSelectedFlow(source)}
+                              class="w-full rounded-md border border-gray-300 px-2 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:bg-gray-100"
+                            >
+                              <option value="">Select output...</option>
+                              {#if getSourceSelectedFlow(source)}
+                                {#each getSourceSelectedFlow(source)?.outputs || [] as output}
+                                  <option value={output.name}
+                                    >{formatArrayOutputLabel(output)}</option
+                                  >
+                                {/each}
+                              {/if}
+                            </select>
+                          </div>
+                        </div>
+                      {/if}
+                    </div>
+                    <div class="col-span-2 flex items-end justify-end gap-2">
+                      {#if sourceIndex > 0}
+                        <button
+                          type="button"
+                          class="rounded-md border border-red-200 px-2 py-1 text-xs text-red-700 hover:bg-red-50"
+                          onclick={() => removeLoopSource(innerLoop, source.id)}
+                        >
+                          Remove
+                        </button>
+                      {/if}
+                    </div>
+                    <div
+                      class="col-span-12 rounded-md border border-blue-100 bg-white px-3 py-2 text-xs break-words whitespace-normal text-gray-600"
+                    >
+                      {getLoopSourcePreview(source)}
+                    </div>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+          {/each}
         {/if}
       </div>
 
-      <!-- Parameters List -->
       {#if flowParameters.length > 0 && hasInitializedMappings}
         <div class="space-y-6">
           {#each flowParameters as param, index}
             <div class="rounded-lg border border-gray-200 p-4">
-              <!-- Parameter Info -->
               <div class="mb-3">
                 <div class="mb-1 flex items-center gap-2">
                   <h3 class="font-medium text-gray-900">{param.name}</h3>
@@ -595,9 +873,7 @@
                 {/if}
               </div>
 
-              <!-- Value Configuration - All in one line -->
               <div class="mb-3 flex gap-3">
-                <!-- Value Source Selection -->
                 <div class="flex-1">
                   <label
                     for="sourceType-{index}"
@@ -612,7 +888,7 @@
                     <option value="static_value">Fixed Value</option>
                     <option value="environment_variable">Environment Variable</option>
                     <option value="function">Function Call</option>
-                    {#if loopConfig.enabled}
+                    {#if loopConfig.enabled && loopOptions.length > 0}
                       <option value="loop_value">Current Loop Value</option>
                     {/if}
                     {#if availableFlowOutputs.length > 0}
@@ -621,7 +897,6 @@
                   </select>
                 </div>
 
-                <!-- Dynamic fields based on source type -->
                 {#if parameterMappings[index].source_type === 'static_value'}
                   <div class="flex-1">
                     <label
@@ -670,7 +945,7 @@
                         id="value-{index}"
                         bind:value={parameterMappings[index].source_value}
                         oninput={(e) => handleInputChange(e, index, 'source_value')}
-                        placeholder="Enter JSON array: [1, 2, 3] or [&quot;item1&quot;, &quot;item2&quot;] or [true, false]"
+                        placeholder="Enter JSON array"
                         rows="3"
                         class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                       ></textarea>
@@ -711,13 +986,12 @@
                       {/each}
                     </select>
                   </div>
-                  <!-- Show preview value if selected and sub-environment is chosen -->
-                  {#if parameterMappings[index].source_value && selectedSubEnvironment}
-                    {@const selectedEnvVar = environmentVariables.find(
-                      (v) => v.name === parameterMappings[index].source_value
-                    )}
-                    {#if selectedEnvVar && selectedEnvVar.value !== null}
-                      <div class="flex-1">
+                  <div class="flex-1">
+                    {#if parameterMappings[index].source_value && selectedSubEnvironment}
+                      {@const selectedEnvVar = environmentVariables.find(
+                        (v) => v.name === parameterMappings[index].source_value
+                      )}
+                      {#if selectedEnvVar && selectedEnvVar.value !== null}
                         <span class="mb-2 block text-sm font-medium text-gray-700"
                           >Preview Value</span
                         >
@@ -728,13 +1002,9 @@
                             ? JSON.stringify(selectedEnvVar.value)
                             : String(selectedEnvVar.value)}
                         </div>
-                      </div>
-                    {:else}
-                      <div class="flex-1"></div>
+                      {/if}
                     {/if}
-                  {:else}
-                    <div class="flex-1"></div>
-                  {/if}
+                  </div>
                 {:else if parameterMappings[index].source_type === 'function'}
                   <div class="flex-1">
                     <label
@@ -747,47 +1017,44 @@
                       type="text"
                       bind:value={parameterMappings[index].source_value}
                       oninput={(e) => handleInputChange(e, index, 'source_value')}
-                      placeholder="e.g., uuid(), dateISO(), randomString(10), dateFormat(1, 'yyyy-MM-dd')"
+                      placeholder="e.g., uuid(), dateISO(), randomString(10)"
                       class="w-full rounded-md border border-gray-300 px-3 py-2 font-mono text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                     />
                   </div>
-                  <div class="flex-1">
-                    <span class="mb-2 block text-sm font-medium text-gray-700"
-                      >Available Functions</span
-                    >
-                    <div
-                      class="max-h-20 w-full overflow-y-auto rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600"
-                    >
-                      <div class="space-y-1">
-                        <div>
-                          <strong>Date/Time:</strong> isoDate(), dateISO(), timestamp(), dateFormat(),
-                          dateAdd(), dateSubtract()
-                        </div>
-                        <div><strong>IDs:</strong> uuid(), randomString(), randomInt()</div>
-                        <div><strong>Encoding:</strong> base64Encode(), urlEncode()</div>
-                      </div>
-                    </div>
-                  </div>
+                  <div class="flex-1"></div>
                 {:else if parameterMappings[index].source_type === 'loop_value'}
                   <div class="flex-1">
-                    <span class="mb-2 block text-sm font-medium text-gray-700">Loop Value</span>
-                    <div
-                      class="w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600"
+                    <label
+                      for="loop-select-{index}"
+                      class="mb-2 block text-sm font-medium text-gray-700">Loop</label
                     >
-                      Current iteration value
-                    </div>
+                    <select
+                      id="loop-select-{index}"
+                      bind:value={parameterMappings[index].loop_id}
+                      onchange={(event) => updateLoopSelection(index, event.currentTarget.value)}
+                      class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    >
+                      {#each loopOptions as loop}
+                        <option value={loop.id}>{loop.name}</option>
+                      {/each}
+                    </select>
                   </div>
                   <div class="flex-1">
-                    <span class="mb-2 block text-sm font-medium text-gray-700">Preview</span>
-                    <div
-                      class="w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600"
+                    <label
+                      for="loop-source-select-{index}"
+                      class="mb-2 block text-sm font-medium text-gray-700">Value</label
                     >
-                      {#if loopPreviewValues.length > 0}
-                        <span class="font-mono">{String(loopPreviewValues[0])}</span>
-                      {:else}
-                        Resolved at runtime
-                      {/if}
-                    </div>
+                    <select
+                      id="loop-source-select-{index}"
+                      bind:value={parameterMappings[index].loop_source_id}
+                      onchange={(event) =>
+                        updateLoopSourceSelection(index, event.currentTarget.value)}
+                      class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    >
+                      {#each getSelectedMappingLoop(index)?.sources || [] as source}
+                        <option value={source.id}>{source.alias}</option>
+                      {/each}
+                    </select>
                   </div>
                 {:else if parameterMappings[index].source_type === 'previous_output'}
                   <div class="flex-1">
@@ -810,12 +1077,12 @@
                     </select>
                   </div>
 
-                  {#if parameterMappings[index].source_flow_step}
-                    {@const selectedFlowOutput = availableFlowOutputs.find(
-                      (f) => f.stepOrder === parameterMappings[index].source_flow_step
-                    )}
-                    {#if selectedFlowOutput}
-                      <div class="flex-1">
+                  <div class="flex-1">
+                    {#if parameterMappings[index].source_flow_step}
+                      {@const selectedFlowOutput = availableFlowOutputs.find(
+                        (f) => f.stepOrder === parameterMappings[index].source_flow_step
+                      )}
+                      {#if selectedFlowOutput}
                         <label
                           for="outputField-{index}"
                           class="mb-2 block text-sm font-medium text-gray-700">Output Field</label
@@ -831,78 +1098,20 @@
                             <option value={output.name}>{output.name} ({output.type})</option>
                           {/each}
                         </select>
-                      </div>
-                    {:else}
-                      <!-- Empty flex item when no flow is selected -->
-                      <div class="flex-1"></div>
+                      {/if}
                     {/if}
-                  {:else}
-                    <!-- Empty flex item when no flow is selected -->
-                    <div class="flex-1"></div>
-                  {/if}
+                  </div>
                 {/if}
               </div>
 
-              <!-- Status/Info Messages -->
-              {#if parameterMappings[index].source_type === 'function'}
-                {#if parameterMappings[index].source_value}
-                  <p class="mb-3 text-xs text-gray-500">
-                    Function call: <strong class="font-mono"
-                      >{parameterMappings[index].source_value}</strong
-                    >
-                  </p>
-                {:else}
-                  <p class="mb-3 text-xs text-amber-600">
-                    Select a function or enter a custom function expression
-                  </p>
-                {/if}
-              {:else if parameterMappings[index].source_type === 'environment_variable'}
-                {#if environmentVariables.length === 0}
-                  <p class="mb-3 text-xs text-gray-500">
-                    {#if !selectedEnvironment}
-                      No environment selected
-                    {:else}
-                      No environment variables available in current environment
-                    {/if}
-                  </p>
-                {:else if parameterMappings[index].source_value}
-                  {@const selectedEnvVar = environmentVariables.find(
-                    (v) => v.name === parameterMappings[index].source_value
-                  )}
-                  {#if selectedEnvVar}
-                    {#if selectedSubEnvironment && selectedEnvVar.value !== null}
-                      <p class="mb-3 text-xs text-gray-500">
-                        Selected: <strong>{parameterMappings[index].source_value}</strong> =
-                        <span class="font-mono"
-                          >{typeof selectedEnvVar.value === 'object'
-                            ? JSON.stringify(selectedEnvVar.value)
-                            : String(selectedEnvVar.value)}</span
-                        >
-                      </p>
-                    {:else}
-                      <p class="mb-3 text-xs text-gray-500">
-                        Selected: <strong>{parameterMappings[index].source_value}</strong>
-                        {#if !selectedSubEnvironment}
-                          <span class="text-amber-600"
-                            >(select sub-environment to see preview value)</span
-                          >
-                        {/if}
-                      </p>
-                    {/if}
-                  {/if}
-                {:else if !selectedSubEnvironment && environmentVariables.length > 0}
-                  <p class="mb-3 text-xs text-amber-600">
-                    Select a sub-environment to see preview values for variables
-                  </p>
-                {/if}
+              {#if parameterMappings[index].source_type === 'loop_value'}
+                <p class="mb-3 text-xs text-gray-500">
+                  Uses the selected source value from the selected loop for each iteration.
+                </p>
               {:else if parameterMappings[index].source_type === 'previous_output' && parameterMappings[index].source_flow_step && parameterMappings[index].source_output_field}
                 <p class="mb-3 text-xs text-gray-500">
                   Selected: <strong>Step {parameterMappings[index].source_flow_step}</strong> →
                   <strong>{parameterMappings[index].source_output_field}</strong>
-                </p>
-              {:else if parameterMappings[index].source_type === 'loop_value'}
-                <p class="mb-3 text-xs text-gray-500">
-                  Uses the current primitive value for each loop iteration.
                 </p>
               {/if}
             </div>
@@ -910,25 +1119,11 @@
         </div>
       {:else}
         <div class="py-8 text-center">
-          <svg
-            class="mx-auto mb-4 h-12 w-12 text-gray-400"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-            />
-          </svg>
           <h3 class="mb-2 text-lg font-medium text-gray-900">No Parameters</h3>
           <p class="text-gray-600">This flow doesn't have any configurable parameters.</p>
         </div>
       {/if}
 
-      <!-- Actions -->
       <div class="mt-8 flex justify-end space-x-3 border-t border-gray-200 pt-6">
         <button
           type="button"

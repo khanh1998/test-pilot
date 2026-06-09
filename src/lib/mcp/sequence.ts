@@ -1,11 +1,14 @@
 import { defaultTemplateFunctions } from '$lib/template/functions';
 import type { TestFlow } from '$lib/types/test-flow';
 import type {
+  FlowLoopDefinition,
+  FlowLoopSource,
   FlowLoopConfig,
   FlowParameterMapping,
   FlowSequence,
   FlowSequenceStep
 } from '$lib/types/flow_sequence';
+import { normalizeFlowLoopConfig } from '$lib/types/flow_sequence';
 
 export interface SequenceValidationResult {
   valid: boolean;
@@ -31,6 +34,20 @@ function isPrimitiveOutputType(type: string | undefined): boolean {
 
 function isPrimitiveArrayOutput(output: ReturnType<typeof getFlowOutputDefinition>): boolean {
   return output?.type === 'array' && isPrimitiveOutputType(output.arrayItemType);
+}
+
+function flattenLoopDefinitions(root?: FlowLoopDefinition): FlowLoopDefinition[] {
+  if (!root) return [];
+  return [root, ...(root.children ?? []).flatMap((child) => flattenLoopDefinitions(child))];
+}
+
+function getLoopDepth(loop: FlowLoopDefinition): number {
+  const childDepth = Math.max(0, ...(loop.children ?? []).map(getLoopDepth));
+  return 1 + childDepth;
+}
+
+function hasDuplicate(values: string[]): boolean {
+  return new Set(values).size !== values.length;
 }
 
 function getFlowParameterNames(flow: TestFlow): Set<string> {
@@ -152,63 +169,22 @@ export function validateFlowSequence(
 
     const parameterNames = getFlowParameterNames(flow);
     const mappings = step.parameter_mappings ?? [];
-    const loopConfig = step.loop_config;
+    const loopConfig = normalizeFlowLoopConfig(step.loop_config);
+
+    const loopDefinitions = flattenLoopDefinitions(loopConfig.root);
 
     if (loopConfig?.enabled) {
-      if (loopConfig.source_type === 'fixed_count') {
-        if (!Number.isInteger(loopConfig.count) || Number(loopConfig.count) < 1) {
-          errors.push(`Sequence step ${step.step_order} loop count must be a positive integer.`);
-        }
-      } else if (loopConfig.source_type === 'environment_variable_array') {
-        if (!loopConfig.source_value) {
-          errors.push(
-            `Sequence step ${step.step_order} loop source environment variable is missing.`
-          );
-        } else if (
-          environmentVariableNames.size > 0 &&
-          !environmentVariableNames.has(loopConfig.source_value)
-        ) {
-          errors.push(
-            `Sequence step ${step.step_order} loops from unknown environment variable "${loopConfig.source_value}".`
-          );
-        }
-      } else if (loopConfig.source_type === 'previous_output_array') {
-        if (loopConfig.source_flow_step === undefined) {
-          errors.push(`Sequence step ${step.step_order} loop source_flow_step is missing.`);
-        } else if (!stepOrders.has(loopConfig.source_flow_step)) {
-          errors.push(
-            `Sequence step ${step.step_order} loops from missing flow step ${loopConfig.source_flow_step}.`
-          );
-        } else if (loopConfig.source_flow_step >= step.step_order) {
-          errors.push(
-            `Sequence step ${step.step_order} loops from step ${loopConfig.source_flow_step}, which does not run earlier.`
-          );
-        } else {
-          const sourceStep = steps.find((item) => item.step_order === loopConfig.source_flow_step);
-          const sourceFlow = sourceStep ? flowsById.get(sourceStep.test_flow_id) : undefined;
-          const outputField = loopConfig.source_output_field || loopConfig.source_value;
-          if (!outputField) {
-            errors.push(`Sequence step ${step.step_order} loop output field is missing.`);
-          } else if (sourceFlow && !getFlowOutputs(sourceFlow).has(outputField)) {
-            errors.push(
-              `Sequence step ${step.step_order} loops from missing output "${outputField}" on flow step ${loopConfig.source_flow_step}.`
-            );
-          } else if (sourceFlow && sourceStep) {
-            const outputDefinition = getFlowOutputDefinition(sourceFlow, outputField);
-            const sourceOutputIsPrimitiveArray =
-              sourceStep.loop_config?.enabled && isPrimitiveOutputType(outputDefinition?.type);
-            const sourceOutputIsDeclaredPrimitiveArray = isPrimitiveArrayOutput(outputDefinition);
-
-            if (!sourceOutputIsPrimitiveArray && !sourceOutputIsDeclaredPrimitiveArray) {
-              errors.push(
-                `Sequence step ${step.step_order} loop source "${outputField}" must be a primitive array output or a primitive output from a looped previous step.`
-              );
-            }
-          }
-        }
+      if (!loopConfig.root) {
+        errors.push(`Sequence step ${step.step_order} loop mode requires a root loop.`);
       } else {
-        errors.push(
-          `Sequence step ${step.step_order} uses unsupported loop source_type "${loopConfig.source_type}".`
+        validateLoopTree(
+          loopConfig.root,
+          step,
+          steps,
+          stepOrders,
+          flowsById,
+          environmentVariableNames,
+          errors
         );
       }
     }
@@ -268,6 +244,27 @@ export function validateFlowSequence(
           errors.push(
             `Sequence step ${step.step_order} maps "${mapping.flow_parameter_name}" from loop_value but loop mode is not enabled.`
           );
+        } else {
+          const fallbackLoop = loopDefinitions.length === 1 ? loopDefinitions[0] : undefined;
+          const fallbackSource =
+            fallbackLoop?.sources.length === 1 ? fallbackLoop.sources[0] : undefined;
+          const loopId = mapping.loop_id || fallbackLoop?.id;
+          const loopSourceId = mapping.loop_source_id || fallbackSource?.id;
+
+          if (!loopId || !loopSourceId) {
+            errors.push(
+              `Sequence step ${step.step_order} maps "${mapping.flow_parameter_name}" from loop_value but loop_id or loop_source_id is missing.`
+            );
+            continue;
+          }
+
+          const targetLoop = loopDefinitions.find((loop) => loop.id === loopId);
+          const targetSource = targetLoop?.sources.find((source) => source.id === loopSourceId);
+          if (!targetLoop || !targetSource) {
+            errors.push(
+              `Sequence step ${step.step_order} maps "${mapping.flow_parameter_name}" from an unknown loop value.`
+            );
+          }
         }
       } else {
         errors.push(
@@ -293,6 +290,148 @@ export function validateFlowSequence(
   };
 }
 
+function validateLoopTree(
+  root: FlowLoopDefinition,
+  step: FlowSequenceStep,
+  steps: FlowSequenceStep[],
+  stepOrders: Set<number>,
+  flowsById: Map<number, TestFlow>,
+  environmentVariableNames: Set<string>,
+  errors: string[]
+) {
+  const loops = flattenLoopDefinitions(root);
+  if (getLoopDepth(root) > 2) {
+    errors.push(`Sequence step ${step.step_order} loop nesting depth cannot exceed 2.`);
+  }
+  if ((root.children ?? []).length > 1) {
+    errors.push(`Sequence step ${step.step_order} loop can have at most one nested loop.`);
+  }
+  for (const loop of loops) {
+    if ((loop.children ?? []).length > 1) {
+      errors.push(
+        `Sequence step ${step.step_order} loop "${loop.name}" can have at most one child.`
+      );
+    }
+  }
+  if (hasDuplicate(loops.map((loop) => loop.name).filter(Boolean))) {
+    errors.push(`Sequence step ${step.step_order} loop names must be unique.`);
+  }
+
+  for (const loop of loops) {
+    if (!loop.name?.trim()) {
+      errors.push(`Sequence step ${step.step_order} has a loop with missing name.`);
+    }
+    if (!loop.sources?.length) {
+      errors.push(
+        `Sequence step ${step.step_order} loop "${loop.name}" must have at least one source.`
+      );
+      continue;
+    }
+    if (hasDuplicate(loop.sources.map((source) => source.alias).filter(Boolean))) {
+      errors.push(
+        `Sequence step ${step.step_order} loop "${loop.name}" source aliases must be unique.`
+      );
+    }
+    for (const source of loop.sources) {
+      validateLoopSource(
+        source,
+        loop,
+        step,
+        steps,
+        stepOrders,
+        flowsById,
+        environmentVariableNames,
+        errors
+      );
+    }
+  }
+}
+
+function validateLoopSource(
+  source: FlowLoopSource,
+  loop: FlowLoopDefinition,
+  step: FlowSequenceStep,
+  steps: FlowSequenceStep[],
+  stepOrders: Set<number>,
+  flowsById: Map<number, TestFlow>,
+  environmentVariableNames: Set<string>,
+  errors: string[]
+) {
+  if (!source.alias?.trim()) {
+    errors.push(
+      `Sequence step ${step.step_order} loop "${loop.name}" has a source with missing alias.`
+    );
+  }
+  if (source.source_type === 'fixed_count') {
+    if (!Number.isInteger(source.count) || Number(source.count) < 1) {
+      errors.push(
+        `Sequence step ${step.step_order} loop source "${source.alias}" count must be a positive integer.`
+      );
+    }
+    return;
+  }
+  if (source.source_type === 'environment_variable_array') {
+    if (!source.source_value) {
+      errors.push(
+        `Sequence step ${step.step_order} loop source "${source.alias}" environment variable is missing.`
+      );
+    } else if (
+      environmentVariableNames.size > 0 &&
+      !environmentVariableNames.has(source.source_value)
+    ) {
+      errors.push(
+        `Sequence step ${step.step_order} loop source "${source.alias}" uses unknown environment variable "${source.source_value}".`
+      );
+    }
+    return;
+  }
+  if (source.source_type !== 'previous_output_array') {
+    errors.push(
+      `Sequence step ${step.step_order} loop source "${source.alias}" uses unsupported source_type "${source.source_type}".`
+    );
+    return;
+  }
+
+  if (source.source_flow_step === undefined) {
+    errors.push(
+      `Sequence step ${step.step_order} loop source "${source.alias}" source_flow_step is missing.`
+    );
+  } else if (!stepOrders.has(source.source_flow_step)) {
+    errors.push(
+      `Sequence step ${step.step_order} loop source "${source.alias}" uses missing flow step ${source.source_flow_step}.`
+    );
+  } else if (source.source_flow_step >= step.step_order) {
+    errors.push(
+      `Sequence step ${step.step_order} loop source "${source.alias}" uses step ${source.source_flow_step}, which does not run earlier.`
+    );
+  } else {
+    const sourceStep = steps.find((item) => item.step_order === source.source_flow_step);
+    const sourceFlow = sourceStep ? flowsById.get(sourceStep.test_flow_id) : undefined;
+    const outputField = source.source_output_field || source.source_value;
+    if (!outputField) {
+      errors.push(
+        `Sequence step ${step.step_order} loop source "${source.alias}" output field is missing.`
+      );
+    } else if (sourceFlow && !getFlowOutputs(sourceFlow).has(outputField)) {
+      errors.push(
+        `Sequence step ${step.step_order} loop source "${source.alias}" uses missing output "${outputField}" on flow step ${source.source_flow_step}.`
+      );
+    } else if (sourceFlow && sourceStep) {
+      const outputDefinition = getFlowOutputDefinition(sourceFlow, outputField);
+      const sourceOutputIsPrimitiveArray =
+        sourceStep.loop_config?.enabled &&
+        (isPrimitiveOutputType(outputDefinition?.type) || isPrimitiveArrayOutput(outputDefinition));
+      const sourceOutputIsDeclaredPrimitiveArray = isPrimitiveArrayOutput(outputDefinition);
+
+      if (!sourceOutputIsPrimitiveArray && !sourceOutputIsDeclaredPrimitiveArray) {
+        errors.push(
+          `Sequence step ${step.step_order} loop source "${source.alias}" must be a primitive array output or a primitive output from a looped previous step.`
+        );
+      }
+    }
+  }
+}
+
 export function explainFlowSequence(
   sequence: FlowSequence,
   flowsById: Map<number, TestFlow>
@@ -309,14 +448,9 @@ export function explainFlowSequence(
     if (!flow) {
       warnings.push(`Step ${step.step_order} references missing flow ${step.test_flow_id}.`);
     }
-    const loopConfig = step.loop_config;
-    const loopText = loopConfig?.enabled
-      ? loopConfig.source_type === 'fixed_count'
-        ? ` (loop ${loopConfig.count ?? 0} time${loopConfig.count === 1 ? '' : 's'})`
-        : loopConfig.source_type === 'environment_variable_array'
-          ? ` (loop env ${loopConfig.source_value})`
-          : ` (loop output ${loopConfig.source_output_field || loopConfig.source_value} from step ${loopConfig.source_flow_step})`
-      : '';
+    const loopConfig = normalizeFlowLoopConfig(step.loop_config);
+    const loopText =
+      loopConfig?.enabled && loopConfig.root ? ` (loop ${explainLoop(loopConfig.root)})` : '';
     return `Step ${step.step_order}: ${flow?.name ?? `Flow ${step.test_flow_id}`}${loopText}`;
   });
 
@@ -326,7 +460,15 @@ export function explainFlowSequence(
         return `Step ${step.step_order}.${mapping.flow_parameter_name} <= output ${mapping.source_output_field || mapping.source_value} from step ${mapping.source_flow_step}`;
       }
       if (mapping.source_type === 'loop_value') {
-        return `Step ${step.step_order}.${mapping.flow_parameter_name} <= current loop value`;
+        const loops = flattenLoopDefinitions(normalizeFlowLoopConfig(step.loop_config).root);
+        const fallbackLoop = loops.length === 1 ? loops[0] : undefined;
+        const fallbackSource =
+          fallbackLoop?.sources.length === 1 ? fallbackLoop.sources[0] : undefined;
+        const loop = loops.find((item) => item.id === (mapping.loop_id || fallbackLoop?.id));
+        const source = loop?.sources.find(
+          (item) => item.id === (mapping.loop_source_id || fallbackSource?.id)
+        );
+        return `Step ${step.step_order}.${mapping.flow_parameter_name} <= loop ${loop?.name ?? mapping.loop_id}.${source?.alias ?? mapping.loop_source_id}`;
       }
       return `Step ${step.step_order}.${mapping.flow_parameter_name} <= ${mapping.source_type} ${mapping.source_value}`;
     })
@@ -338,4 +480,11 @@ export function explainFlowSequence(
     mappings,
     warnings
   };
+}
+
+function explainLoop(loop: FlowLoopDefinition): string {
+  const aliases = loop.sources.map((source) => source.alias).join(',');
+  const current = `${loop.name}[${aliases}]`;
+  const child = loop.children?.[0];
+  return child ? `${current} -> ${explainLoop(child)}` : current;
 }

@@ -1,6 +1,16 @@
-import type { ResolvedFlowExecution } from './types';
+import type {
+  ResolvedFlowExecution,
+  SequenceLoopExecutionContext,
+  SequenceResolvedLoop
+} from './types';
 import type { TestFlowData, FlowStep, StepEndpoint } from '$lib/components/test-flows/types';
-import type { FlowSequenceStep, FlowParameterMapping } from '$lib/types/flow_sequence';
+import type {
+  FlowLoopDefinition,
+  FlowLoopSource,
+  FlowSequenceStep,
+  FlowParameterMapping
+} from '$lib/types/flow_sequence';
+import { normalizeFlowLoopConfig } from '$lib/types/flow_sequence';
 import type { Environment } from '$lib/types/environment';
 import type { TestFlow } from '$lib/types/test-flow';
 import type { Project } from '$lib/types/project';
@@ -53,7 +63,7 @@ export class SequenceParameterResolver {
       message: string,
       details?: string
     ) => void,
-    loopValue?: string | number | boolean
+    loopContext?: SequenceLoopExecutionContext
   ): ResolvedFlowExecution {
     try {
       if (!flow.flowJson) {
@@ -113,7 +123,7 @@ export class SequenceParameterResolver {
             accumulatedOutputs,
             environmentVariables,
             onLog,
-            loopValue
+            loopContext
           );
 
           if (resolvedValue !== undefined) {
@@ -171,7 +181,7 @@ export class SequenceParameterResolver {
       message: string,
       details?: string
     ) => void,
-    loopValue?: string | number | boolean
+    loopContext?: SequenceLoopExecutionContext
   ): unknown {
     try {
       switch (mapping.source_type) {
@@ -225,6 +235,27 @@ export class SequenceParameterResolver {
           return mapping.source_value;
 
         case 'loop_value':
+          let loopId = mapping.loop_id;
+          let loopSourceId = mapping.loop_source_id;
+          if (!loopId || !loopSourceId) {
+            const loopIds = Object.keys(loopContext?.valuesByLoopId ?? {});
+            const fallbackLoopId = loopIds.length === 1 ? loopIds[0] : undefined;
+            const sourceIds = fallbackLoopId
+              ? Object.keys(loopContext?.valuesByLoopId[fallbackLoopId]?.valuesBySourceId ?? {})
+              : [];
+            loopId = fallbackLoopId;
+            loopSourceId = sourceIds.length === 1 ? sourceIds[0] : undefined;
+          }
+
+          if (!loopId || !loopSourceId) {
+            onLog(
+              'warning',
+              `Loop value mapping for parameter '${mapping.flow_parameter_name}' is missing loop_id or loop_source_id`
+            );
+            return undefined;
+          }
+
+          const loopValue = loopContext?.valuesByLoopId[loopId]?.valuesBySourceId[loopSourceId];
           if (loopValue !== undefined) {
             onLog('debug', `Loop value resolved for parameter '${mapping.flow_parameter_name}'`);
             return loopValue;
@@ -232,7 +263,7 @@ export class SequenceParameterResolver {
 
           onLog(
             'warning',
-            `Loop value requested for parameter '${mapping.flow_parameter_name}', but this flow is not running in loop mode`
+            `Loop value requested for parameter '${mapping.flow_parameter_name}', but no matching loop value is available`
           );
           return undefined;
 
@@ -307,7 +338,7 @@ export class SequenceParameterResolver {
     }
   }
 
-  static resolveLoopValues(
+  static resolveLoopPlan(
     sequenceStep: FlowSequenceStep,
     accumulatedOutputs: Record<string, unknown>,
     environmentVariables: Record<string, unknown>,
@@ -316,67 +347,127 @@ export class SequenceParameterResolver {
       message: string,
       details?: string
     ) => void
-  ): Array<string | number | boolean> {
-    const loopConfig = sequenceStep.loop_config;
+  ): SequenceResolvedLoop | null {
+    const loopConfig = normalizeFlowLoopConfig(sequenceStep.loop_config);
 
-    if (!loopConfig?.enabled) {
-      return [];
+    if (!loopConfig?.enabled || !loopConfig.root) {
+      return null;
     }
 
-    switch (loopConfig.source_type) {
+    return this.resolveLoopDefinition(
+      loopConfig.root,
+      accumulatedOutputs,
+      environmentVariables,
+      onLog
+    );
+  }
+
+  private static resolveLoopDefinition(
+    loop: FlowLoopDefinition,
+    accumulatedOutputs: Record<string, unknown>,
+    environmentVariables: Record<string, unknown>,
+    onLog: (
+      level: 'info' | 'debug' | 'error' | 'warning',
+      message: string,
+      details?: string
+    ) => void
+  ): SequenceResolvedLoop {
+    if (!loop.sources?.length) {
+      throw new Error(`Loop '${loop.name}' must have at least one source`);
+    }
+
+    const resolvedSources = loop.sources.map((source) => ({
+      source,
+      values: this.resolveLoopSource(source, accumulatedOutputs, environmentVariables, onLog)
+    }));
+    const expectedLength = resolvedSources[0].values.length;
+
+    for (const { source, values } of resolvedSources.slice(1)) {
+      if (values.length !== expectedLength) {
+        throw new Error(
+          `Loop '${loop.name}' zip source '${source.alias}' has ${values.length} value(s), expected ${expectedLength}`
+        );
+      }
+    }
+
+    const rows = Array.from({ length: expectedLength }, (_, index) => ({
+      loopId: loop.id,
+      loopName: loop.name,
+      index,
+      valuesBySourceId: Object.fromEntries(
+        resolvedSources.map(({ source, values }) => [source.id, values[index]])
+      ),
+      sourceAliases: Object.fromEntries(loop.sources.map((source) => [source.id, source.alias]))
+    }));
+
+    return {
+      loopId: loop.id,
+      loopName: loop.name,
+      rows,
+      children: (loop.children ?? []).map((child) =>
+        this.resolveLoopDefinition(child, accumulatedOutputs, environmentVariables, onLog)
+      )
+    };
+  }
+
+  private static resolveLoopSource(
+    loopSource: FlowLoopSource,
+    accumulatedOutputs: Record<string, unknown>,
+    environmentVariables: Record<string, unknown>,
+    onLog: (
+      level: 'info' | 'debug' | 'error' | 'warning',
+      message: string,
+      details?: string
+    ) => void
+  ): Array<string | number | boolean> {
+    switch (loopSource.source_type) {
       case 'fixed_count': {
-        const count = Number(loopConfig.count);
+        const count = Number(loopSource.count);
         if (!Number.isInteger(count) || count < 1) {
-          throw new Error(
-            `Loop count for step ${sequenceStep.step_order} must be a positive integer`
-          );
+          throw new Error(`Loop source '${loopSource.alias}' count must be a positive integer`);
         }
 
         return Array.from({ length: count }, (_, index) => index);
       }
 
       case 'environment_variable_array': {
-        if (!loopConfig.source_value) {
-          throw new Error(
-            `Loop environment variable is required for step ${sequenceStep.step_order}`
-          );
+        if (!loopSource.source_value) {
+          throw new Error(`Loop source '${loopSource.alias}' environment variable is required`);
         }
 
-        const value = environmentVariables[loopConfig.source_value];
+        const value = environmentVariables[loopSource.source_value];
         return this.validatePrimitiveArray(
           value,
-          `environment variable '${loopConfig.source_value}'`
+          `environment variable '${loopSource.source_value}'`
         );
       }
 
       case 'previous_output_array': {
-        if (!loopConfig.source_flow_step) {
-          throw new Error(`Loop source flow step is required for step ${sequenceStep.step_order}`);
+        if (!loopSource.source_flow_step) {
+          throw new Error(`Loop source '${loopSource.alias}' source flow step is required`);
         }
 
-        const outputKey = `flow_${loopConfig.source_flow_step}`;
+        const outputKey = `flow_${loopSource.source_flow_step}`;
         const flowOutputs = accumulatedOutputs[outputKey] as Record<string, unknown> | undefined;
 
         if (!flowOutputs) {
-          throw new Error(`No outputs found from flow step ${loopConfig.source_flow_step}`);
+          throw new Error(`No outputs found from flow step ${loopSource.source_flow_step}`);
         }
 
-        const outputField = loopConfig.source_output_field || loopConfig.source_value;
+        const outputField = loopSource.source_output_field || loopSource.source_value;
         if (!outputField) {
-          throw new Error(
-            `Loop source output field is required for step ${sequenceStep.step_order}`
-          );
+          throw new Error(`Loop source '${loopSource.alias}' output field is required`);
         }
 
         const value = this.extractValueFromObject(flowOutputs, outputField, onLog);
         return this.validatePrimitiveArray(
           value,
-          `output '${outputField}' from step ${loopConfig.source_flow_step}`
+          `output '${outputField}' from step ${loopSource.source_flow_step}`
         );
       }
 
       default:
-        throw new Error(`Unknown loop source type: ${loopConfig.source_type}`);
+        throw new Error(`Unknown loop source type: ${loopSource.source_type}`);
     }
   }
 

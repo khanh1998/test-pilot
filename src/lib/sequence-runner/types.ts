@@ -54,13 +54,16 @@ export interface SequenceLoopResult {
   totalIterations: number;
   completedIterations: number;
   failedIterationIndex?: number;
-  iterationValues: Array<string | number | boolean>;
+  loopNames: Record<string, string>;
+  sourceAliases: Record<string, Record<string, string>>;
   iterations: SequenceLoopIterationResult[];
 }
 
 export interface SequenceLoopIterationResult {
   index: number;
-  value: string | number | boolean;
+  label: string;
+  path: SequenceLoopIterationPath[];
+  valuesByLoopId: Record<string, SequenceLoopContextValue>;
   success: boolean;
   matchedExpectation: boolean;
   error?: unknown;
@@ -68,6 +71,33 @@ export interface SequenceLoopIterationResult {
   responses: Record<string, unknown>;
   parameterValues: Record<string, unknown>;
   executionTime: number;
+}
+
+export interface SequenceLoopIterationPath {
+  loopId: string;
+  loopName: string;
+  index: number;
+  valuesBySourceId: Record<string, string | number | boolean>;
+  sourceAliases: Record<string, string>;
+}
+
+export interface SequenceLoopContextValue {
+  loopName: string;
+  index: number;
+  valuesBySourceId: Record<string, string | number | boolean>;
+  sourceAliases: Record<string, string>;
+}
+
+export interface SequenceLoopExecutionContext {
+  path: SequenceLoopIterationPath[];
+  valuesByLoopId: Record<string, SequenceLoopContextValue>;
+}
+
+export interface SequenceResolvedLoop {
+  loopId: string;
+  loopName: string;
+  rows: SequenceLoopIterationPath[];
+  children: SequenceResolvedLoop[];
 }
 
 export interface SequenceExecutionState {

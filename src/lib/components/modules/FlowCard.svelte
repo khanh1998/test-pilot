@@ -10,6 +10,7 @@
   import type { TestFlow } from '../../types/test-flow.js';
   import type { SequenceFlowResult } from '$lib/sequence-runner/types';
   import type { FlowSequenceStep } from '../../types/flow_sequence.js';
+  import { normalizeFlowLoopConfig } from '../../types/flow_sequence.js';
 
   interface Props {
     [key: string]: unknown;
@@ -137,19 +138,18 @@
   }
 
   function getLoopSummary(step: FlowSequenceStep | undefined): string {
-    const loopConfig = step?.loop_config;
+    const loopConfig = normalizeFlowLoopConfig(step?.loop_config);
     if (!loopConfig?.enabled) return '';
 
-    if (loopConfig.source_type === 'fixed_count') {
-      return `Loop: ${loopConfig.count || 0}`;
-    }
+    const formatLoop = (loop: NonNullable<typeof loopConfig.root>): string => {
+      const aliases = (loop.sources || []).map((source) => source.alias || '?').join(',');
+      const current = `${loop.name || 'loop'}[${aliases || '?'}]`;
+      const child = loop.children?.[0];
+      return child ? `${current} -> ${formatLoop(child)}` : current;
+    };
 
-    if (loopConfig.source_type === 'environment_variable_array') {
-      return `Loop: env.${loopConfig.source_value || '?'}`;
-    }
-
-    if (loopConfig.source_type === 'previous_output_array') {
-      return `Loop: Step ${loopConfig.source_flow_step || '?'}.${loopConfig.source_output_field || loopConfig.source_value || '?'}[]`;
+    if (loopConfig.root) {
+      return `Loop: ${formatLoop(loopConfig.root)}`;
     }
 
     return 'Loop';

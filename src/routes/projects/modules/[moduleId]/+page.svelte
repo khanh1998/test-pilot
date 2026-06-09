@@ -998,14 +998,19 @@
             sequenceStep?.loop_config?.enabled &&
             (outputType === 'string' || outputType === 'number' || outputType === 'boolean');
           const loopedArrayOutput = sequenceStep?.loop_config?.enabled && outputType === 'array';
+          const loopedPrimitiveArrayOutput =
+            loopedArrayOutput &&
+            (output.arrayItemType === 'string' ||
+              output.arrayItemType === 'number' ||
+              output.arrayItemType === 'boolean');
 
           flowOutputs.push({
             name: output.name,
             type: loopedPrimitiveOutput ? 'array' : outputType,
             arrayItemType: loopedPrimitiveOutput
               ? outputType
-              : loopedArrayOutput
-                ? 'unknown'
+              : loopedPrimitiveArrayOutput
+                ? output.arrayItemType
                 : output.type === 'array'
                   ? output.arrayItemType
                   : undefined,

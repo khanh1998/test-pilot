@@ -176,7 +176,7 @@
           </div>
           {#if selectedIteration}
             <span class="text-xs text-gray-500">
-              Value: <span class="font-mono">{String(selectedIteration.value)}</span>
+              <span class="font-mono">{selectedIteration.label}</span>
             </span>
           {/if}
         </div>
@@ -189,7 +189,7 @@
                 ? 'border-blue-500 bg-blue-50 text-blue-700'
                 : getIterationStatusClass(iteration.success, iteration.matchedExpectation)}"
               onclick={() => (selectedIterationIndex = iteration.index)}
-              title={`Value: ${String(iteration.value)}`}
+              title={iteration.label}
             >
               #{iteration.index + 1}
             </button>
@@ -350,9 +350,9 @@
                   </dd>
                 </div>
                 <div>
-                  <dt class="text-xs font-medium text-indigo-600">Values</dt>
+                  <dt class="text-xs font-medium text-indigo-600">Loops</dt>
                   <dd class="mt-1 text-sm text-indigo-900">
-                    {flowResult.loop.iterationValues.length}
+                    {Object.keys(flowResult.loop.loopNames).length}
                   </dd>
                 </div>
               </dl>

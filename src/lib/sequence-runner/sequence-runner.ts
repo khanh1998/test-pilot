@@ -1,4 +1,11 @@
-import type { SequenceRunnerOptions, SequenceExecutionState, SequenceFlowResult } from './types';
+import type {
+  SequenceRunnerOptions,
+  SequenceExecutionState,
+  SequenceFlowResult,
+  SequenceLoopExecutionContext,
+  SequenceLoopIterationPath,
+  SequenceResolvedLoop
+} from './types';
 import type { TestFlow } from '$lib/types/test-flow';
 import type { FlowSequenceStep } from '$lib/types/flow_sequence';
 import { FlowRunner, type FlowRunnerOptions } from '$lib/flow-runner';
@@ -55,7 +62,6 @@ export class SequenceRunner {
 
         // Execute this flow
         const flowResult = await this.executeFlow(flow, sequenceStep, i);
-        console.log('Flow result: ', flowResult);
         this.state.flowResults.push(flowResult);
 
         // Check if flow execution failed and evaluate against expectations
@@ -271,7 +277,7 @@ export class SequenceRunner {
     flowIndex: number,
     environmentVariables: Record<string, unknown>,
     apiHosts: Record<string, string>,
-    loopValue?: string | number | boolean
+    loopContext?: SequenceLoopExecutionContext
   ): Promise<SequenceFlowResult> {
     const startTime = performance.now();
 
@@ -283,7 +289,7 @@ export class SequenceRunner {
         environmentVariables,
         apiHosts,
         this.options.onLog,
-        loopValue
+        loopContext
       );
 
       // Variables to capture flow execution results
@@ -383,31 +389,33 @@ export class SequenceRunner {
     apiHosts: Record<string, string>,
     startTime: number
   ): Promise<SequenceFlowResult> {
-    const loopValues = SequenceParameterResolver.resolveLoopValues(
+    const loopPlan = SequenceParameterResolver.resolveLoopPlan(
       sequenceStep,
       this.state.accumulatedOutputs,
       environmentVariables,
       this.options.onLog
     );
+    const loopContexts = loopPlan ? this.buildLoopExecutionContexts(loopPlan) : [];
 
     this.options.onLog(
       'info',
       `Loop mode enabled for flow ${flow.name}`,
-      `${loopValues.length} iteration(s)`
+      `${loopContexts.length} iteration(s)`
     );
 
     const iterationResults: SequenceFlowResult[] = [];
 
-    for (let iterationIndex = 0; iterationIndex < loopValues.length; iterationIndex++) {
+    for (let iterationIndex = 0; iterationIndex < loopContexts.length; iterationIndex++) {
       if (this.state.shouldStopExecution) {
         this.options.onLog('info', 'Loop execution stopped by user');
         break;
       }
 
+      const loopContext = loopContexts[iterationIndex];
       this.options.onLog(
         'info',
-        `Running iteration ${iterationIndex + 1}/${loopValues.length} for flow ${flow.name}`,
-        `Loop value: ${String(loopValues[iterationIndex])}`
+        `Running iteration ${iterationIndex + 1}/${loopContexts.length} for flow ${flow.name}`,
+        this.formatLoopContextLabel(loopContext)
       );
 
       const iterationResult = await this.executeSingleFlowRun(
@@ -416,7 +424,7 @@ export class SequenceRunner {
         flowIndex,
         environmentVariables,
         apiHosts,
-        loopValues[iterationIndex]
+        loopContext
       );
 
       iterationResults.push(iterationResult);
@@ -426,28 +434,78 @@ export class SequenceRunner {
           flow,
           sequenceStep,
           startTime,
-          loopValues,
+          loopContexts,
           iterationResults,
           iterationIndex
         );
       }
     }
 
-    return this.createLoopResult(flow, sequenceStep, startTime, loopValues, iterationResults);
+    return this.createLoopResult(flow, sequenceStep, startTime, loopContexts, iterationResults);
+  }
+
+  private buildLoopExecutionContexts(loop: SequenceResolvedLoop): SequenceLoopExecutionContext[] {
+    const appendLoop = (
+      currentLoop: SequenceResolvedLoop,
+      path: SequenceLoopIterationPath[],
+      valuesByLoopId: SequenceLoopExecutionContext['valuesByLoopId']
+    ): SequenceLoopExecutionContext[] => {
+      const contexts: SequenceLoopExecutionContext[] = [];
+
+      for (const row of currentLoop.rows) {
+        const nextPath = [...path, row];
+        const nextValuesByLoopId = {
+          ...valuesByLoopId,
+          [row.loopId]: {
+            loopName: row.loopName,
+            index: row.index,
+            valuesBySourceId: row.valuesBySourceId,
+            sourceAliases: row.sourceAliases
+          }
+        };
+
+        if (currentLoop.children.length === 0) {
+          contexts.push({ path: nextPath, valuesByLoopId: nextValuesByLoopId });
+          continue;
+        }
+
+        for (const child of currentLoop.children) {
+          contexts.push(...appendLoop(child, nextPath, nextValuesByLoopId));
+        }
+      }
+
+      return contexts;
+    };
+
+    return appendLoop(loop, [], {});
+  }
+
+  private formatLoopContextLabel(context: SequenceLoopExecutionContext): string {
+    return context.path
+      .map((pathItem) => {
+        const values = Object.entries(pathItem.valuesBySourceId)
+          .map(
+            ([sourceId, value]) =>
+              `${pathItem.sourceAliases[sourceId] || sourceId}=${String(value)}`
+          )
+          .join(', ');
+        return `${pathItem.loopName}[${pathItem.index + 1}]: ${values}`;
+      })
+      .join(' / ');
   }
 
   private createLoopResult(
     flow: TestFlow,
     sequenceStep: FlowSequenceStep,
     startTime: number,
-    loopValues: Array<string | number | boolean>,
+    loopContexts: SequenceLoopExecutionContext[],
     iterationResults: SequenceFlowResult[],
     failedIterationIndex?: number
   ): SequenceFlowResult {
     const lastResult = iterationResults[iterationResults.length - 1];
     const completedResults = iterationResults.filter((result) => result.matchedExpectation);
     const success =
-      iterationResults.length === loopValues.length &&
+      iterationResults.length === loopContexts.length &&
       iterationResults.every((result) => result.success);
     const expectsError = sequenceStep.expects_error ?? false;
     const endTime = performance.now();
@@ -468,13 +526,16 @@ export class SequenceRunner {
       executionTime: Math.round(endTime - startTime),
       loop: {
         enabled: true,
-        totalIterations: loopValues.length,
+        totalIterations: loopContexts.length,
         completedIterations: completedResults.length,
         failedIterationIndex,
-        iterationValues: loopValues,
+        loopNames: this.collectLoopNames(loopContexts),
+        sourceAliases: this.collectSourceAliases(loopContexts),
         iterations: iterationResults.map((result, index) => ({
           index,
-          value: loopValues[index],
+          label: loopContexts[index] ? this.formatLoopContextLabel(loopContexts[index]) : '',
+          path: loopContexts[index]?.path ?? [],
+          valuesByLoopId: loopContexts[index]?.valuesByLoopId ?? {},
           success: result.success,
           matchedExpectation: result.matchedExpectation,
           error: result.error,
@@ -487,6 +548,31 @@ export class SequenceRunner {
     };
   }
 
+  private collectLoopNames(loopContexts: SequenceLoopExecutionContext[]): Record<string, string> {
+    const loopNames: Record<string, string> = {};
+    for (const context of loopContexts) {
+      for (const pathItem of context.path) {
+        loopNames[pathItem.loopId] = pathItem.loopName;
+      }
+    }
+    return loopNames;
+  }
+
+  private collectSourceAliases(
+    loopContexts: SequenceLoopExecutionContext[]
+  ): Record<string, Record<string, string>> {
+    const sourceAliases: Record<string, Record<string, string>> = {};
+    for (const context of loopContexts) {
+      for (const pathItem of context.path) {
+        sourceAliases[pathItem.loopId] = {
+          ...(sourceAliases[pathItem.loopId] ?? {}),
+          ...pathItem.sourceAliases
+        };
+      }
+    }
+    return sourceAliases;
+  }
+
   private aggregateRecords(records: Array<Record<string, unknown>>): Record<string, unknown> {
     const aggregated: Record<string, unknown[]> = {};
 
@@ -495,7 +581,11 @@ export class SequenceRunner {
         if (!aggregated[key]) {
           aggregated[key] = [];
         }
-        aggregated[key].push(value);
+        if (Array.isArray(value)) {
+          aggregated[key].push(...value);
+        } else {
+          aggregated[key].push(value);
+        }
       }
     }
 

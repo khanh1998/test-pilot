@@ -274,13 +274,25 @@ describe('SequenceParameterResolver', () => {
           {
             flow_parameter_name: 'user_email',
             source_type: 'loop_value',
-            source_value: 'value'
+            source_value: 'email',
+            loop_id: 'loop_user',
+            loop_source_id: 'source_email'
           }
         ],
         loop_config: {
           enabled: true,
-          source_type: 'environment_variable_array',
-          source_value: 'emails'
+          root: {
+            id: 'loop_user',
+            name: 'user',
+            sources: [
+              {
+                id: 'source_email',
+                alias: 'email',
+                source_type: 'environment_variable_array',
+                source_value: 'emails'
+              }
+            ]
+          }
         }
       };
 
@@ -291,11 +303,82 @@ describe('SequenceParameterResolver', () => {
         {},
         {},
         mockOnLog,
-        'testuser@example.com'
+        {
+          path: [
+            {
+              loopId: 'loop_user',
+              loopName: 'user',
+              index: 0,
+              valuesBySourceId: { source_email: 'testuser@example.com' },
+              sourceAliases: { source_email: 'email' }
+            }
+          ],
+          valuesByLoopId: {
+            loop_user: {
+              loopName: 'user',
+              index: 0,
+              valuesBySourceId: { source_email: 'testuser@example.com' },
+              sourceAliases: { source_email: 'email' }
+            }
+          }
+        }
       );
 
       expect(result.resolvedParameters).toMatchObject({
         user_email: 'testuser@example.com'
+      });
+    });
+
+    it('resolves legacy current loop value mappings without loop IDs', () => {
+      const step = {
+        id: 'legacy-loop-step',
+        test_flow_id: 2,
+        step_order: 2,
+        parameter_mappings: [
+          {
+            flow_parameter_name: 'user_email',
+            source_type: 'loop_value',
+            source_value: 'value'
+          }
+        ],
+        loop_config: {
+          enabled: true,
+          source_type: 'environment_variable_array',
+          source_value: 'emails'
+        }
+      } as unknown as FlowSequenceStep;
+
+      const loopPlan = SequenceParameterResolver.resolveLoopPlan(
+        step,
+        {},
+        { emails: ['legacy@example.com'] },
+        mockOnLog
+      );
+      const row = loopPlan?.rows[0];
+      const result = SequenceParameterResolver.resolveFlowParameters(
+        createUserFlow,
+        step,
+        {},
+        {},
+        {},
+        mockOnLog,
+        row
+          ? {
+              path: [row],
+              valuesByLoopId: {
+                [row.loopId]: {
+                  loopName: row.loopName,
+                  index: row.index,
+                  valuesBySourceId: row.valuesBySourceId,
+                  sourceAliases: row.sourceAliases
+                }
+              }
+            }
+          : undefined
+      );
+
+      expect(result.resolvedParameters).toMatchObject({
+        user_email: 'legacy@example.com'
       });
     });
 
@@ -307,17 +390,19 @@ describe('SequenceParameterResolver', () => {
         parameter_mappings: [],
         loop_config: {
           enabled: true,
-          source_type: 'fixed_count',
-          count: 3
+          root: {
+            id: 'loop_user',
+            name: 'user',
+            sources: [{ id: 'source_index', alias: 'index', source_type: 'fixed_count', count: 3 }]
+          }
         }
       };
 
-      expect(SequenceParameterResolver.resolveLoopValues(step, {}, {}, mockOnLog)).toEqual([
-        0, 1, 2
-      ]);
+      const plan = SequenceParameterResolver.resolveLoopPlan(step, {}, {}, mockOnLog);
+      expect(plan?.rows.map((row) => row.valuesBySourceId.source_index)).toEqual([0, 1, 2]);
     });
 
-    it('resolves environment primitive array loop values', () => {
+    it('resolves zipped environment primitive array loop rows', () => {
       const step: FlowSequenceStep = {
         id: 'env-loop-step',
         test_flow_id: 1,
@@ -325,19 +410,38 @@ describe('SequenceParameterResolver', () => {
         parameter_mappings: [],
         loop_config: {
           enabled: true,
-          source_type: 'environment_variable_array',
-          source_value: 'order_ids'
+          root: {
+            id: 'loop_order',
+            name: 'order',
+            sources: [
+              {
+                id: 'source_order_id',
+                alias: 'id',
+                source_type: 'environment_variable_array',
+                source_value: 'order_ids'
+              },
+              {
+                id: 'source_priority',
+                alias: 'priority',
+                source_type: 'environment_variable_array',
+                source_value: 'priorities'
+              }
+            ]
+          }
         }
       };
 
-      expect(
-        SequenceParameterResolver.resolveLoopValues(
-          step,
-          {},
-          { order_ids: ['ord_1', 'ord_2'] },
-          mockOnLog
-        )
-      ).toEqual(['ord_1', 'ord_2']);
+      const plan = SequenceParameterResolver.resolveLoopPlan(
+        step,
+        {},
+        { order_ids: ['ord_1', 'ord_2'], priorities: [1, 2] },
+        mockOnLog
+      );
+
+      expect(plan?.rows).toMatchObject([
+        { valuesBySourceId: { source_order_id: 'ord_1', source_priority: 1 } },
+        { valuesBySourceId: { source_order_id: 'ord_2', source_priority: 2 } }
+      ]);
     });
 
     it('resolves previous output primitive array loop values', () => {
@@ -348,20 +452,29 @@ describe('SequenceParameterResolver', () => {
         parameter_mappings: [],
         loop_config: {
           enabled: true,
-          source_type: 'previous_output_array',
-          source_flow_step: 1,
-          source_output_field: 'order_id'
+          root: {
+            id: 'loop_order',
+            name: 'order',
+            sources: [
+              {
+                id: 'source_order_id',
+                alias: 'id',
+                source_type: 'previous_output_array',
+                source_flow_step: 1,
+                source_output_field: 'order_id'
+              }
+            ]
+          }
         }
       };
 
-      expect(
-        SequenceParameterResolver.resolveLoopValues(
-          step,
-          { flow_1: { order_id: [101, 102] } },
-          {},
-          mockOnLog
-        )
-      ).toEqual([101, 102]);
+      const plan = SequenceParameterResolver.resolveLoopPlan(
+        step,
+        { flow_1: { order_id: [101, 102] } },
+        {},
+        mockOnLog
+      );
+      expect(plan?.rows.map((row) => row.valuesBySourceId.source_order_id)).toEqual([101, 102]);
     });
 
     it('rejects object and null loop array values', () => {
@@ -372,18 +485,67 @@ describe('SequenceParameterResolver', () => {
         parameter_mappings: [],
         loop_config: {
           enabled: true,
-          source_type: 'environment_variable_array',
-          source_value: 'items'
+          root: {
+            id: 'loop_item',
+            name: 'item',
+            sources: [
+              {
+                id: 'source_item',
+                alias: 'value',
+                source_type: 'environment_variable_array',
+                source_value: 'items'
+              }
+            ]
+          }
         }
       };
 
       expect(() =>
-        SequenceParameterResolver.resolveLoopValues(step, {}, { items: [{ id: 1 }] }, mockOnLog)
+        SequenceParameterResolver.resolveLoopPlan(step, {}, { items: [{ id: 1 }] }, mockOnLog)
       ).toThrow(/string, number, or boolean/);
 
       expect(() =>
-        SequenceParameterResolver.resolveLoopValues(step, {}, { items: [null] }, mockOnLog)
+        SequenceParameterResolver.resolveLoopPlan(step, {}, { items: [null] }, mockOnLog)
       ).toThrow(/string, number, or boolean/);
+    });
+
+    it('rejects mismatched zip source lengths', () => {
+      const step: FlowSequenceStep = {
+        id: 'zip-loop-step',
+        test_flow_id: 1,
+        step_order: 1,
+        parameter_mappings: [],
+        loop_config: {
+          enabled: true,
+          root: {
+            id: 'loop_user',
+            name: 'user',
+            sources: [
+              {
+                id: 'source_email',
+                alias: 'email',
+                source_type: 'environment_variable_array',
+                source_value: 'emails'
+              },
+              {
+                id: 'source_role',
+                alias: 'role',
+                source_type: 'environment_variable_array',
+                source_value: 'roles'
+              }
+            ]
+          }
+        }
+      };
+
+      expect(() =>
+        SequenceParameterResolver.resolveLoopPlan(
+          step,
+          {},
+          { emails: ['a@example.com', 'b@example.com'], roles: ['admin'] },
+          mockOnLog
+        )
+      ).toThrow(/expected 2/);
     });
   });
 

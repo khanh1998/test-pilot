@@ -41,11 +41,76 @@ export interface FlowSequenceStep {
 
 export interface FlowLoopConfig {
   enabled: boolean;
+  root?: FlowLoopDefinition;
+}
+
+export interface FlowLoopDefinition {
+  id: string;
+  name: string;
+  sources: FlowLoopSource[];
+  children?: FlowLoopDefinition[];
+}
+
+export interface FlowLoopSource {
+  id: string;
+  alias: string;
   source_type: 'fixed_count' | 'environment_variable_array' | 'previous_output_array';
   count?: number;
   source_value?: string;
   source_flow_step?: number;
   source_output_field?: string;
+}
+
+type LegacyFlowLoopConfig = {
+  enabled: boolean;
+  source_type?: 'fixed_count' | 'environment_variable_array' | 'previous_output_array';
+  count?: number;
+  source_value?: string;
+  source_flow_step?: number;
+  source_output_field?: string;
+};
+
+export function clonePlain<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+export function normalizeFlowLoopConfig(config: unknown): FlowLoopConfig {
+  if (!config || typeof config !== 'object') {
+    return { enabled: false };
+  }
+
+  const loopConfig = clonePlain(config as LegacyFlowLoopConfig & FlowLoopConfig);
+  if (!loopConfig.enabled) {
+    return { enabled: false };
+  }
+
+  if ('root' in loopConfig && loopConfig.root) {
+    return loopConfig as FlowLoopConfig;
+  }
+
+  if (!loopConfig.source_type) {
+    return { enabled: true };
+  }
+
+  return {
+    enabled: true,
+    root: {
+      id: 'loop_legacy',
+      name: 'loop',
+      sources: [
+        {
+          id: 'source_legacy',
+          alias: 'value',
+          source_type: loopConfig.source_type,
+          count: loopConfig.count,
+          source_value: loopConfig.source_value,
+          source_flow_step: loopConfig.source_flow_step,
+          source_output_field: loopConfig.source_output_field
+        }
+      ],
+      children: []
+    }
+  };
 }
 
 export interface FlowParameterMapping {
@@ -60,6 +125,8 @@ export interface FlowParameterMapping {
   data_type?: 'string' | 'number' | 'boolean'; // Only used for static_value
   source_flow_step?: number; // Only used for previous_output
   source_output_field?: string; // Only used for previous_output
+  loop_id?: string; // Only used for loop_value
+  loop_source_id?: string; // Only used for loop_value
 }
 
 export interface ExecutionCondition {
