@@ -131,7 +131,7 @@ function getPreviewSources(
 
   for (const match of matches) {
     const expression = parseTemplateExpression(match);
-    if (!expression || expression.source !== 'res') {
+    if (!expression || (expression.source !== 'res' && expression.source !== 'proc')) {
       continue;
     }
 
