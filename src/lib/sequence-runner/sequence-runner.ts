@@ -63,6 +63,13 @@ export class SequenceRunner {
         // Execute this flow
         const flowResult = await this.executeFlow(flow, sequenceStep, i);
         this.state.flowResults.push(flowResult);
+        this.options.onFlowResult?.({
+          flowIndex: i,
+          flow,
+          stepOrder: sequenceStep.step_order,
+          flowResult,
+          flowResults: [...this.state.flowResults]
+        });
 
         // Check if flow execution failed and evaluate against expectations
         const actuallyFailed = !flowResult.success;

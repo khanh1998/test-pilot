@@ -797,6 +797,8 @@
 
     runningSequences.add(sequence.id);
     runningSequences = new Set(runningSequences); // Trigger reactivity
+    sequenceResultsMap.set(sequence.id, []);
+    sequenceResultsMap = new Map(sequenceResultsMap); // Clear stale highlights before this run
 
     console.log('Running sequence:', {
       sequenceName: sequence.name,
@@ -851,6 +853,10 @@
           console.log(
             `${status} Flow ${data.flow.name} ${data.success ? 'completed' : 'failed'}${data.error ? `: ${data.error}` : ''}`
           );
+        },
+        onFlowResult: (data) => {
+          sequenceResultsMap.set(sequence.id, data.flowResults);
+          sequenceResultsMap = new Map(sequenceResultsMap);
         },
         onSequenceStateUpdate: (state) => {
           console.log(
@@ -1379,7 +1385,7 @@
       <div class="space-y-6">
         <!-- Existing sequences -->
         {#if Array.isArray(sequences) && sequences.length > 0}
-          <div class="rounded-lg ">
+          <div class="rounded-lg">
             <div class="space-y-4">
               {#each sequences as sequence (sequence.id)}
                 <SequenceRow

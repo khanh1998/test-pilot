@@ -31,6 +31,13 @@ export interface SequenceRunnerOptions {
     error?: unknown;
     flowOutputs: Record<string, unknown>;
   }) => void;
+  onFlowResult?: (data: {
+    flowIndex: number;
+    flow: TestFlow;
+    stepOrder: number;
+    flowResult: SequenceFlowResult;
+    flowResults: SequenceFlowResult[];
+  }) => void;
   onSequenceStateUpdate?: (state: SequenceExecutionState) => void;
 }
 
