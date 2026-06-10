@@ -267,10 +267,11 @@
         {/if}
         {#if loopSummary}
           <span
-            class="inline-flex flex-shrink-0 items-center rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-800"
+            class="inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-indigo-100 text-indigo-800"
             title={loopSummary}
+            aria-label={loopSummary}
           >
-            <svg class="mr-1 h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
                 stroke-linecap="round"
                 stroke-linejoin="round"
@@ -278,7 +279,6 @@
                 d="M17 1l4 4-4 4M3 11V9a4 4 0 014-4h14M7 23l-4-4 4-4m14-2v2a4 4 0 01-4 4H3"
               />
             </svg>
-            {loopSummary}
           </span>
         {/if}
       </div>

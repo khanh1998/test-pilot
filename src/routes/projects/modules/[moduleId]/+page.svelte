@@ -1379,8 +1379,7 @@
       <div class="space-y-6">
         <!-- Existing sequences -->
         {#if Array.isArray(sequences) && sequences.length > 0}
-          <div class="rounded-lg bg-white p-6 shadow">
-            <h3 class="mb-4 text-lg font-medium text-gray-900">Test Sequences</h3>
+          <div class="rounded-lg ">
             <div class="space-y-4">
               {#each sequences as sequence (sequence.id)}
                 <SequenceRow
