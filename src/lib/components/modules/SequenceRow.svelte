@@ -1,10 +1,10 @@
 <!-- SequenceRow.svelte - Horizontal row displaying a sequence with flow cards -->
 <script lang="ts">
-    import type { FlowSequence } from '../../types/flow_sequence.js';
+  import type { FlowSequence } from '../../types/flow_sequence.js';
   import type { TestFlow } from '../../types/test-flow.js';
   import type { Environment } from '../../types/environment.js';
   import type { SequenceFlowResult } from '$lib/sequence-runner/types';
-  
+
   import { flip } from 'svelte/animate';
   import { quintOut } from 'svelte/easing';
   import FlowCard from './FlowCard.svelte';
@@ -31,8 +31,8 @@
     selectedEnvironment = null,
     selectedSubEnvironment = null,
     isRunning = false,
-    executionResults = []
-  , ...callbackProps
+    executionResults = [],
+    ...callbackProps
   }: Props & Record<string, unknown> = $props();
 
   // Debug executionResults
@@ -41,7 +41,7 @@
       console.log(`SequenceRow ${sequence.name} received execution results:`, executionResults);
     }
   });
-  
+
   // Debug when component renders
   $effect(() => {
     console.log(`SequenceRow ${sequence.name} rendering with:`, {
@@ -52,8 +52,8 @@
   });
 
   function dispatch(eventName: string, detail?: unknown) {
-    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
-    if (typeof handler === "function") {
+    const handler = callbackProps['on' + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === 'function') {
       if (arguments.length > 1) {
         handler(detail);
       } else {
@@ -127,7 +127,11 @@
     event.preventDefault();
     console.log('Drop event:', { draggedIndex, index, sequence: sequence.name });
     if (draggedIndex !== -1 && draggedIndex !== index) {
-      console.log('Dispatching reorderFlow:', { sequence, fromIndex: draggedIndex, toIndex: index });
+      console.log('Dispatching reorderFlow:', {
+        sequence,
+        fromIndex: draggedIndex,
+        toIndex: index
+      });
       dispatch('reorderFlow', { sequence, fromIndex: draggedIndex, toIndex: index });
     }
     dropTargetIndex = -1;
@@ -143,10 +147,10 @@
   }
 
   function handleConfirmClone(payload: { name: string; description: string }) {
-    dispatch('cloneSequence', { 
-      sequence, 
-      name: payload.name, 
-      description: payload.description 
+    dispatch('cloneSequence', {
+      sequence,
+      name: payload.name,
+      description: payload.description
     });
     showCloneDialog = false;
   }
@@ -168,14 +172,18 @@
     dispatch('runSequence', { sequence });
   }
 
-  function handleShowResults(payload: { flow: TestFlow; stepOrder: number; executionResult: SequenceFlowResult }) {
+  function handleShowResults(payload: {
+    flow: TestFlow;
+    stepOrder: number;
+    executionResult: SequenceFlowResult;
+  }) {
     selectedFlowResult = payload.executionResult;
     selectedFlowName = payload.flow.name;
     showResultsPanel = true;
   }
 
   function handleMoveLeft(payload: { stepOrder: number }) {
-    const currentIndex = steps.findIndex(s => s.step_order === payload.stepOrder);
+    const currentIndex = steps.findIndex((s) => s.step_order === payload.stepOrder);
     if (currentIndex > 0) {
       movingIndex = currentIndex;
       targetIndex = currentIndex - 1;
@@ -190,7 +198,7 @@
   }
 
   function handleMoveRight(payload: { stepOrder: number }) {
-    const currentIndex = steps.findIndex(s => s.step_order === payload.stepOrder);
+    const currentIndex = steps.findIndex((s) => s.step_order === payload.stepOrder);
     if (currentIndex < steps.length - 1) {
       movingIndex = currentIndex;
       targetIndex = currentIndex + 1;
@@ -205,10 +213,10 @@
   }
 
   function handleToggleExpectsError(payload: { stepOrder: number; expectsError: boolean }) {
-    dispatch('toggleExpectsError', { 
-      sequence, 
-      stepOrder: payload.stepOrder, 
-      expectsError: payload.expectsError 
+    dispatch('toggleExpectsError', {
+      sequence,
+      stepOrder: payload.stepOrder,
+      expectsError: payload.expectsError
     });
   }
 
@@ -220,57 +228,78 @@
 
   let steps = $derived(sequence.sequenceConfig?.steps || []);
   let canRun = $derived(sequenceFlows.length > 0 && selectedEnvironment && selectedSubEnvironment);
-  
+
   // Pre-compute flow data for animation
-  let flowsWithData = $derived(steps.map((step, index) => {
-    const flow = sequenceFlows.find(f => parseInt(f.id) === step.test_flow_id);
-    return {
-      sequenceStep: step,
-      flow: flow!,
-      stepOrder: step.step_order,
-      index,
-      isFirst: index === 0,
-      isLast: index === steps.length - 1
-    };
-  }).filter(item => item.flow !== undefined) as Array<{
-    sequenceStep: typeof steps[0];
-    flow: TestFlow;
-    stepOrder: number;
-    index: number;
-    isFirst: boolean;
-    isLast: boolean;
-  }>);
+  let flowsWithData = $derived(
+    steps
+      .map((step, index) => {
+        const flow = sequenceFlows.find((f) => parseInt(f.id) === step.test_flow_id);
+        return {
+          sequenceStep: step,
+          flow: flow!,
+          stepOrder: step.step_order,
+          index,
+          isFirst: index === 0,
+          isLast: index === steps.length - 1
+        };
+      })
+      .filter((item) => item.flow !== undefined) as Array<{
+      sequenceStep: (typeof steps)[0];
+      flow: TestFlow;
+      stepOrder: number;
+      index: number;
+      isFirst: boolean;
+      isLast: boolean;
+    }>
+  );
 </script>
 
-<div class="sequence-row bg-white border border-gray-200 rounded-lg p-4 mb-4 {isRunning ? 'ring-2 ring-green-500 ring-opacity-50 bg-green-50' : ''}" class:animate-pulse={isRunning}>
+<div
+  class="sequence-row mb-4 rounded-lg border border-gray-200 bg-white p-4 {isRunning
+    ? 'ring-opacity-50 bg-green-50 ring-2 ring-green-500'
+    : ''}"
+  class:animate-pulse={isRunning}
+>
   <!-- Sequence Header -->
-  <div class="flex items-center justify-between mb-4">
-    <div class="flex items-center gap-3 flex-1">
+  <div class="mb-4 flex items-center justify-between">
+    <div class="flex flex-1 items-center gap-3">
       {#if isEditing}
         <input
           bind:value={editingName}
           onblur={handleNameEdit}
           onkeydown={handleNameKeydown}
-          class="text-lg font-semibold bg-transparent border-b border-blue-500 focus:outline-none focus:border-blue-600 px-1"
+          class="border-b border-blue-500 bg-transparent px-1 text-lg font-semibold focus:border-blue-600 focus:outline-none"
         />
       {:else}
         <button
           type="button"
-          class="text-lg font-semibold text-gray-900 hover:text-blue-600 text-left"
+          class="text-left text-lg font-semibold text-gray-900 hover:text-blue-600"
           onclick={() => (isEditing = true)}
         >
           {sequence.name}
         </button>
       {/if}
-      
+
       <span class="text-sm text-gray-500">
         {steps.length} flow{steps.length !== 1 ? 's' : ''}
       </span>
-      
+
       {#if isRunning}
-        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-          <svg class="w-3 h-3 mr-1 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+        <span
+          class="inline-flex items-center rounded-full bg-green-100 px-2 py-1 text-xs font-medium text-green-800"
+        >
+          <svg
+            class="mr-1 h-3 w-3 animate-spin"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+            />
           </svg>
           Running
         </span>
@@ -284,43 +313,67 @@
         type="button"
         onclick={handleRunSequence}
         disabled={!canRun || isRunning}
-        class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+        class="inline-flex items-center rounded-md border border-transparent bg-green-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-300"
         title={!canRun ? 'Select an environment to run this sequence' : 'Run this sequence'}
       >
         {#if isRunning}
-          <svg class="w-3 h-3 mr-1 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          <svg
+            class="mr-1 h-3 w-3 animate-spin"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+            />
           </svg>
           Running...
         {:else}
-          <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8.056v3.888a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
+          <svg class="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+            <path
+              fill-rule="evenodd"
+              d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8.056v3.888a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"
+              clip-rule="evenodd"
+            />
           </svg>
           Run
         {/if}
       </button>
-      
+
       <!-- Clone Sequence Button -->
       <button
         type="button"
         onclick={handleCloneSequence}
-        class="p-2 text-gray-400 hover:text-blue-600 rounded-md hover:bg-blue-50 transition-colors"
+        class="rounded-md p-2 text-gray-400 transition-colors hover:bg-blue-50 hover:text-blue-600"
         aria-label="Clone sequence"
         title="Clone this sequence"
       >
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+          />
         </svg>
       </button>
-      
+
       <button
         type="button"
         onclick={handleDeleteSequence}
-        class="p-2 text-gray-400 hover:text-red-600 rounded-md hover:bg-red-50 transition-colors"
+        class="rounded-md p-2 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
         aria-label="Delete sequence"
       >
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+          />
         </svg>
       </button>
     </div>
@@ -328,42 +381,43 @@
 
   <!-- Flow Cards Container -->
   <div class="flex items-center gap-3 overflow-x-auto py-2" style="min-height: 11rem;">
-      {#each flowsWithData as { sequenceStep, flow, stepOrder, index, isFirst, isLast } (sequenceStep.id)}
-        <div
-          class="drop-zone"
-          class:border-2={dropTargetIndex === index}
-          class:border-blue-400={dropTargetIndex === index}
-          class:border-dashed={dropTargetIndex === index}
-          class:bg-blue-50={dropTargetIndex === index}
-          class:rounded-lg={dropTargetIndex === index}
-          class:p-1={dropTargetIndex === index}
-          ondragover={(e) => handleDragOver(e, index)}
-          ondrop={(e) => handleDrop(e, index)}
-          role="button"
-          tabindex="0"
-          animate:flip={{ duration: 800, easing: quintOut }}
-        >
-          <FlowCard
-            {flow}
-            {stepOrder}
-            sequenceStep={sequenceStep}
-            isDragging={draggedIndex === index}
-            isDropTarget={dropTargetIndex === index}
-            isMoving={movingIndex === index || targetIndex === index}
-            {isFirst}
-            {isLast}
-            {executionResults}
-            onClick={handleFlowClick}
-            onDragstart={handleDragStart}
-            onDragend={handleDragEnd}
-            onRemove={handleFlowRemove}
-            onShowResults={handleShowResults}
-            onMoveLeft={handleMoveLeft}
-            onMoveRight={handleMoveRight}
-            onToggleExpectsError={handleToggleExpectsError}
-          />
-        </div>
-      {/each}    <!-- Add Flow Search -->
+    {#each flowsWithData as { sequenceStep, flow, stepOrder, index, isFirst, isLast } (sequenceStep.id)}
+      <div
+        class="drop-zone"
+        class:border-2={dropTargetIndex === index}
+        class:border-blue-400={dropTargetIndex === index}
+        class:border-dashed={dropTargetIndex === index}
+        class:bg-blue-50={dropTargetIndex === index}
+        class:rounded-lg={dropTargetIndex === index}
+        class:p-1={dropTargetIndex === index}
+        ondragover={(e) => handleDragOver(e, index)}
+        ondrop={(e) => handleDrop(e, index)}
+        role="button"
+        tabindex="0"
+        animate:flip={{ duration: 800, easing: quintOut }}
+      >
+        <FlowCard
+          {flow}
+          {stepOrder}
+          {sequenceStep}
+          isDragging={draggedIndex === index}
+          isDropTarget={dropTargetIndex === index}
+          isMoving={movingIndex === index || targetIndex === index}
+          {isFirst}
+          {isLast}
+          {executionResults}
+          onClick={handleFlowClick}
+          onDragstart={handleDragStart}
+          onDragend={handleDragEnd}
+          onRemove={handleFlowRemove}
+          onShowResults={handleShowResults}
+          onMoveLeft={handleMoveLeft}
+          onMoveRight={handleMoveRight}
+          onToggleExpectsError={handleToggleExpectsError}
+        />
+      </div>
+    {/each}
+    <!-- Add Flow Search -->
     <div class="flex-shrink-0">
       <FlowSearch
         bind:isOpen={showFlowSearch}
@@ -375,7 +429,7 @@
 
   <!-- Sequence Description -->
   {#if sequence.description}
-    <div class="mt-3 text-sm text-gray-600 border-t border-gray-100 pt-3">
+    <div class="mt-3 border-t border-gray-100 pt-3 text-sm text-gray-600">
       {sequence.description}
     </div>
   {/if}
@@ -396,6 +450,10 @@
 <!-- Clone Dialog -->
 <CloneDialog
   bind:isOpen={showCloneDialog}
+  title="Clone Sequence"
+  nameLabel="Sequence name"
+  namePlaceholder="Enter sequence name"
+  confirmText="Clone Sequence"
   originalName={sequence.name}
   originalDescription={sequence.description || ''}
   onConfirm={handleConfirmClone}
@@ -414,16 +472,16 @@
   .sequence-row {
     transition: all 0.2s ease-in-out;
   }
-  
+
   .sequence-row:hover {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   }
 
   .drop-zone {
     min-height: auto; /* Let the card determine its height */
-    min-width: 20rem;  /* Match the new w-80 width of flow cards */
+    min-width: 20rem; /* Match the new w-80 width of flow cards */
   }
-  
+
   .drop-zone:global(.dragging-over) {
     background-color: #dbeafe;
     border: 2px dashed #3b82f6;

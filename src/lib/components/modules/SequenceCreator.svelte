@@ -1,18 +1,27 @@
-<!-- SequenceCreator.svelte - Simple inline sequence creation form -->
+<!-- SequenceCreator.svelte - Sequence creation trigger and modal -->
 <script lang="ts">
-  
+  function stopPropagation<T extends Event>(handler: (event: T) => unknown) {
+    return (event: T) => {
+      event.stopPropagation();
+      return handler(event);
+    };
+  }
 
   interface Props {
     [key: string]: unknown;
     isCreating?: boolean;
+    compact?: boolean;
   }
 
-  let { isCreating = $bindable(false) , ...callbackProps
+  let {
+    isCreating = $bindable(false),
+    compact = false,
+    ...callbackProps
   }: Props & Record<string, unknown> = $props();
 
   function dispatch(eventName: string, detail?: unknown) {
-    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
-    if (typeof handler === "function") {
+    const handler = callbackProps['on' + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === 'function') {
       if (arguments.length > 1) {
         handler(detail);
       } else {
@@ -22,18 +31,19 @@
   }
 
   let sequenceName = $state('');
+  let showCreateDialog = $state(false);
 
   function handleSubmit() {
     if (sequenceName.trim()) {
       dispatch('create', { name: sequenceName.trim() });
       sequenceName = '';
-      isCreating = false;
+      showCreateDialog = false;
     }
   }
 
   function handleCancel() {
     sequenceName = '';
-    isCreating = false;
+    showCreateDialog = false;
     dispatch('cancel');
   }
 
@@ -46,45 +56,72 @@
   }
 </script>
 
-{#if isCreating}
-  <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-    <div class="flex items-center gap-3">
-      <div class="flex-1">
+<button
+  type="button"
+  onclick={() => (showCreateDialog = true)}
+  disabled={isCreating}
+  class={compact
+    ? 'flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-gray-300 px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:border-blue-400 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-60'
+    : 'mb-4 flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 py-3 text-gray-600 transition-colors hover:border-blue-400 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-60'}
+>
+  <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+  </svg>
+  Create New Sequence
+</button>
+
+{#if showCreateDialog}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-black"
+    onkeydown={handleKeydown}
+  >
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+      class="mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-xl"
+      onclick={stopPropagation(() => undefined)}
+    >
+      <h2 class="mb-4 text-2xl font-bold text-gray-900">Create New Sequence</h2>
+
+      <div class="mb-6">
+        <label for="sequenceName" class="mb-1 block text-sm font-medium text-gray-700">
+          Sequence name <span class="text-red-500">*</span>
+        </label>
         <input
+          id="sequenceName"
+          type="text"
           bind:value={sequenceName}
           onkeydown={handleKeydown}
-          placeholder="Enter sequence name..."
-          class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          class="w-full rounded-md border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+          placeholder="Enter sequence name"
+          disabled={isCreating}
+          required
         />
       </div>
-      <div class="flex gap-2">
+
+      <div class="flex justify-end space-x-3">
         <button
           type="button"
-          onclick={handleSubmit}
-          disabled={!sequenceName.trim()}
-          class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+          class="rounded-md bg-gray-200 px-4 py-2 text-gray-800 transition hover:bg-gray-300 disabled:opacity-50"
+          onclick={handleCancel}
+          disabled={isCreating}
         >
-          Create
+          Cancel
         </button>
         <button
           type="button"
-          onclick={handleCancel}
-          class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 text-sm font-medium"
+          class="rounded-md bg-blue-600 px-4 py-2 text-white transition hover:bg-blue-700 disabled:opacity-50"
+          onclick={handleSubmit}
+          disabled={isCreating || !sequenceName.trim()}
         >
-          Cancel
+          {#if isCreating}
+            Creating...
+          {:else}
+            Create Sequence
+          {/if}
         </button>
       </div>
     </div>
   </div>
-{:else}
-  <button
-    type="button"
-    onclick={() => (isCreating = true)}
-    class="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-400 hover:text-blue-600 transition-colors mb-4 flex items-center justify-center gap-2"
-  >
-    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-    </svg>
-    Create New Sequence
-  </button>
 {/if}

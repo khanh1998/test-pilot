@@ -6,10 +6,9 @@
     };
   }
 
-  
   function dispatch(eventName: string, detail?: unknown) {
-    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
-    if (typeof handler === "function") {
+    const handler = callbackProps['on' + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === 'function') {
       if (arguments.length > 1) {
         handler(detail);
       } else {
@@ -24,14 +23,24 @@
     originalName?: string;
     originalDescription?: string;
     loading?: boolean;
+    title?: string;
+    nameLabel?: string;
+    namePlaceholder?: string;
+    confirmText?: string;
+    loadingText?: string;
   }
 
   let {
     isOpen = $bindable(false),
     originalName = '',
     originalDescription = '',
-    loading = false
-  , ...callbackProps
+    loading = false,
+    title = 'Clone Test Flow',
+    nameLabel = 'Name',
+    namePlaceholder = 'Enter test flow name',
+    confirmText = 'Clone Test Flow',
+    loadingText = 'Cloning...',
+    ...callbackProps
   }: Props & Record<string, unknown> = $props();
 
   let name = $state('');
@@ -66,28 +75,28 @@
 
 {#if isOpen}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div 
-    class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50"
+  <div
+    class="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-black"
     onkeydown={handleKeydown}
   >
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div 
+    <div
       class="mx-4 w-full max-w-lg rounded-lg bg-white p-6 shadow-xl"
       onclick={(event) => event.stopPropagation()}
     >
-      <h2 class="mb-4 text-2xl font-bold text-gray-900">Clone Test Flow</h2>
+      <h2 class="mb-4 text-2xl font-bold text-gray-900">{title}</h2>
 
       <div class="mb-4">
         <label for="cloneName" class="mb-1 block text-sm font-medium text-gray-700">
-          Name <span class="text-red-500">*</span>
+          {nameLabel} <span class="text-red-500">*</span>
         </label>
         <input
           id="cloneName"
           type="text"
           bind:value={name}
           class="w-full rounded-md border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-          placeholder="Enter test flow name"
+          placeholder={namePlaceholder}
           disabled={loading}
           required
         />
@@ -122,12 +131,23 @@
         >
           {#if loading}
             <svg class="mr-2 h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path class="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              <circle
+                class="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                stroke-width="4"
+              ></circle>
+              <path
+                class="opacity-75"
+                fill="currentColor"
+                d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+              ></path>
             </svg>
-            Cloning...
+            {loadingText}
           {:else}
-            Clone Test Flow
+            {confirmText}
           {/if}
         </button>
       </div>

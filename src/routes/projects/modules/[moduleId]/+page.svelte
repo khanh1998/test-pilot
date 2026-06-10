@@ -1202,10 +1202,10 @@
 
   <div class="min-h-screen bg-gray-50">
     <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-      <!-- Environment Selector and Run All Button -->
+      <!-- Environment Selector, Run All Button, and Sequence Creation -->
       <div class="mb-6 rounded-lg bg-white p-6 shadow">
-        <div class="flex items-center justify-between">
-          <div class="max-w-md flex-1">
+        <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div class="w-full xl:w-44">
             <SimplifiedEnvironmentSelector
               id="environment-selector"
               environment={projectEnvironment}
@@ -1215,7 +1215,11 @@
             />
           </div>
 
-          <div class="ml-6 flex items-center space-x-3">
+          <div class="w-full xl:w-96">
+            <SequenceCreator onCreate={handleCreateSequence} isCreating={isSubmitting} compact />
+          </div>
+
+          <div class="flex flex-wrap items-center gap-3">
             <!-- Execution Options Button -->
             <button
               type="button"
@@ -1272,17 +1276,6 @@
             </button>
           </div>
         </div>
-
-        {#if projectEnvironment && selectedSubEnvironment}
-          <div class="mt-3 text-xs text-green-600">✓ Ready to execute with project environment</div>
-        {:else if !projectEnvironment}
-          <div class="mt-3 text-xs text-yellow-600">
-            ⚠ No environment configured for this project. Configure an environment in project
-            settings to enable execution.
-          </div>
-        {:else}
-          <div class="mt-3 text-xs text-gray-500">Configuring project environment...</div>
-        {/if}
       </div>
 
       <!-- Execution Options Panel (Collapsible) -->
@@ -1384,12 +1377,6 @@
 
       <!-- Excel-like sequence management interface -->
       <div class="space-y-6">
-        <!-- Create new sequence -->
-        <div class="rounded-lg bg-white p-6 shadow">
-          <h3 class="mb-4 text-lg font-medium text-gray-900">Create New Sequence</h3>
-          <SequenceCreator onCreate={handleCreateSequence} isCreating={isSubmitting} />
-        </div>
-
         <!-- Existing sequences -->
         {#if Array.isArray(sequences) && sequences.length > 0}
           <div class="rounded-lg bg-white p-6 shadow">
