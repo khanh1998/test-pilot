@@ -30,6 +30,7 @@
 
   let activeTab: 'overview' | 'outputs' | 'responses' | 'parameters' = $state('overview');
   let selectedIterationIndex: number | null = $state(null);
+  let expandedRequests = $state<Set<string>>(new Set());
 
   function closePanel() {
     dispatch('close');
@@ -72,6 +73,32 @@
     return 'border-red-200 bg-red-50 text-red-700';
   }
 
+  function getStepId(endpointId: string): string {
+    const separatorIndex = endpointId.lastIndexOf('-');
+    return separatorIndex > 0 ? endpointId.slice(0, separatorIndex) : endpointId;
+  }
+
+  function hasRequestBody(body: unknown): boolean {
+    if (body === null || body === undefined) return false;
+    if (typeof body === 'object') return Object.keys(body).length > 0;
+    return true;
+  }
+
+  function getRequestToggleKey(endpointId: string): string {
+    return `${selectedIterationIndex ?? 'flow'}:${endpointId}`;
+  }
+
+  function toggleRequestDetails(endpointId: string) {
+    const key = getRequestToggleKey(endpointId);
+    const next = new Set(expandedRequests);
+    if (next.has(key)) {
+      next.delete(key);
+    } else {
+      next.add(key);
+    }
+    expandedRequests = next;
+  }
+
   let statusInfo = $derived(flowResult ? getStatusIcon(flowResult.success) : null);
   let selectedIteration = $derived(
     selectedIterationIndex === null
@@ -82,6 +109,9 @@
   );
   let displayedOutputs = $derived(selectedIteration?.outputs || flowResult?.outputs || {});
   let displayedResponses = $derived(selectedIteration?.responses || flowResult?.responses || {});
+  let displayedExecutionState = $derived(
+    selectedIteration?.executionState || flowResult?.executionState || {}
+  );
   let displayedParameterValues = $derived(
     selectedIteration?.parameterValues || flowResult?.parameterValues || {}
   );
@@ -484,7 +514,77 @@
         <div class="space-y-4">
           {#if Object.keys(displayedResponses).length > 0}
             {#each Object.entries(displayedResponses) as [endpointId, response]}
-              <JsonViewer data={response} title="Endpoint {endpointId}" maxHeight="400px" />
+              {@const endpointState = displayedExecutionState[endpointId]}
+              {@const request = endpointState?.request}
+              {@const responseMeta = endpointState?.response}
+              {@const requestToggleKey = getRequestToggleKey(endpointId)}
+              {@const requestIsExpanded = expandedRequests.has(requestToggleKey)}
+              <div class="overflow-hidden rounded-lg border border-gray-200 bg-white">
+                <div class="border-b border-gray-200 bg-gray-50 px-4 py-3">
+                  <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div class="min-w-0">
+                      <div class="flex flex-wrap items-center gap-2">
+                        <span
+                          class="rounded bg-blue-100 px-2 py-0.5 font-mono text-xs font-semibold text-blue-800"
+                        >
+                          {getStepId(endpointId)}
+                        </span>
+                        <span class="font-mono text-xs text-gray-500">Response {endpointId}</span>
+                      </div>
+                      {#if request?.url}
+                        <p class="mt-1 text-xs break-all text-gray-500">{request.url}</p>
+                      {/if}
+                    </div>
+
+                    <div class="flex items-center gap-2 text-xs text-gray-500">
+                      {#if responseMeta?.status}
+                        <span
+                          class="rounded px-2 py-1 font-medium {responseMeta.status >= 200 &&
+                          responseMeta.status < 300
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-red-100 text-red-700'}"
+                        >
+                          {responseMeta.status}
+                          {responseMeta.statusText || ''}
+                        </span>
+                      {/if}
+                      {#if endpointState?.timing !== undefined}
+                        <span>{formatExecutionTime(endpointState.timing)}</span>
+                      {/if}
+                      <button
+                        type="button"
+                        class="rounded border border-gray-300 bg-white px-2 py-1 font-medium text-gray-700 transition-colors hover:bg-gray-100"
+                        onclick={() => toggleRequestDetails(endpointId)}
+                        aria-expanded={requestIsExpanded}
+                      >
+                        {requestIsExpanded ? 'Hide Request' : 'Show Request'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="space-y-4 p-4">
+                  {#if requestIsExpanded && request}
+                    <div class="space-y-3 rounded-md border border-gray-100 bg-gray-50 p-3">
+                      <h4 class="text-sm font-medium text-gray-900">Request</h4>
+
+                      {#if hasRequestBody(request.body)}
+                        <JsonViewer data={request.body} title="Body" maxHeight="240px" />
+                      {:else}
+                        <p class="text-sm text-gray-500">No request body.</p>
+                      {/if}
+                    </div>
+                  {:else if requestIsExpanded}
+                    <div
+                      class="rounded-md border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800"
+                    >
+                      Request details were not captured for this response.
+                    </div>
+                  {/if}
+
+                  <JsonViewer data={response} title="Response Body" maxHeight="400px" />
+                </div>
+              </div>
             {/each}
           {:else}
             <div class="py-8 text-center">

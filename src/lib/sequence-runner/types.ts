@@ -52,6 +52,7 @@ export interface SequenceFlowResult {
   outputs: Record<string, unknown>;
   responses: Record<string, unknown>;
   parameterValues: Record<string, unknown>;
+  executionState: ExecutionState;
   executionTime: number;
   loop?: SequenceLoopResult;
 }
@@ -77,6 +78,7 @@ export interface SequenceLoopIterationResult {
   outputs: Record<string, unknown>;
   responses: Record<string, unknown>;
   parameterValues: Record<string, unknown>;
+  executionState: ExecutionState;
   executionTime: number;
 }
 

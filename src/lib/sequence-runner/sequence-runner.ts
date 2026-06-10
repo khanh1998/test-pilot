@@ -302,6 +302,7 @@ export class SequenceRunner {
       // Variables to capture flow execution results
       let flowOutputs: Record<string, unknown> = {};
       let storedResponses: Record<string, unknown> = {};
+      let executionState: import('$lib/components/test-flows/types').ExecutionState = {};
       let flowExecutionResult: { success: boolean; error?: unknown } | null = null;
 
       // Create FlowRunner options
@@ -317,6 +318,7 @@ export class SequenceRunner {
           // Capture the flow outputs and responses from the callback
           flowOutputs = data.flowOutputs;
           storedResponses = data.storedResponses;
+          executionState = data.executionState;
           flowExecutionResult = { success: data.success, error: data.error };
         }
       };
@@ -375,6 +377,7 @@ export class SequenceRunner {
         outputs: flowOutputs, // Now properly captured from onExecutionComplete callback
         responses: storedResponses, // Now properly captured from onExecutionComplete callback
         parameterValues: resolvedExecution.resolvedParameters,
+        executionState,
         executionTime
       };
     } catch (err: unknown) {
@@ -530,6 +533,7 @@ export class SequenceRunner {
       parameterValues: this.namespaceIterationRecords(
         iterationResults.map((result) => result.parameterValues)
       ),
+      executionState: {},
       executionTime: Math.round(endTime - startTime),
       loop: {
         enabled: true,
@@ -549,6 +553,7 @@ export class SequenceRunner {
           outputs: result.outputs,
           responses: result.responses,
           parameterValues: result.parameterValues,
+          executionState: result.executionState,
           executionTime: result.executionTime
         }))
       }
@@ -631,6 +636,7 @@ export class SequenceRunner {
       outputs: {},
       responses: {},
       parameterValues: {},
+      executionState: {},
       executionTime: Math.round(endTime - startTime)
     };
   }
