@@ -47,6 +47,7 @@
   let selectedSubEnvironment: string | null = $state(null);
   let isRunningAll = $state(false);
   let runningSequences = $state(new Set<number>()); // Track which sequences are running
+  let runAllMode: 'parallel' | 'sequential' = $state('sequential');
 
   // Save selected sub-environment to local storage
   function saveSelectedSubEnvironment(moduleId: number, subEnv: string | null) {
@@ -684,68 +685,35 @@
 
     // Use the current project environment
     const selectedEnv = projectEnvironment;
+    const runnableSequences = sequences.filter(
+      (sequence) => (sequenceFlowsMap.get(sequence.id) || []).length > 0
+    );
+
+    if (runnableSequences.length === 0) {
+      alert('No sequences have flows to run');
+      return;
+    }
 
     isRunningAll = true;
     console.log('Running all sequences with environment:', {
       environment: selectedEnv.name,
       subEnvironment: selectedSubEnvironment,
-      sequences: sequences.map((s) => s.name)
+      mode: runAllMode,
+      sequences: runnableSequences.map((s) => s.name)
     });
 
     try {
-      let successCount = 0;
-      let failCount = 0;
+      const results =
+        runAllMode === 'parallel'
+          ? await Promise.all(
+              runnableSequences.map((sequence) => runSequenceForRunAll(sequence, selectedEnv))
+            )
+          : await runSequencesSequentially(runnableSequences, selectedEnv);
 
-      // Run each sequence sequentially
-      for (const sequence of sequences) {
-        const flows = sequenceFlowsMap.get(sequence.id) || [];
-        if (flows.length === 0) {
-          console.log(`Skipping sequence "${sequence.name}" - no flows`);
-          continue;
-        }
-
-        console.log(`\n🚀 Running sequence: ${sequence.name}`);
-
-        try {
-          // Create sequence runner options
-          const sequenceOptions: SequenceRunnerOptions = {
-            sequence,
-            flows,
-            project: selectedProject, // Add project information
-            selectedEnvironment: selectedEnv,
-            selectedSubEnvironment: selectedSubEnvironment,
-            preferences: executionPreferences,
-            onLog: (level, message, details) => {
-              console.log(`[${sequence.name}] [${level}] ${message}`, details);
-            },
-            onSequenceComplete: (data) => {
-              const status = data.success ? '✅' : '❌';
-              console.log(
-                `${status} Sequence "${sequence.name}" completed: ${data.completedFlows}/${data.totalFlows} flows`
-              );
-            }
-          };
-
-          const sequenceRunner = new SequenceRunner(sequenceOptions);
-          const result = await sequenceRunner.runSequence();
-
-          // Store execution results for this sequence
-          sequenceResultsMap.set(sequence.id, sequenceRunner.flowResults);
-          sequenceResultsMap = new Map(sequenceResultsMap); // Trigger reactivity
-
-          if (result.success) {
-            successCount++;
-          } else {
-            failCount++;
-            console.error(`Sequence "${sequence.name}" failed:`, result.error);
-          }
-        } catch (err) {
-          failCount++;
-          console.error(`Failed to run sequence "${sequence.name}":`, err);
-        }
-      }
-
-      const totalSequences = sequences.length;
+      const successCount = results.filter((result) => result.success).length;
+      const failCount = results.length - successCount;
+      const skippedCount = sequences.length - runnableSequences.length;
+      const totalSequences = runnableSequences.length;
       const message = `Execution completed: ${successCount} successful, ${failCount} failed out of ${totalSequences} sequences`;
 
       if (failCount > 0) {
@@ -753,14 +721,14 @@
           'warning',
           'Some Sequences Failed',
           message,
-          `${failCount} sequence(s) encountered errors. Check the console for detailed error information.`
+          `${failCount} sequence(s) encountered errors.${skippedCount > 0 ? ` ${skippedCount} empty sequence(s) were skipped.` : ''} Check the console for detailed error information.`
         );
       } else {
         showExecutionResults(
           'success',
           'All Sequences Completed',
           message,
-          `Successfully executed all ${successCount} sequences.`
+          `Successfully executed all ${successCount} sequences.${skippedCount > 0 ? ` ${skippedCount} empty sequence(s) were skipped.` : ''}`
         );
         console.log(`🎉 ${message}`);
       }
@@ -775,6 +743,86 @@
       );
     } finally {
       isRunningAll = false;
+    }
+  }
+
+  async function runSequencesSequentially(
+    runnableSequences: FlowSequence[],
+    selectedEnv: Environment
+  ) {
+    const results: Array<{ success: boolean; error?: unknown }> = [];
+
+    for (const sequence of runnableSequences) {
+      results.push(await runSequenceForRunAll(sequence, selectedEnv));
+    }
+
+    return results;
+  }
+
+  async function runSequenceForRunAll(sequence: FlowSequence, selectedEnv: Environment) {
+    const flows = sequenceFlowsMap.get(sequence.id) || [];
+
+    runningSequences.add(sequence.id);
+    runningSequences = new Set(runningSequences);
+    sequenceResultsMap.set(sequence.id, []);
+    sequenceResultsMap = new Map(sequenceResultsMap);
+
+    console.log(`\n🚀 Running sequence: ${sequence.name}`);
+
+    try {
+      const sequenceOptions: SequenceRunnerOptions = {
+        sequence,
+        flows,
+        project: selectedProject,
+        selectedEnvironment: selectedEnv,
+        selectedSubEnvironment: selectedSubEnvironment!,
+        preferences: executionPreferences,
+        onLog: (level, message, details) => {
+          console.log(`[${sequence.name}] [${level}] ${message}`, details);
+        },
+        onSequenceStart: () => {
+          console.log(`Sequence "${sequence.name}" started`);
+        },
+        onSequenceComplete: (data) => {
+          const status = data.success ? '✅' : '❌';
+          console.log(
+            `${status} Sequence "${sequence.name}" completed: ${data.completedFlows}/${data.totalFlows} flows`
+          );
+        },
+        onFlowStart: (data) => {
+          console.log(
+            `[${sequence.name}] Starting flow ${data.flow.name} (step ${data.stepOrder})`
+          );
+        },
+        onFlowComplete: (data) => {
+          const status = data.success ? '✅' : '❌';
+          console.log(
+            `[${sequence.name}] ${status} Flow ${data.flow.name} ${data.success ? 'completed' : 'failed'}${data.error ? `: ${data.error}` : ''}`
+          );
+        },
+        onFlowResult: (data) => {
+          sequenceResultsMap.set(sequence.id, data.flowResults);
+          sequenceResultsMap = new Map(sequenceResultsMap);
+        }
+      };
+
+      const sequenceRunner = new SequenceRunner(sequenceOptions);
+      const result = await sequenceRunner.runSequence();
+
+      sequenceResultsMap.set(sequence.id, sequenceRunner.flowResults);
+      sequenceResultsMap = new Map(sequenceResultsMap);
+
+      if (!result.success) {
+        console.error(`Sequence "${sequence.name}" failed:`, result.error);
+      }
+
+      return result;
+    } catch (err) {
+      console.error(`Failed to run sequence "${sequence.name}":`, err);
+      return { success: false, error: err };
+    } finally {
+      runningSequences.delete(sequence.id);
+      runningSequences = new Set(runningSequences);
     }
   }
 
@@ -1050,7 +1098,11 @@
     getPreviousFlowOutputs(selectedSequence, selectedStepOrder, sequenceFlowsMap)
   );
   // Reactive statement to check if we can run all sequences
-  let canRunAll = $derived(sequences.length > 0 && projectEnvironment && selectedSubEnvironment);
+  let canRunAll = $derived(
+    sequences.some((sequence) => (sequenceFlowsMap.get(sequence.id) || []).length > 0) &&
+      projectEnvironment &&
+      selectedSubEnvironment
+  );
   // Debug execution results
   $effect(() => {
     if (sequenceResultsMap.size > 0) {
@@ -1226,6 +1278,19 @@
           </div>
 
           <div class="flex flex-wrap items-center gap-3">
+            <div class="flex items-center gap-2">
+              <label for="runAllMode" class="text-sm font-medium text-gray-700">Run mode</label>
+              <select
+                id="runAllMode"
+                bind:value={runAllMode}
+                disabled={isRunningAll || runningSequences.size > 0}
+                class="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-gray-100"
+              >
+                <option value="parallel">Parallel</option>
+                <option value="sequential">Sequential</option>
+              </select>
+            </div>
+
             <!-- Execution Options Button -->
             <button
               type="button"
@@ -1248,11 +1313,11 @@
             <button
               type="button"
               onclick={handleRunAllSequences}
-              disabled={!canRunAll || isRunningAll}
+              disabled={!canRunAll || isRunningAll || runningSequences.size > 0}
               class="inline-flex items-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-300"
               title={!canRunAll
-                ? 'Ensure project environment is configured and sequences have flows'
-                : 'Run all sequences in this module'}
+                ? 'Ensure project environment is configured and at least one sequence has flows'
+                : `Run all sequences in ${runAllMode} mode`}
             >
               {#if isRunningAll}
                 <svg
@@ -1268,7 +1333,7 @@
                     d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
                   />
                 </svg>
-                Running All...
+                Running {runAllMode === 'parallel' ? 'Parallel' : 'Sequential'}...
               {:else}
                 <svg class="mr-2 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
                   <path
