@@ -1649,6 +1649,128 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
   );
 
   server.registerTool(
+    'create_sequence',
+    {
+      title: 'Create Sequence',
+      description: 'Create a new empty flow sequence in a module.',
+      inputSchema: {
+        projectId: z.number(),
+        moduleId: z.number(),
+        name: z.string(),
+        description: z.string().optional()
+      }
+    },
+    async ({ projectId, moduleId, name, description }) => {
+      const user = requireAuthContext(authContext);
+      const { FlowSequenceService } = await import('$lib/server/service/projects/sequence_service');
+      const service = new FlowSequenceService();
+      const sequence = await service.createSequence(moduleId, projectId, user.userId, {
+        name,
+        description
+      });
+      return asTextResult({ sequence });
+    }
+  );
+
+  server.registerTool(
+    'update_sequence',
+    {
+      title: 'Update Sequence',
+      description: 'Rename a sequence or update its description.',
+      inputSchema: {
+        projectId: z.number(),
+        moduleId: z.number(),
+        sequenceId: z.number(),
+        name: z.string().optional(),
+        description: z.string().optional()
+      }
+    },
+    async ({ projectId, moduleId, sequenceId, name, description }) => {
+      const user = requireAuthContext(authContext);
+      const { FlowSequenceService } = await import('$lib/server/service/projects/sequence_service');
+      const service = new FlowSequenceService();
+      const sequence = await service.updateSequence(sequenceId, moduleId, projectId, user.userId, {
+        name,
+        description
+      });
+      return asTextResult({ sequence });
+    }
+  );
+
+  server.registerTool(
+    'delete_sequence',
+    {
+      title: 'Delete Sequence',
+      description: 'Permanently delete a flow sequence.',
+      inputSchema: {
+        projectId: z.number(),
+        moduleId: z.number(),
+        sequenceId: z.number()
+      }
+    },
+    async ({ projectId, moduleId, sequenceId }) => {
+      const user = requireAuthContext(authContext);
+      const { FlowSequenceService } = await import('$lib/server/service/projects/sequence_service');
+      const service = new FlowSequenceService();
+      await service.deleteSequence(sequenceId, moduleId, projectId, user.userId);
+      return asTextResult({ deleted: true, sequenceId });
+    }
+  );
+
+  server.registerTool(
+    'clone_sequence',
+    {
+      title: 'Clone Sequence',
+      description:
+        'Clone an existing flow sequence into the same module with a new name, copying all steps and parameter mappings.',
+      inputSchema: {
+        projectId: z.number(),
+        moduleId: z.number(),
+        sequenceId: z.number(),
+        name: z.string(),
+        description: z.string().optional()
+      }
+    },
+    async ({ projectId, moduleId, sequenceId, name, description }) => {
+      const user = requireAuthContext(authContext);
+      const { FlowSequenceService } = await import('$lib/server/service/projects/sequence_service');
+      const service = new FlowSequenceService();
+      const sequence = await service.cloneSequence(sequenceId, moduleId, projectId, user.userId, {
+        name,
+        description
+      });
+      return asTextResult({ sequence });
+    }
+  );
+
+  server.registerTool(
+    'remove_flow_from_sequence',
+    {
+      title: 'Remove Flow From Sequence',
+      description: 'Remove a step from a sequence by its step ID.',
+      inputSchema: {
+        projectId: z.number(),
+        moduleId: z.number(),
+        sequenceId: z.number(),
+        sequenceStepId: z.string()
+      }
+    },
+    async ({ projectId, moduleId, sequenceId, sequenceStepId }) => {
+      const user = requireAuthContext(authContext);
+      const { FlowSequenceService } = await import('$lib/server/service/projects/sequence_service');
+      const service = new FlowSequenceService();
+      const sequence = await service.removeFlowFromSequence(
+        sequenceId,
+        sequenceStepId,
+        moduleId,
+        projectId,
+        user.userId
+      );
+      return asTextResult({ sequence });
+    }
+  );
+
+  server.registerTool(
     'list_projects',
     {
       title: 'List Projects',
