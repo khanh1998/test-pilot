@@ -524,6 +524,7 @@ async function buildProjectContext(
       agentContext: detail.project.agentContext ?? null
     },
     apis: projectApis,
+    modules: detail.modules.map((m) => ({ id: m.id, name: m.name })),
     environments,
     existingFlows: existingFlows.testFlows,
     counts: {
@@ -822,8 +823,16 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
           ],
           dataDependencies: ['suggest_expression', 'explain_expression'],
           validation: ['validate_flow', 'explain_flow'],
-          execution: ['run_flow', 'save_flow']
+          execution: ['run_flow', 'save_flow'],
+          coverage: ['get_coverage_gaps', 'explain_sequence', 'browse_endpoints', 'validate_flow_sequence']
         },
+        coverageWorkflow: [
+          '1. list_projects → get_project_context(projectId) — get module IDs, API IDs, and existing flows.',
+          '2. get_coverage_gaps(projectId) — see unusedFlows, flowCoverage (flow→sequence map, deduped), and endpointCoverage (coveredEndpoints, uncoveredEndpoints, coverageByTag).',
+          '3. browse_endpoints(projectId, tag: "...") — drill into uncovered endpoint groups by tag.',
+          '4. explain_sequence(projectId, moduleId, sequenceId) — understand how a sequence composes its flows and what parameters it needs.',
+          '5. validate_flow_sequence(projectId, moduleId, sequenceId) — check for missing parameter mappings or broken output references.'
+        ],
         transformationSyntax:
           focus === 'overview' || focus === 'transformations'
             ? {
@@ -1332,7 +1341,12 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
         }
       };
       const explanation = explainFlowDocument(flowDocument);
-      return asTextResult({ flowId, ...explanation });
+      // "No API hosts" is an execution-readiness warning — suppress it during read-only analysis
+      const filteredExplanation = {
+        ...explanation,
+        warnings: explanation.warnings.filter((w) => !w.includes('No API hosts are configured'))
+      };
+      return asTextResult({ flowId, ...filteredExplanation });
     }
   );
 
@@ -1678,23 +1692,32 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
       const seqService = new FlowSequenceService();
       const seqResult = await seqService.listProjectSequences(projectId, user.userId);
 
-      // Build flow → sequence mapping
-      const flowToSeqs: Record<number, number[]> = {};
+      // Build flow → sequence mapping, deduped: sequenceId → { name, stepCount }
+      const flowToSeqMap: Record<number, Record<number, { name: string; stepCount: number }>> = {};
       for (const seq of seqResult.sequences) {
         for (const step of seq.sequenceConfig.steps ?? []) {
-          if (!flowToSeqs[step.test_flow_id]) flowToSeqs[step.test_flow_id] = [];
-          flowToSeqs[step.test_flow_id].push(seq.id);
+          if (!flowToSeqMap[step.test_flow_id]) flowToSeqMap[step.test_flow_id] = {};
+          const entry = flowToSeqMap[step.test_flow_id][seq.id];
+          if (entry) {
+            entry.stepCount++;
+          } else {
+            flowToSeqMap[step.test_flow_id][seq.id] = { name: seq.name, stepCount: 1 };
+          }
         }
       }
 
       const unusedFlows = flows
-        .filter((f) => !flowToSeqs[f.id])
+        .filter((f) => !flowToSeqMap[f.id] || Object.keys(flowToSeqMap[f.id]).length === 0)
         .map((f) => ({ id: f.id, name: f.name }));
 
       const flowCoverage = flows.map((f) => ({
         id: f.id,
         name: f.name,
-        usedInSequences: flowToSeqs[f.id] ?? []
+        usedInSequences: Object.entries(flowToSeqMap[f.id] ?? {}).map(([seqId, info]) => ({
+          sequenceId: Number(seqId),
+          sequenceName: info.name,
+          stepCount: info.stepCount
+        }))
       }));
 
       // Collect all endpoint_ids used across all flows
@@ -1718,12 +1741,28 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
       }
 
       let allEndpoints: Awaited<ReturnType<typeof browseEndpoints>> = [];
+      let coveredEndpoints: Array<{ id: number; method: string; path: string; summary: string | null }> = [];
       let uncoveredEndpoints: Array<{ id: number; method: string; path: string; summary: string | null }> = [];
+      let coverageByTag: Array<{ tag: string; total: number; covered: number }> = [];
       if (apiIds.length > 0) {
         allEndpoints = await browseEndpoints({ userId: user.userId, apiIds, limit: 1000 });
+        coveredEndpoints = allEndpoints
+          .filter((ep) => usedEndpointIds.has(ep.id))
+          .map((ep) => ({ id: ep.id, method: ep.method, path: ep.path, summary: ep.summary ?? null }));
         uncoveredEndpoints = allEndpoints
           .filter((ep) => !usedEndpointIds.has(ep.id))
           .map((ep) => ({ id: ep.id, method: ep.method, path: ep.path, summary: ep.summary ?? null }));
+        const tagMap: Record<string, { total: number; covered: number }> = {};
+        for (const ep of allEndpoints) {
+          for (const tag of ep.tags ?? []) {
+            if (!tagMap[tag]) tagMap[tag] = { total: 0, covered: 0 };
+            tagMap[tag].total++;
+            if (usedEndpointIds.has(ep.id)) tagMap[tag].covered++;
+          }
+        }
+        coverageByTag = Object.entries(tagMap)
+          .map(([tag, counts]) => ({ tag, ...counts }))
+          .sort((a, b) => b.total - a.total);
       }
 
       return asTextResult({
@@ -1734,7 +1773,10 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
         flowCoverage,
         endpointCoverage: {
           totalImported: apiIds.length > 0 ? allEndpoints.length : null,
-          coveredCount: usedEndpointIds.size,
+          coveredCount: coveredEndpoints.length,
+          uncoveredCount: uncoveredEndpoints.length,
+          coverageByTag,
+          coveredEndpoints,
           uncoveredEndpoints
         }
       });
@@ -2072,6 +2114,7 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
       const context = await buildProjectContext(projectId, authContext, includeEnvironmentValues);
       return asTextResult({
         project: context.project,
+        modules: context.modules,
         apis: context.apis,
         environments: context.environments,
         counts: {
