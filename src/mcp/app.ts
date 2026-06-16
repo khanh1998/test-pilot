@@ -1341,12 +1341,7 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
         }
       };
       const explanation = explainFlowDocument(flowDocument);
-      // "No API hosts" is an execution-readiness warning — suppress it during read-only analysis
-      const filteredExplanation = {
-        ...explanation,
-        warnings: explanation.warnings.filter((w) => !w.includes('No API hosts are configured'))
-      };
-      return asTextResult({ flowId, ...filteredExplanation });
+      return asTextResult({ flowId, ...explanation });
     }
   );
 

@@ -702,10 +702,6 @@ export function validateFlowDocument(document: FlowDocument): FlowValidationResu
     }
   }
 
-  if (!FlowValidator.validateApiHosts(document.flowData)) {
-    warnings.push('No API hosts are configured yet. Execution will require at least one host.');
-  }
-
   for (const step of document.flowData.steps) {
     for (const endpoint of step.endpoints) {
       const stepTemplates: Array<{ path: string; value: string }> = [];

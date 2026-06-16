@@ -33,12 +33,6 @@
     }
   }
 
-  // Check if there are valid API hosts configured
-  let hasValidApiHosts = $derived(flowData.settings.api_hosts && 
-    Object.keys(flowData.settings.api_hosts).length > 0 &&
-    Object.values(flowData.settings.api_hosts).some(
-      (hostInfo) => hostInfo && hostInfo.url && hostInfo.url.trim() !== ''
-    ));
 
   function handleTestFlowChange(payload: any) {
     dispatch('change', payload);
@@ -62,15 +56,6 @@
 </script>
 
 <div class="space-y-4">
-  {#if !hasValidApiHosts}
-    <div class="mb-4 rounded border border-yellow-300 bg-yellow-100 px-4 py-3 text-yellow-800">
-      <p class="font-medium">API Hosts Not Configured</p>
-      <p>
-        Please configure at least one API host in the Settings tab before running the test flow.
-      </p>
-    </div>
-  {/if}
-
   <!-- Use the TestFlowEditor component for a cleaner implementation -->
   <TestFlowEditor
     {testFlowId}

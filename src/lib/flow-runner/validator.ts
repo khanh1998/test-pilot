@@ -34,11 +34,6 @@ export class FlowValidator {
     if (!validation.isValid) {
       return validation.errors.join('; ');
     }
-
-    if (!this.validateApiHosts(flowData)) {
-      return 'No API Hosts are configured. Please configure at least one API host before running the flow.';
-    }
-
     return null;
   }
 }
