@@ -383,6 +383,26 @@ async function resolveApiScope(
         `Project ${input.projectId} has multiple APIs (${detail.apis.map((api) => `${api.apiId}:${api.api?.name || `API ${api.apiId}`}`).join(', ')}). Ask the human which APIs to use, then pass apiIds explicitly.`
       );
     }
+    // Project has no direct API links — fall back to environment-linked API IDs.
+    const user = requireAuthContext(authContext);
+    const { ProjectEnvironmentService } = await import(
+      '$lib/server/service/projects/environment_service'
+    );
+    const envService = new ProjectEnvironmentService();
+    const envLinks = await envService.listProjectEnvironments(input.projectId, user.userId);
+    const envApiIds = [
+      ...new Set(
+        envLinks.environmentLinks.flatMap(
+          (link) => ((link.environment?.config as { linked_apis?: number[] })?.linked_apis ?? [])
+        )
+      )
+    ];
+    if (envApiIds.length === 1) return { apiIds: envApiIds };
+    if (envApiIds.length > 1) {
+      throw new Error(
+        `Project ${input.projectId} has multiple APIs linked via environments (${envApiIds.join(', ')}). Pass apiIds explicitly.`
+      );
+    }
   }
 
   throw new Error(
@@ -453,11 +473,42 @@ async function buildProjectContext(
     };
   });
 
+  // If no APIs are linked at project level, fall back to environment-linked API IDs.
+  let projectApis = detail.apis.map((apiLink) => ({
+    id: apiLink.apiId,
+    name: apiLink.api?.name ?? '',
+    description: apiLink.api?.description ?? null,
+    defaultHost: apiLink.defaultHost ?? apiLink.api?.host ?? null
+  }));
+
+  if (projectApis.length === 0) {
+    const envApiIds = [
+      ...new Set(environments.flatMap((e) => (e.linkedApiIds as number[]) ?? []))
+    ];
+    if (envApiIds.length > 0) {
+      const { db } = await import('$lib/server/db');
+      const { apis: apisTable } = await import('$lib/server/db/schema');
+      const { inArray } = await import('drizzle-orm');
+      const apiRows = await db
+        .select({ id: apisTable.id, name: apisTable.name, description: apisTable.description, host: apisTable.host })
+        .from(apisTable)
+        .where(inArray(apisTable.id, envApiIds));
+      projectApis = apiRows.map((a) => ({
+        id: a.id,
+        name: a.name ?? '',
+        description: a.description ?? null,
+        defaultHost: a.host ?? null
+      }));
+    }
+  }
+
   const guidanceNotes = [
     'If you are working in the backend codebase, use that context first. Read routes, controllers, services, DTOs, and recent code changes to infer the business sequence and likely endpoints before relying on endpoint search alone.',
-    detail.apis.length > 1
+    projectApis.length > 1
       ? 'This project has multiple APIs. Ask the human which APIs should be in scope before building or searching.'
-      : 'This project has a single linked API, so API scope can be inferred if needed.',
+      : projectApis.length === 1
+        ? 'This project has a single linked API, so API scope can be inferred if needed.'
+        : 'This project has no linked APIs.',
     environments.length > 1
       ? 'This project has multiple environments. Ask the human which environment should be linked before building.'
       : environments.length === 1
@@ -472,24 +523,19 @@ async function buildProjectContext(
       description: detail.project.description ?? null,
       agentContext: detail.project.agentContext ?? null
     },
-    apis: detail.apis.map((apiLink) => ({
-      id: apiLink.apiId,
-      name: apiLink.api?.name ?? '',
-      description: apiLink.api?.description ?? null,
-      defaultHost: apiLink.defaultHost ?? apiLink.api?.host ?? null
-    })),
+    apis: projectApis,
     environments,
     existingFlows: existingFlows.testFlows,
     counts: {
-      apis: detail.apis.length,
+      apis: projectApis.length,
       environments: environments.length,
       modules: detail.modules.length,
       existingFlows: existingFlows.testFlows.length
     },
     guidance: {
-      needsClarification: detail.apis.length > 1 || environments.length > 1,
+      needsClarification: projectApis.length > 1 || environments.length > 1,
       reasons: [
-        ...(detail.apis.length > 1 ? ['multiple_apis'] : []),
+        ...(projectApis.length > 1 ? ['multiple_apis'] : []),
         ...(environments.length > 1 ? ['multiple_environments'] : [])
       ],
       notes: guidanceNotes,
@@ -1566,20 +1612,132 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
     {
       title: 'List Flow Sequences',
       description:
-        'List flow sequences for a project or one module so an agent can compose self-contained flows.',
+        'List flow sequences for a project or module. Returns a lightweight summary by default (id, name, stepCount, flowIds, updatedAt). Pass includeFull: true to include the raw sequenceConfig — only do this when you need parameter mappings or loop config.',
       inputSchema: {
         projectId: z.number(),
-        moduleId: z.number().optional()
+        moduleId: z.number().optional(),
+        includeFull: z.boolean().optional()
       }
     },
-    async ({ projectId, moduleId }) => {
+    async ({ projectId, moduleId, includeFull = false }) => {
       const user = requireAuthContext(authContext);
       const { FlowSequenceService } = await import('$lib/server/service/projects/sequence_service');
       const service = new FlowSequenceService();
       const result = moduleId
         ? await service.listModuleSequences(moduleId, projectId, user.userId)
         : await service.listProjectSequences(projectId, user.userId);
-      return asTextResult(result as unknown as Record<string, unknown>);
+
+      if (includeFull) {
+        return asTextResult(result as unknown as Record<string, unknown>);
+      }
+
+      const summary = result.sequences.map((seq) => ({
+        id: seq.id,
+        name: seq.name,
+        description: seq.description ?? null,
+        moduleId: seq.moduleId,
+        stepCount: seq.sequenceConfig.steps?.length ?? 0,
+        flowIds: (seq.sequenceConfig.steps ?? []).map((s) => s.test_flow_id),
+        updatedAt: seq.updatedAt
+      }));
+      return asTextResult({ sequences: summary, total: result.total });
+    }
+  );
+
+  server.registerTool(
+    'get_coverage_gaps',
+    {
+      title: 'Get Coverage Gaps',
+      description: [
+        'Answer three coverage questions for a project:',
+        '1. Which flows are never referenced by any sequence? (unusedFlows)',
+        '2. Which flows are used in which sequences? (flowCoverage)',
+        '3. Which imported API endpoints are not hit by any test flow? (uncoveredEndpoints)'
+      ].join(' '),
+      inputSchema: {
+        projectId: z.number()
+      }
+    },
+    async ({ projectId }) => {
+      const user = requireAuthContext(authContext);
+
+      const { FlowSequenceService } = await import('$lib/server/service/projects/sequence_service');
+      const { browseEndpoints } = await import('$lib/server/repository/db/api-endpoints');
+      const { db } = await import('$lib/server/db');
+      const { testFlows: testFlowsTable } = await import('$lib/server/db/schema');
+      const { eq: dbEq } = await import('drizzle-orm');
+
+      // Fetch all flows with flowJson for endpoint scanning (up to 200)
+      const flows = await db
+        .select({ id: testFlowsTable.id, name: testFlowsTable.name, flowJson: testFlowsTable.flowJson })
+        .from(testFlowsTable)
+        .where(dbEq(testFlowsTable.projectId, projectId))
+        .limit(200);
+
+      // Fetch all sequences
+      const seqService = new FlowSequenceService();
+      const seqResult = await seqService.listProjectSequences(projectId, user.userId);
+
+      // Build flow → sequence mapping
+      const flowToSeqs: Record<number, number[]> = {};
+      for (const seq of seqResult.sequences) {
+        for (const step of seq.sequenceConfig.steps ?? []) {
+          if (!flowToSeqs[step.test_flow_id]) flowToSeqs[step.test_flow_id] = [];
+          flowToSeqs[step.test_flow_id].push(seq.id);
+        }
+      }
+
+      const unusedFlows = flows
+        .filter((f) => !flowToSeqs[f.id])
+        .map((f) => ({ id: f.id, name: f.name }));
+
+      const flowCoverage = flows.map((f) => ({
+        id: f.id,
+        name: f.name,
+        usedInSequences: flowToSeqs[f.id] ?? []
+      }));
+
+      // Collect all endpoint_ids used across all flows
+      const usedEndpointIds = new Set<number>();
+      for (const flow of flows) {
+        const flowData = flow.flowJson as { steps?: Array<{ endpoints?: Array<{ endpoint_id?: number | string }> }> };
+        for (const step of flowData?.steps ?? []) {
+          for (const ep of step.endpoints ?? []) {
+            if (ep.endpoint_id != null) usedEndpointIds.add(Number(ep.endpoint_id));
+          }
+        }
+      }
+
+      // Resolve API IDs for the project (reuse resolveApiScope logic)
+      let apiIds: number[] = [];
+      try {
+        const scope = await resolveApiScope({ projectId }, authContext);
+        apiIds = scope.apiIds ?? (scope.apiId ? [scope.apiId] : []);
+      } catch {
+        // No APIs linked — endpoint coverage not available
+      }
+
+      let allEndpoints: Awaited<ReturnType<typeof browseEndpoints>> = [];
+      let uncoveredEndpoints: Array<{ id: number; method: string; path: string; summary: string | null }> = [];
+      if (apiIds.length > 0) {
+        allEndpoints = await browseEndpoints({ userId: user.userId, apiIds, limit: 1000 });
+        uncoveredEndpoints = allEndpoints
+          .filter((ep) => !usedEndpointIds.has(ep.id))
+          .map((ep) => ({ id: ep.id, method: ep.method, path: ep.path, summary: ep.summary ?? null }));
+      }
+
+      return asTextResult({
+        projectId,
+        totalFlows: flows.length,
+        totalSequences: seqResult.total,
+        unusedFlows,
+        flowCoverage,
+        endpointCoverage: {
+          totalImported: apiIds.length > 0 ? allEndpoints.length : null,
+          coveredCount: usedEndpointIds.size,
+          uncoveredEndpoints
+        }
+      });
     }
   );
 
