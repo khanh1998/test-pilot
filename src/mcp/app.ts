@@ -756,12 +756,12 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
         agentWorkflow: [
           'Call prepare_flow_context(projectId) to inspect APIs, environments, and existing flows.',
           'If guidance says clarification is needed, ask the human to choose APIs and/or environment first.',
-          'For new flows: use save_flow to create an initial flow, then create_flow_draft(flowId) to edit it.',
-          'For editing existing flows: use create_flow_draft(flowId) to clone the flow as a DB-backed draft.',
+          'PATH A — Create a new flow: use save_flow(flowDocument) with a full JSON definition. save_flow is a one-shot create; it does not support incremental editing.',
+          'PATH B — Edit an existing flow: use create_flow_draft(flowId) to clone it as a DB-backed draft, then edit the draft incrementally.',
           'Build steps with add_step(draftFlowId, ...) — include full endpoint definitions including body, headers, assertions, and transformations in one call.',
           'For surgical edits to an existing endpoint, use update_endpoint(draftFlowId, stepId, index, patch).',
           'Validate and test with validate_flow(draftFlowId) and run_flow(draftFlowId).',
-          'Commit the draft back to the original with commit_flow_draft(draftFlowId), or discard it with discard_flow_draft.'
+          'Commit with commit_flow_draft(draftFlowId) to overwrite the original, or pass saveAsNew: true to create a new flow. Discard with discard_flow_draft to cancel.'
         ],
         keyTools: {
           context: ['prepare_flow_context', 'get_project_context', 'list_test_flows', 'get_test_flow'],
@@ -911,6 +911,7 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
         draftFlowId: result.draftFlowId,
         originalFlowId: result.originalFlowId,
         flow: draft?.testFlow ?? null,
+        warning: `commit_flow_draft will OVERWRITE flow ${result.originalFlowId} in place. Use saveAsNew: true on commit_flow_draft to save as a separate new flow instead.`,
         note: 'Use draftFlowId for all edits. Call commit_flow_draft when done or discard_flow_draft to cancel.'
       });
     }
@@ -921,15 +922,66 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
     {
       title: 'Commit Flow Draft',
       description:
-        'Copy the draft flow back to its original and delete the draft. Call this after validate_flow and run_flow confirm the draft is correct.',
+        'Commit a draft flow. By default (saveAsNew: false) overwrites the original flow in place and deletes the draft — use this to update an existing flow. Set saveAsNew: true to save the draft as a brand-new independent flow instead, leaving the original untouched.',
       inputSchema: {
-        draftFlowId: z.number()
+        draftFlowId: z.number(),
+        saveAsNew: z.boolean().optional(),
+        newName: z.string().optional()
       }
     },
-    async ({ draftFlowId }) => {
+    async ({ draftFlowId, saveAsNew = false, newName }) => {
       const user = requireAuthContext(authContext);
+
+      if (saveAsNew) {
+        const { db } = await import('$lib/server/db');
+        const { testFlows } = await import('$lib/server/db/schema');
+        const { and, eq } = await import('drizzle-orm');
+        const { getTestFlowApiIds } = await import(
+          '$lib/server/repository/db/test-flows'
+        );
+        const { createBasicTestFlow } = await import(
+          '$lib/server/service/test_flows/create_test_flow'
+        );
+
+        const [draft] = await db
+          .select()
+          .from(testFlows)
+          .where(and(eq(testFlows.id, draftFlowId), eq(testFlows.userId, user.userId)));
+        if (!draft) throw new Error('Draft flow not found or does not belong to the user');
+        if (!draft.draftOf) throw new Error(`Flow ${draftFlowId} is not a draft`);
+
+        const apiIds = await getTestFlowApiIds(draftFlowId);
+        const created = await createBasicTestFlow(user.userId, {
+          name: newName ?? `${draft.name} (copy)`,
+          description: draft.description ?? undefined,
+          apiIds,
+          projectId: draft.projectId ?? undefined,
+          environmentId: draft.environmentId ?? undefined,
+          flowJson: draft.flowJson
+        });
+
+        const { discardTestFlowDraft } = await import(
+          '$lib/server/service/test_flows/draft_flow'
+        );
+        await discardTestFlowDraft(draftFlowId, user.userId);
+
+        return asTextResult({
+          committed: true,
+          saveAsNew: true,
+          flowId: created.testFlow.id,
+          name: created.testFlow.name,
+          note: 'Draft discarded. A new independent flow was created — the original flow was not modified.'
+        });
+      }
+
       const result = await commitTestFlowDraft(draftFlowId, user.userId);
-      return asTextResult({ committed: true, flowId: result.id, name: result.name });
+      return asTextResult({
+        committed: true,
+        saveAsNew: false,
+        flowId: result.id,
+        name: result.name,
+        note: `Original flow ${result.id} has been overwritten with the draft content.`
+      });
     }
   );
 
@@ -1379,10 +1431,41 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
     'save_flow',
     {
       title: 'Save Flow',
-      description:
-        'Persist a flow document directly to the database (create or update). For editing an existing flow use create_flow_draft + commit_flow_draft instead. Use save_flow for creating brand-new flows from a full JSON definition.',
+      description: [
+        'Persist a brand-new flow to the database from a full JSON definition.',
+        'To edit an existing flow incrementally, use create_flow_draft → add_step / update_endpoint → commit_flow_draft instead.',
+        '',
+        'flowDocument shape:',
+        '  { name, description?, projectId?, environmentId?,',
+        '    flowData: {',
+        '      steps: [{ step_id, label, endpoints: [...], timeout?, clearCookiesBeforeExecution? }],',
+        '      parameters: [{ name, type, required, description? }],',
+        '      outputs: [],',
+        '      endpoints: [],   // leave empty — populated automatically',
+        '      settings: { api_hosts: {}, linkedEnvironment?: { environmentId, environmentName } }',
+        '    }',
+        '  }',
+        'Each endpoint inside steps needs: endpoint_id, api_id, order, body?, headers?, queryParams?, pathParams?, assertions?, transformations?'
+      ].join('\n'),
       inputSchema: {
-        flowDocument: z.unknown(),
+        flowDocument: z.object({
+          name: z.string(),
+          description: z.string().optional(),
+          projectId: z.number().optional(),
+          environmentId: z.number().optional(),
+          sourceFlowId: z.number().optional(),
+          flowData: z.object({
+            steps: z.array(z.unknown()),
+            parameters: z.array(z.unknown()).optional(),
+            outputs: z.array(z.unknown()).optional(),
+            endpoints: z.array(z.unknown()).optional(),
+            settings: z.object({
+              api_hosts: z.record(z.string(), z.unknown()).optional(),
+              environment: z.object({ environmentId: z.number(), subEnvironment: z.string().optional() }).optional(),
+              linkedEnvironment: z.unknown().optional()
+            }).optional()
+          }).optional()
+        }),
         flowId: z.number().optional(),
         projectId: z.number().optional(),
         saveMode: z.enum(['auto', 'update', 'create_new']).optional()
@@ -1987,15 +2070,14 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
       title: 'Get Test Flow',
       description: 'Load an existing test flow along with the endpoints it uses.',
       inputSchema: {
-        userId: z.number().optional(),
-        id: z.number()
+        flowId: z.number()
       }
     },
-    async ({ userId, id }) => {
+    async ({ flowId }) => {
       const { getTestFlow } = await import('$lib/server/service/test_flows/get_test_flow');
-      const result = await getTestFlow(id, getUserId(userId, authContext));
+      const result = await getTestFlow(flowId, requireAuthContext(authContext).userId);
       if (!result) {
-        throw new Error(`Test flow ${id} was not found.`);
+        throw new Error(`Test flow ${flowId} was not found.`);
       }
       return asTextResult(result as unknown as Record<string, unknown>);
     }
