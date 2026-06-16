@@ -29,8 +29,6 @@ import {
   validateFlowSequence
 } from '$lib/mcp/sequence';
 import { createDraft, deleteDraft, getDraft, getDraftTtlMs, updateDraft } from '$lib/mcp/drafts';
-import { createFlowRun, getFlowRun, updateFlowRun } from '$lib/mcp/runs';
-import { getFlowRunTtlMs } from '$lib/mcp/runs';
 import {
   createFlowSession,
   getFlowSession,
@@ -305,13 +303,8 @@ const transformationReference = {
   }
 };
 
-function ttlInfo(kind: 'draft' | 'session' | 'run', expiresAt?: number) {
-  const ttlMs =
-    kind === 'draft'
-      ? getDraftTtlMs()
-      : kind === 'session'
-        ? getFlowSessionTtlMs()
-        : getFlowRunTtlMs();
+function ttlInfo(kind: 'draft' | 'session', expiresAt?: number) {
+  const ttlMs = kind === 'draft' ? getDraftTtlMs() : getFlowSessionTtlMs();
   return {
     kind,
     ttlMs,
@@ -976,7 +969,7 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
             'link_parameter'
           ],
           validation: ['validate_flow', 'explain_flow', 'review_flow_session'],
-          execution: ['run_flow', 'get_flow_run', 'save_flow']
+          execution: ['run_flow', 'save_flow']
         },
         transformationSyntax:
           focus === 'overview' || focus === 'transformations'
@@ -2386,12 +2379,6 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
         '$lib/server/service/test_flows/run_test_flow_sync'
       );
 
-      const run = createFlowRun(user.userId, {
-        flowId,
-        sessionId,
-        draftId: sourceDraftId
-      });
-
       const syncResult = await runFlowDataSync(
         effectiveDocument.flowData,
         user.userId,
@@ -2415,29 +2402,11 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
         }
       );
 
-      updateFlowRun(run.id, user.userId, {
-        status: syncResult.status === 'completed' ? 'completed' : 'failed',
-        success: syncResult.success,
-        summary: syncResult.summary,
-        error: syncResult.error,
-        completedAt: Date.now(),
-        executionState: syncResult.executionState,
-        logs: syncResult.logs,
-        storedResponses: syncResult.storedResponses,
-        parameterValues: syncResult.parameterValues,
-        flowOutputs: syncResult.flowOutputs
-      });
-
       return asTextResult({
-        runId: run.id,
         status: syncResult.status,
         success: syncResult.success,
         summary: syncResult.summary,
         validation,
-        executionMode: {
-          serverCookieHandling: preferences?.serverCookieHandling ?? false,
-          note: 'MCP server-side execution uses the shared sync run service and server HTTP transport.'
-        },
         resolvedEnvironment: {
           environmentId:
             effectiveDocument.environmentId ??
@@ -2445,93 +2414,11 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
             null,
           subEnvironment: effectiveDocument.flowData.settings.environment?.subEnvironment ?? null
         },
-        runTtl: ttlInfo('run', run.expiresAt),
         missingParameters: syncResult.missingParameters ?? [],
         flowOutputs: syncResult.flowOutputs,
-        executionState: syncResult.executionState
-      });
-    }
-  );
-
-  server.registerTool(
-    'get_run_report',
-    {
-      title: 'Get Run Report',
-      description: 'Get a concise engineering report for a previously started MCP flow run.',
-      inputSchema: {
-        runId: z.string()
-      }
-    },
-    async ({ runId }) => {
-      const user = requireAuthContext(authContext);
-      const run = getFlowRun(runId, user.userId);
-      if (!run) {
-        throw new Error(`Flow run ${runId} was not found.`);
-      }
-
-      const failedEndpoints = Object.entries(run.executionState)
-        .filter(
-          ([, state]) =>
-            typeof state === 'object' &&
-            state !== null &&
-            (state as { status?: string }).status === 'failed'
-        )
-        .map(([endpointId, state]) => ({
-          endpointId,
-          error: (state as { error?: string }).error ?? null
-        }));
-
-      return asTextResult({
-        runId: run.id,
-        status: run.status,
-        success: run.success,
-        summary: run.summary,
-        failedEndpoints,
-        parameterValues: run.parameterValues,
-        flowOutputs: run.flowOutputs,
-        executionState: run.executionState,
-        storedResponses: run.storedResponses,
-        logTail: run.logs.slice(-20),
-        runTtl: ttlInfo('run', run.expiresAt)
-      });
-    }
-  );
-
-  server.registerTool(
-    'explain_run_failure',
-    {
-      title: 'Explain Run Failure',
-      description:
-        'Explain the most likely failing endpoint and error from a previous MCP flow run in plain English.',
-      inputSchema: {
-        runId: z.string()
-      }
-    },
-    async ({ runId }) => {
-      const user = requireAuthContext(authContext);
-      const run = getFlowRun(runId, user.userId);
-      if (!run) {
-        throw new Error(`Flow run ${runId} was not found.`);
-      }
-
-      const failedEntry = Object.entries(run.executionState).find(
-        ([, state]) =>
-          typeof state === 'object' &&
-          state !== null &&
-          (state as { status?: string }).status === 'failed'
-      );
-
-      const explanation = failedEntry
-        ? `The run failed at ${failedEntry[0]}${(failedEntry[1] as { error?: string }).error ? ` with error: ${(failedEntry[1] as { error?: string }).error}` : '.'}`
-        : run.error
-          ? `The run failed before a specific endpoint failure was captured. Error: ${run.error}`
-          : 'The run failed, but no endpoint-specific failure detail was captured.';
-
-      return asTextResult({
-        runId: run.id,
-        status: run.status,
-        explanation,
-        runTtl: ttlInfo('run', run.expiresAt)
+        executionState: syncResult.executionState,
+        logs: syncResult.logs,
+        storedResponses: syncResult.storedResponses
       });
     }
   );

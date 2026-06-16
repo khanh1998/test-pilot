@@ -73,11 +73,6 @@
     return 'border-red-200 bg-red-50 text-red-700';
   }
 
-  function getStepId(endpointId: string): string {
-    const separatorIndex = endpointId.lastIndexOf('-');
-    return separatorIndex > 0 ? endpointId.slice(0, separatorIndex) : endpointId;
-  }
-
   function hasRequestBody(body: unknown): boolean {
     if (body === null || body === undefined) return false;
     if (typeof body === 'object') return Object.keys(body).length > 0;
@@ -527,12 +522,20 @@
                         <span
                           class="rounded bg-blue-100 px-2 py-0.5 font-mono text-xs font-semibold text-blue-800"
                         >
-                          {getStepId(endpointId)}
+                          {endpointId}
                         </span>
-                        <span class="font-mono text-xs text-gray-500">Response {endpointId}</span>
                       </div>
                       {#if request?.url}
-                        <p class="mt-1 text-xs break-all text-gray-500">{request.url}</p>
+                        <div class="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-xs">
+                          {#if request.method}
+                            <span
+                              class="shrink-0 rounded bg-gray-200 px-2 py-0.5 font-mono font-semibold text-gray-700"
+                            >
+                              {request.method}
+                            </span>
+                          {/if}
+                          <span class="break-all font-mono text-gray-500">{request.url}</span>
+                        </div>
                       {/if}
                     </div>
 
