@@ -609,7 +609,7 @@ async function ensureFlowHasApiHosts(
   document: FlowDocument,
   authContext?: McpAuthContext
 ): Promise<FlowDocument> {
-  const existingHosts = document.flowData.settings.api_hosts ?? {};
+  const existingHosts = document.flowData?.settings?.api_hosts ?? {};
   if (Object.keys(existingHosts).length > 0) {
     return document;
   }
@@ -1389,7 +1389,23 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
       }
     },
     async ({ flowDocument, flowId, projectId, saveMode = 'auto' }) => {
-      const runnableDocument = await ensureFlowHasApiHosts(flowDocument as FlowDocument, authContext);
+      // Normalize: agents sometimes pass a bare TestFlowData without the FlowDocument wrapper.
+      // If there's no flowData key but there is a steps key, wrap it.
+      let normalizedDoc = flowDocument as FlowDocument;
+      if (!normalizedDoc.flowData && (normalizedDoc as unknown as Record<string, unknown>).steps) {
+        const bare = normalizedDoc as unknown as Record<string, unknown>;
+        normalizedDoc = {
+          name: (bare.name as string) ?? 'Untitled',
+          flowData: normalizedDoc as unknown as import('$lib/components/test-flows/types').TestFlowData
+        };
+      }
+      if (normalizedDoc.flowData && !normalizedDoc.flowData.settings) {
+        normalizedDoc = {
+          ...normalizedDoc,
+          flowData: { ...normalizedDoc.flowData, settings: {} as import('$lib/components/test-flows/types').TestFlowData['settings'] }
+        };
+      }
+      const runnableDocument = await ensureFlowHasApiHosts(normalizedDoc, authContext);
       const validation = validateFlowDocument(runnableDocument);
       if (!validation.valid) {
         throw new Error(`Flow is not valid and cannot be saved: ${validation.errors.join('; ')}`);
