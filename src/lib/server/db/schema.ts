@@ -8,7 +8,8 @@ import {
   jsonb,
   index,
   uniqueIndex,
-  customType
+  customType,
+  type AnyPgColumn
 } from 'drizzle-orm/pg-core';
 
 // Define a custom tsvector type
@@ -100,13 +101,15 @@ export const testFlows = pgTable(
     projectId: integer('project_id').references(() => projects.id), // Optional project reference for new project-centric model
     flowJson: jsonb('flow_json').notNull(), // Will store the entire flow structure including steps, inputs, assertions
     environmentId: integer('environment_id').references(() => environments.id), // Link to environment for execution
+    draftOf: integer('draft_of').references((): AnyPgColumn => testFlows.id, { onDelete: 'set null' }),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull()
   },
   (table) => [
     index('test_flows_project_id_idx').on(table.projectId),
     index('test_flows_user_id_idx').on(table.userId),
-    index('test_flows_environment_id_idx').on(table.environmentId)
+    index('test_flows_environment_id_idx').on(table.environmentId),
+    index('test_flows_draft_of_idx').on(table.draftOf)
   ]
 );
 
