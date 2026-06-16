@@ -807,7 +807,14 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
           responses: 'Use {{res:stepId-0.$.path}} for previous endpoint responses.',
           transformations: 'Use {{proc:stepId-0.$.alias.path}} for transformation outputs.',
           environment:
-            'Do not reference environment values directly in flows. Add a flow parameter, then map it to an environment variable.'
+            'Do not reference environment values directly in flows. Add a flow parameter, then map it to an environment variable.',
+          typePreservation: [
+            'Use DOUBLE braces {{...}} everywhere: path params, query params, headers, and string-valued body fields.',
+            'Use TRIPLE braces {{{...}}} ONLY inside a JSON request body when the field must stay a non-string primitive (number, boolean, null).',
+            'Example — body where conversation_id is an integer: { "conversation_id": {{{param:conversation_id}}} }',
+            'Example — query param (always string context, so double): queryParams: { "conversation_id": "{{param:conversation_id}}" }',
+            'A common mistake: using {{{...}}} for integers in query params or path params. Those are always rendered as strings in URLs — use double braces there.'
+          ]
         },
         focus
       })
