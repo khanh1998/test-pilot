@@ -1,5 +1,4 @@
 <script lang="ts">
-  
   import SimplifiedEnvironmentSelector from '../environments/SimplifiedEnvironmentSelector.svelte';
   import type { Environment } from '$lib/types/environment';
   import type { ExecutionState } from './types';
@@ -12,11 +11,12 @@
     isLoadingEnvironment?: boolean;
     executionStore: ExecutionState;
     executionLogs?: Array<{
-    level: 'info' | 'debug' | 'error' | 'warning';
-    message: string;
-    details?: string;
-    timestamp: Date;
-  }>;
+      level: 'info' | 'debug' | 'error' | 'warning';
+      message: string;
+      details?: string;
+      timestamp: Date;
+    }>;
+    runTarget?: 'local' | 'backend';
     hasValidApiHosts?: boolean;
     hasSteps?: boolean;
     totalSteps?: number;
@@ -29,15 +29,16 @@
     isLoadingEnvironment = false,
     executionStore,
     executionLogs = [],
+    runTarget = 'local',
     hasValidApiHosts = false,
     hasSteps = false,
-    totalSteps = 0
-  , ...callbackProps
+    totalSteps = 0,
+    ...callbackProps
   }: Props & Record<string, unknown> = $props();
 
   function dispatch(eventName: string, detail?: unknown) {
-    const handler = callbackProps["on" + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
-    if (typeof handler === "function") {
+    const handler = callbackProps['on' + eventName.charAt(0).toUpperCase() + eventName.slice(1)];
+    if (typeof handler === 'function') {
       if (arguments.length > 1) {
         handler(detail);
       } else {
@@ -46,7 +47,10 @@
     }
   }
 
-  function handleEnvironmentSelection(payload: { environmentId: number | null; subEnvironment: string | null }) {
+  function handleEnvironmentSelection(payload: {
+    environmentId: number | null;
+    subEnvironment: string | null;
+  }) {
     dispatch('environmentSelect', payload);
   }
 
@@ -64,6 +68,11 @@
 
   function handleOpenLogs() {
     dispatch('openLogs');
+  }
+
+  function handleRunTargetChange(event: Event) {
+    const target = event.currentTarget as HTMLSelectElement;
+    dispatch('runTargetChange', target.value as 'local' | 'backend');
   }
 
   function handleRunFlow() {
@@ -89,7 +98,9 @@
             id="environment-selector"
             {environment}
             {selectedSubEnvironment}
-            placeholder={isLoadingEnvironment ? "Loading environment..." : "Select sub-environment..."}
+            placeholder={isLoadingEnvironment
+              ? 'Loading environment...'
+              : 'Select sub-environment...'}
             disabled={isRunning || isLoadingEnvironment}
             onSelect={handleEnvironmentSelection}
           />
@@ -163,19 +174,34 @@
               />
             </svg>
             View Logs
-            <span class="ml-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-gray-100 text-xs font-medium text-gray-600">
+            <span
+              class="ml-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-gray-100 text-xs font-medium text-gray-600"
+            >
               {executionLogs.length}
             </span>
           </button>
         {/if}
+
+        <label class="flex items-center gap-2 text-sm text-gray-600">
+          <span>Run on</span>
+          <select
+            class="rounded-md border border-gray-300 bg-white px-2 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+            value={runTarget}
+            onchange={handleRunTargetChange}
+            disabled={isRunning}
+          >
+            <option value="local">Local</option>
+            <option value="backend">Backend</option>
+          </select>
+        </label>
 
         <!-- Run Flow Button -->
         <button
           class="inline-flex items-center rounded-md border border-transparent px-4 py-2 text-sm font-medium text-white shadow-sm {isRunning
             ? 'bg-red-600 hover:bg-red-700'
             : !hasValidApiHosts || !hasSteps
-            ? 'bg-gray-400 cursor-not-allowed'
-            : 'bg-blue-600 hover:bg-blue-700'}"
+              ? 'cursor-not-allowed bg-gray-400'
+              : 'bg-blue-600 hover:bg-blue-700'}"
           onclick={isRunning ? handleStop : handleRunFlow}
           disabled={isRunning || !hasValidApiHosts || !hasSteps}
         >
@@ -236,7 +262,7 @@
                 d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
               />
             </svg>
-            Run Flow
+            {runTarget === 'backend' ? 'Run Backend' : 'Run Flow'}
           {/if}
         </button>
       </div>

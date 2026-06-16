@@ -65,13 +65,13 @@ export class ParameterManager {
         this.context.addLog(
           'debug',
           `Parameter '${parameter.name}' resolved from environment variable '${resolvedParameter.sourceName}'`,
-          String(resolvedParameter.value)
+          formatParameterValueForLog(parameter.name, resolvedParameter.value)
         );
       } else if (resolvedParameter?.source === 'default') {
         this.context.addLog(
           'debug',
           `Parameter '${parameter.name}' using default value`,
-          String(parameter.defaultValue)
+          formatParameterValueForLog(parameter.name, parameter.defaultValue)
         );
       }
 
@@ -83,7 +83,7 @@ export class ParameterManager {
             : 'default value';
         this.context.addLog(
           'info',
-          `Parameter '${parameter.name}' = ${JSON.stringify(resolvedParameter.value)} (from ${source})`
+          `Parameter '${parameter.name}' = ${formatParameterValueForLog(parameter.name, resolvedParameter.value)} (from ${source})`
         );
       } else {
         this.context.addLog(
@@ -96,7 +96,7 @@ export class ParameterManager {
     this.context.addLog(
       'debug',
       'Final ephemeral parameter values for this execution',
-      JSON.stringify(parameterValues, null, 2)
+      JSON.stringify(sanitizeParameterValuesForLog(parameterValues), null, 2)
     );
     return parameterValues;
   }
@@ -143,7 +143,7 @@ export class ParameterManager {
         this.context.addLog(
           'info',
           `User provided value for required parameter '${parameter.name}'`,
-          String(parameter.value)
+          formatParameterValueForLog(parameter.name, parameter.value)
         );
       }
     });
@@ -166,6 +166,33 @@ export class ParameterManager {
     }
     return null;
   }
+}
+
+const REDACTED_LOG_VALUE = '[REDACTED]';
+const SENSITIVE_PARAMETER_NAME_PATTERN =
+  /(^|[_\-.])(auth|authorization|cookie|credential|key|pass|password|secret|session|token)([_\-.]|$)|api[_\-.]?key/i;
+
+function isSensitiveParameterName(name: string): boolean {
+  return SENSITIVE_PARAMETER_NAME_PATTERN.test(name);
+}
+
+function formatParameterValueForLog(name: string, value: unknown): string {
+  if (isSensitiveParameterName(name)) {
+    return REDACTED_LOG_VALUE;
+  }
+
+  return JSON.stringify(value);
+}
+
+function sanitizeParameterValuesForLog(
+  parameterValues: Record<string, unknown>
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(parameterValues).map(([name, value]) => [
+      name,
+      isSensitiveParameterName(name) ? REDACTED_LOG_VALUE : value
+    ])
+  );
 }
 
 export function resolveFlowParameterValues(

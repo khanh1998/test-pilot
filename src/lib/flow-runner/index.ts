@@ -12,3 +12,5 @@ export {
 } from './parameter-manager';
 export { FlowOutputEvaluator, type OutputEvaluatorContext } from './output-evaluator';
 export { FlowValidator } from './validator';
+export type { FlowHttpRequest, FlowHttpTransport, RequestCookie } from './http-transport';
+export { sanitizeExecutionState, sanitizeHeaders, sanitizeValue } from './sanitize';

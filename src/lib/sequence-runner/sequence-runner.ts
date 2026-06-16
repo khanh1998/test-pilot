@@ -309,6 +309,7 @@ export class SequenceRunner {
       const flowRunnerOptions: FlowRunnerOptions = {
         flowData: resolvedExecution.flowData,
         preferences: this.options.preferences,
+        httpTransport: this.options.httpTransport,
         selectedEnvironment: this.options.selectedEnvironment,
         environmentVariables: resolvedExecution.environmentVariables,
         onLog: this.options.onLog,

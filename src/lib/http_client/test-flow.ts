@@ -1,11 +1,32 @@
+import type { ExecutionState } from '$lib/components/test-flows/types';
+import type { ExecutionPreferences } from '$lib/flow-runner';
+import type { RequestCookie } from '$lib/flow-runner/http-transport';
+export type { RequestCookie } from '$lib/flow-runner/http-transport';
 import type { Endpoint } from '$lib/types/test-flow';
 import { fetchWithAuth } from './util';
 
-export interface RequestCookie {
-	name: string;
-	value: string;
-	domain: string;
-	path?: string;
+export interface RunTestFlowSyncRequest {
+	mode?: 'sync';
+	parameters?: Record<string, unknown>;
+	environment?: {
+		environmentId?: number;
+		subEnvironment?: string;
+	};
+	preferences?: Partial<ExecutionPreferences>;
+}
+
+export interface RunTestFlowSyncResponse {
+	status: 'completed' | 'failed' | 'missing_parameters';
+	success: boolean;
+	summary: string;
+	executionState: ExecutionState;
+	storedResponses: Record<string, unknown>;
+	storedTransformations: Record<string, Record<string, unknown>>;
+	parameterValues: Record<string, unknown>;
+	flowOutputs: Record<string, unknown>;
+	logs: Array<{ level: 'info' | 'debug' | 'warning' | 'error'; message: string; details?: string }>;
+	missingParameters?: string[];
+	error?: string;
 }
 
 export async function getTestFlows(options: {
@@ -128,6 +149,28 @@ export async function deleteTestFlow(id: string | number) {
 		console.error(`Error deleting test flow ${id}:`, error);
 		return null;
 	}
+}
+
+export async function runTestFlowSync(
+	id: string | number,
+	body: RunTestFlowSyncRequest
+): Promise<RunTestFlowSyncResponse> {
+	const response = await fetchWithAuth(`/api/test-flows/${id}/runs`, {
+		method: 'POST',
+		body: JSON.stringify({ mode: 'sync', ...body })
+	});
+
+	const responseBody = await response.json().catch(() => null);
+
+	if (response.ok || responseBody?.status === 'missing_parameters') {
+		return responseBody as RunTestFlowSyncResponse;
+	}
+
+	throw new Error(
+		responseBody?.error ||
+			responseBody?.message ||
+			`Failed to run test flow on backend (${response.status})`
+	);
 }
 
 import { isDesktop } from '$lib/environment';

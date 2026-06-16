@@ -26,10 +26,15 @@ vi.mock('$lib/environment', () => ({
 describe('FlowExecutionEngine Template Resolution', () => {
   let mockContext: ExecutionContext;
   let engine: FlowExecutionEngine;
+  let mockHttpTransport: { execute: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     // Reset all mocks
     vi.clearAllMocks();
+
+    mockHttpTransport = {
+      execute: vi.fn()
+    };
 
     // Setup mock context
     mockContext = {
@@ -78,6 +83,7 @@ describe('FlowExecutionEngine Template Resolution', () => {
       },
       environmentVariables: {},
       cookieStore: new Map(),
+      httpTransport: mockHttpTransport,
       selectedEnvironment: null,
       shouldStopExecution: false,
       error: null,
@@ -547,6 +553,85 @@ describe('FlowExecutionEngine Template Resolution', () => {
         username: 'testuser',
         password: 'testpass'
       });
+    });
+  });
+
+  describe('executeEndpoint transport integration', () => {
+    it('uses the injected transport and records request and response details', async () => {
+      mockContext.flowData.settings.api_hosts = {
+        1: { url: 'https://api.example.com' }
+      };
+      mockContext.flowData.endpoints = [
+        {
+          id: 1,
+          apiId: 1,
+          path: '/users',
+          method: 'GET'
+        }
+      ];
+
+      mockHttpTransport.execute.mockResolvedValue(
+        new Response(JSON.stringify({ id: 123 }), {
+          status: 200,
+          statusText: 'OK',
+          headers: { 'content-type': 'application/json' }
+        })
+      );
+
+      await engine.executeEndpoint({ endpoint_id: 1, api_id: 1 }, 'step-1', 0);
+
+      expect(mockHttpTransport.execute).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: 'https://api.example.com/users',
+          headers: {},
+          body: null,
+          endpointId: 'step-1-0',
+          timeout: 30000,
+          useServerCookieHandling: false
+        })
+      );
+      expect(mockContext.storedResponses['step-1-0']).toEqual({ id: 123 });
+      expect(mockContext.updateExecutionState).toHaveBeenCalledWith('step-1-0', {
+        request: expect.objectContaining({
+          url: 'https://api.example.com/users',
+          method: 'GET'
+        })
+      });
+      expect(mockContext.updateExecutionState).toHaveBeenCalledWith('step-1-0', {
+        response: expect.objectContaining({
+          status: 200,
+          statusText: 'OK',
+          body: { id: 123 }
+        })
+      });
+    });
+
+    it('records transport failures in endpoint state and logs', async () => {
+      mockContext.flowData.settings.api_hosts = {
+        1: { url: 'https://api.example.com' }
+      };
+      mockContext.flowData.endpoints = [
+        {
+          id: 1,
+          apiId: 1,
+          path: '/users',
+          method: 'GET'
+        }
+      ];
+      mockHttpTransport.execute.mockRejectedValue(new Error('Network unavailable'));
+
+      await engine.executeEndpoint({ endpoint_id: 1, api_id: 1 }, 'step-1', 0);
+
+      expect(mockContext.updateExecutionState).toHaveBeenCalledWith('step-1-0', {
+        status: 'failed',
+        error: 'Network unavailable'
+      });
+      expect(mockContext.addLog).toHaveBeenCalledWith(
+        'error',
+        'Endpoint step-1-0 failed',
+        'Network unavailable'
+      );
+      expect(mockContext.error).toBeInstanceOf(Error);
     });
   });
 

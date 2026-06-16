@@ -4,7 +4,6 @@ import type {
   FlowParameter,
   ExecutionState
 } from '$lib/components/test-flows/types';
-import type { RequestCookie } from '$lib/http_client/test-flow';
 import {
   FlowExecutionEngine,
   type ExecutionPreferences,
@@ -13,10 +12,12 @@ import {
 import { ParameterManager, type ParameterManagerContext } from './parameter-manager';
 import { FlowOutputEvaluator, type OutputEvaluatorContext } from './output-evaluator';
 import { FlowValidator } from './validator';
+import type { FlowHttpTransport, RequestCookie } from './http-transport';
 
 export interface FlowRunnerOptions {
   flowData: TestFlowData;
   preferences: ExecutionPreferences;
+  httpTransport: FlowHttpTransport;
   selectedEnvironment: import('$lib/types/environment').Environment | null;
   environmentVariables: Record<string, unknown>;
   onLog: (level: 'info' | 'debug' | 'error' | 'warning', message: string, details?: string) => void;
@@ -104,6 +105,7 @@ export class FlowRunner {
       parameterValues: this.state.parameterValues,
       environmentVariables: this.options.environmentVariables,
       cookieStore: this.state.cookieStore,
+      httpTransport: this.options.httpTransport,
       selectedEnvironment: this.options.selectedEnvironment,
       get shouldStopExecution() {
         return state.shouldStopExecution;

@@ -41,6 +41,7 @@
   // Get the endpoint ID - using stepId-endpointIndex format now instead of endpointId-endpointIndex
   let endpointId = $derived(`${stepId}-${endpointIndex}`);
   let executionData = $derived(executionState[endpointId] || {});
+  let executionError = $derived(executionData.error || '');
   let panelElement: HTMLDivElement | undefined = $state();
 
   function closeResponseViewer() {
@@ -114,6 +115,10 @@
               )} text-white"
             >
               {executionData.response.status}
+            </span>
+          {:else if executionError}
+            <span class="ml-2 rounded-full bg-red-600 px-1.5 py-0.5 text-xs font-medium text-white">
+              Failed
             </span>
           {/if}
         </h3>
@@ -281,6 +286,18 @@
         <div class="space-y-4">
           <h4 class="mb-2 text-sm font-medium text-gray-700">Response Details</h4>
 
+          {#if executionError}
+            <div class="rounded-md border border-red-200 bg-red-50 p-3">
+              <h5 class="mb-1 text-xs font-semibold text-red-800">Execution Error</h5>
+              <p class="text-sm break-words whitespace-pre-wrap text-red-700">{executionError}</p>
+              {#if executionData.request?.url}
+                <div class="mt-2 rounded border border-red-100 bg-white p-2 font-mono text-xs break-all text-red-900">
+                  {executionData.request.method || endpoint?.method} {executionData.request.url}
+                </div>
+              {/if}
+            </div>
+          {/if}
+
           <!-- Status -->
           <div class="mb-4">
             <h5 class="mb-1 text-xs font-medium text-gray-500">Status:</h5>
@@ -316,6 +333,8 @@
                   )}</pre>
               </div>
             </div>
+          {:else if executionError}
+            <p class="text-sm text-gray-500">No response was received.</p>
           {/if}
         </div>
       {/if}

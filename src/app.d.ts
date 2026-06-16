@@ -8,6 +8,8 @@ declare global {
     interface Locals {
       user?: JWTPayload;
       token?: string;
+      authSource?: 'jwt' | 'agent_token';
+      agentTokenId?: number;
       getUserId?: () => number;
     }
     // interface PageData {}

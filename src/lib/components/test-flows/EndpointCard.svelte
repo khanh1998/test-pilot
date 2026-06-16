@@ -75,6 +75,8 @@
   let currentExecutionState = $derived(executionState[endpointDisplayId] || {});
   let executionStatus = $derived(currentExecutionState?.status);
   let executionResponse = $derived(currentExecutionState?.response);
+  let executionRequest = $derived(currentExecutionState?.request);
+  let executionError = $derived(currentExecutionState?.error || '');
   let executionTiming = $derived(currentExecutionState?.timing || null);
   let transformationResults = $derived(currentExecutionState?.transformations || {});
 
@@ -89,6 +91,7 @@
 
   // Check if transformation results are available
   let hasTransformationResults = $derived(Object.keys(transformationResults).length > 0);
+  let hasExecutionDetails = $derived(Boolean(executionResponse || executionRequest || executionError));
 
   // Get the response status code for an endpoint
   let statusCode = $derived(executionResponse?.status || null);
@@ -305,6 +308,15 @@
     </div>
   </div>
 
+  {#if executionError}
+    <div
+      class="mt-1 rounded border border-red-200 bg-red-100 px-1.5 py-1 text-[10px] leading-snug text-red-800"
+      title={executionError}
+    >
+      <div class="line-clamp-2 break-words">{executionError}</div>
+    </div>
+  {/if}
+
   <!-- Parameter configuration summary -->
   <div class="mt-2">
     <!-- Button row 1: Primary actions -->
@@ -332,14 +344,14 @@
 
       <!-- Response Viewer Button -->
       <button
-        class="flex items-center justify-center rounded border px-1.5 py-0.5 text-xs {executionResponse
+        class="flex items-center justify-center rounded border px-1.5 py-0.5 text-xs {hasExecutionDetails
           ? 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100'
           : 'border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100'} transition-colors"
         onclick={openResponseViewer}
-        disabled={!executionResponse}
-        title={executionResponse
-          ? 'View complete request and response details'
-          : 'Run endpoint to view response'}
+        disabled={!hasExecutionDetails}
+        title={hasExecutionDetails
+          ? 'View request, response, and error details'
+          : 'Run endpoint to view details'}
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -355,7 +367,7 @@
             d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
           />
         </svg>
-        Response
+        {executionResponse ? 'Response' : 'Details'}
       </button>
     
       <!-- Transformation Editor Button -->
@@ -559,3 +571,13 @@
   endpoint={selectedEndpoint}
   onClose={closeEndpointDetails}
 />
+
+<style>
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+</style>

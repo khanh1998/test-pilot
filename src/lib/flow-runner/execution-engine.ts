@@ -4,11 +4,9 @@ import type {
   StepEndpoint,
   ExecutionState
 } from '$lib/components/test-flows/types';
-import type { RequestCookie } from '$lib/http_client/test-flow';
-import { executeDirectEndpoint, executeProxiedEndpoint } from '$lib/http_client/test-flow';
-import { isDesktop } from '$lib/environment';
 import { createTemplateContextFromFlowRunner, resolveTemplate } from '$lib/template';
 import { createTemplateFunctions, defaultTemplateFunctions } from '$lib/template';
+import type { FlowHttpTransport, RequestCookie } from './http-transport';
 
 export interface ExecutionPreferences {
   parallelExecution: boolean;
@@ -26,6 +24,7 @@ export interface ExecutionContext {
   parameterValues: Record<string, unknown>;
   environmentVariables: Record<string, unknown>;
   cookieStore: Map<string, Array<RequestCookie>>;
+  httpTransport: FlowHttpTransport;
   selectedEnvironment: import('$lib/types/environment').Environment | null;
   shouldStopExecution: boolean;
   error: unknown;
@@ -203,6 +202,7 @@ export class FlowExecutionEngine {
         status: 'failed',
         error: errorMessage
       });
+      this.context.addLog('error', `Endpoint ${endpointId} failed`, errorMessage);
 
       if (this.context.preferences.stopOnError) {
         this.context.error = err;
@@ -335,100 +335,17 @@ export class FlowExecutionEngine {
     body: any,
     endpointId: string
   ): Promise<Response> {
-    if (this.context.preferences.serverCookieHandling) {
-      return await this.makeProxiedRequest(endpointDef, url, headers, body, endpointId);
-    } else {
-      return await this.makeDirectRequest(endpointDef, url, headers, body, endpointId);
-    }
-  }
-
-  private async makeProxiedRequest(
-    endpointDef: any,
-    url: string,
-    headers: Record<string, string>,
-    body: any,
-    endpointId: string
-  ): Promise<Response> {
-    const targetUrl = new URL(url);
-    const domain = targetUrl.hostname;
-
-    let requestCookies: RequestCookie[] = [];
-
-    for (const [_key, cookies] of this.context.cookieStore.entries()) {
-      if (cookies.length > 0) {
-        for (const cookie of cookies) {
-          if (cookie.value.length > 0) {
-            requestCookies.push(cookie);
-          }
-        }
-      }
-    }
-
-    this.context.addLog(
-      'debug',
-      `Sending ${requestCookies.length} cookies with request`,
-      `Target domain: ${domain}`
-    );
-
-    const proxiedResult = await executeProxiedEndpoint(
+    return this.context.httpTransport.execute({
       endpointDef,
       url,
       headers,
       body,
-      requestCookies,
-      this.context.preferences.timeout
-    );
-
-    const response = proxiedResult.response;
-    const responseCookies = proxiedResult.cookies;
-
-    if (responseCookies && responseCookies.length > 0) {
-      this.context.cookieStore.set(
-        endpointId,
-        responseCookies.map((c: RequestCookie) => ({
-          name: c.name,
-          value: c.value,
-          domain: c.domain || targetUrl.hostname,
-          path: c.path
-        }))
-      );
-    }
-
-    this.context.addLog(
-      'info',
-      'Request proxied through server for cookie handling',
-      `Original URL: ${url}\nProxy URL: /api/proxy/request`
-    );
-
-    return response;
-  }
-
-  private async makeDirectRequest(
-    endpointDef: any,
-    url: string,
-    headers: Record<string, string>,
-    body: any,
-    endpointId: string
-  ): Promise<Response> {
-    const response = await executeDirectEndpoint(
-      endpointDef,
-      url,
-      headers,
-      body,
-      this.context.preferences.timeout,
-      this.context.cookieStore,
-      endpointId
-    );
-
-    if (isDesktop) {
-      this.context.addLog(
-        'debug',
-        `Desktop mode: cookies managed via Tauri HTTP client`,
-        `Cookies for ${endpointId}: ${this.context.cookieStore.has(endpointId) ? this.context.cookieStore.get(endpointId)?.length : 0} cookies`
-      );
-    }
-
-    return response;
+      timeout: this.context.preferences.timeout,
+      cookieStore: this.context.cookieStore,
+      endpointId,
+      useServerCookieHandling: this.context.preferences.serverCookieHandling,
+      addLog: this.context.addLog
+    });
   }
 
   private async processTransformations(
@@ -569,13 +486,15 @@ export class FlowExecutionEngine {
       );
 
       if (!assertionResults.passed) {
+        const failureMessage = assertionResults.failureMessage || 'Assertion failed';
         this.context.updateExecutionState(endpointId, {
           status: 'failed',
-          error: assertionResults.failureMessage || 'Assertion failed'
+          error: failureMessage
         });
+        this.context.addLog('error', `Endpoint ${endpointId} assertion failed`, failureMessage);
 
         if (this.context.preferences.stopOnError) {
-          this.context.error = new Error(assertionResults.failureMessage || 'Assertion failed');
+          this.context.error = new Error(failureMessage);
         }
 
         return;
@@ -620,19 +539,19 @@ export class FlowExecutionEngine {
     } else if (response.ok) {
       this.context.updateExecutionState(endpointId, { status: 'completed' }, true);
     } else {
+      const errorMessage = `Request failed with status ${response.status}: ${response.statusText}`;
       this.context.updateExecutionState(
         endpointId,
         {
           status: 'failed',
-          error: `Request failed with status ${response.status}: ${response.statusText}`
+          error: errorMessage
         },
         true
       );
+      this.context.addLog('error', `Endpoint ${endpointId} failed`, errorMessage);
 
       if (this.context.preferences.stopOnError) {
-        this.context.error = new Error(
-          `Request failed with status ${response.status}: ${response.statusText}`
-        );
+        this.context.error = new Error(errorMessage);
       }
     }
   }

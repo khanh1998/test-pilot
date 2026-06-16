@@ -190,8 +190,29 @@
     const { success, error: executionError } = payload;
 
     if (!success && executionError) {
-      $error = executionError.message || 'An error occurred during flow execution';
+      $error = stringifyExecutionError(executionError);
     }
+  }
+
+  function stringifyExecutionError(executionError: unknown): string {
+    if (executionError instanceof Error) {
+      return executionError.message;
+    }
+
+    if (typeof executionError === 'string') {
+      return executionError;
+    }
+
+    if (
+      typeof executionError === 'object' &&
+      executionError !== null &&
+      'message' in executionError &&
+      typeof executionError.message === 'string'
+    ) {
+      return executionError.message;
+    }
+
+    return 'An error occurred during flow execution';
   }
 
   async function handleSave() {

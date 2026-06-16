@@ -83,6 +83,9 @@ describe('Parameter Synchronization Bug Fix', () => {
         retryCount: 0,
         timeout: 30000
       },
+      httpTransport: {
+        execute: vi.fn()
+      },
       selectedEnvironment: null,
       environmentVariables: {},
       onLog: vi.fn(),

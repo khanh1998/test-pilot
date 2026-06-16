@@ -2382,12 +2382,9 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
             }
           : runnableDocument;
 
-      const environmentState = await loadSelectedEnvironmentForDocument(
-        effectiveDocument,
-        environmentOverrides,
-        authContext
+      const { runFlowDataSync } = await import(
+        '$lib/server/service/test_flows/run_test_flow_sync'
       );
-      const { FlowRunner } = await import('$lib/flow-runner/flow-runner');
 
       const run = createFlowRun(user.userId, {
         flowId,
@@ -2395,92 +2392,51 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
         draftId: sourceDraftId
       });
 
-      const logs: Array<{
-        level: 'info' | 'debug' | 'error' | 'warning';
-        message: string;
-        details?: string;
-      }> = [];
-      let executionState: Record<string, unknown> = {};
-      let completionData: {
-        success: boolean;
-        error?: unknown;
-        storedResponses: Record<string, unknown>;
-        parameterValues: Record<string, unknown>;
-        flowOutputs: Record<string, unknown>;
-      } | null = null;
-
-      const runner = new FlowRunner({
-        flowData: effectiveDocument.flowData,
-        preferences: {
-          parallelExecution: preferences?.parallelExecution ?? false,
-          stopOnError: preferences?.stopOnError ?? true,
-          serverCookieHandling: false,
-          retryCount: preferences?.retryCount ?? 0,
-          timeout: preferences?.timeout ?? 30000
+      const syncResult = await runFlowDataSync(
+        effectiveDocument.flowData,
+        user.userId,
+        {
+          parameters: parameterOverrides,
+          environment: environmentOverrides,
+          preferences: {
+            parallelExecution: preferences?.parallelExecution ?? false,
+            stopOnError: preferences?.stopOnError ?? true,
+            serverCookieHandling: preferences?.serverCookieHandling ?? false,
+            retryCount: preferences?.retryCount ?? 0,
+            timeout: preferences?.timeout ?? 30000
+          }
         },
-        selectedEnvironment: environmentState?.environment ?? null,
-        environmentVariables: environmentState?.resolvedVariables ?? {},
-        onLog: (level, message, details) => {
-          logs.push({ level, message, details });
-        },
-        onExecutionStateUpdate: (state) => {
-          executionState = structuredClone(state);
-        },
-        onEndpointStateUpdate: ({ endpointId, state }) => {
-          executionState = {
-            ...executionState,
-            [endpointId]: state
-          };
-        },
-        onExecutionComplete: (data) => {
-          completionData = data;
+        {
+          projectId: effectiveDocument.projectId ?? null,
+          savedEnvironmentId:
+            effectiveDocument.environmentId ??
+            effectiveDocument.flowData.settings.environment?.environmentId ??
+            null
         }
-      });
-
-      const result = await runner.runFlow();
-      const finalCompletion = completionData ?? {
-        success: result.success,
-        error: result.error,
-        storedResponses: {},
-        parameterValues: {},
-        flowOutputs: {}
-      };
-
-      const failedEndpoint = Object.entries(executionState).find(
-        ([, state]) =>
-          typeof state === 'object' &&
-          state !== null &&
-          (state as { status?: string }).status === 'failed'
-      )?.[0];
-      const summary = result.success
-        ? `Flow executed successfully with ${effectiveDocument.flowData.steps.length} steps.`
-        : 'parametersWithMissingValues' in result && result.parametersWithMissingValues?.length
-          ? `Flow requires parameter values for: ${result.parametersWithMissingValues.map((parameter) => parameter.name).join(', ')}.`
-          : failedEndpoint
-            ? `Flow failed at ${failedEndpoint}.`
-            : `Flow execution failed${result.error ? `: ${String(result.error)}` : '.'}`;
+      );
 
       updateFlowRun(run.id, user.userId, {
-        status: result.success ? 'completed' : 'failed',
-        success: result.success,
-        summary,
-        error: result.error ? String(result.error) : undefined,
+        status: syncResult.status === 'completed' ? 'completed' : 'failed',
+        success: syncResult.success,
+        summary: syncResult.summary,
+        error: syncResult.error,
         completedAt: Date.now(),
-        executionState,
-        logs,
-        storedResponses: finalCompletion.storedResponses,
-        parameterValues: finalCompletion.parameterValues,
-        flowOutputs: finalCompletion.flowOutputs
+        executionState: syncResult.executionState,
+        logs: syncResult.logs,
+        storedResponses: syncResult.storedResponses,
+        parameterValues: syncResult.parameterValues,
+        flowOutputs: syncResult.flowOutputs
       });
 
       return asTextResult({
         runId: run.id,
-        status: result.success ? 'completed' : 'failed',
-        summary,
+        status: syncResult.status,
+        success: syncResult.success,
+        summary: syncResult.summary,
         validation,
         executionMode: {
-          serverCookieHandling: false,
-          note: 'MCP server-side execution uses direct HTTP requests with the shared cookie store instead of the browser proxy path.'
+          serverCookieHandling: preferences?.serverCookieHandling ?? false,
+          note: 'MCP server-side execution uses the shared sync run service and server HTTP transport.'
         },
         resolvedEnvironment: {
           environmentId:
@@ -2490,10 +2446,9 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
           subEnvironment: effectiveDocument.flowData.settings.environment?.subEnvironment ?? null
         },
         runTtl: ttlInfo('run', run.expiresAt),
-        missingParameters:
-          'parametersWithMissingValues' in result
-            ? (result.parametersWithMissingValues?.map((parameter) => parameter.name) ?? [])
-            : []
+        missingParameters: syncResult.missingParameters ?? [],
+        flowOutputs: syncResult.flowOutputs,
+        executionState: syncResult.executionState
       });
     }
   );
@@ -2534,6 +2489,8 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
         failedEndpoints,
         parameterValues: run.parameterValues,
         flowOutputs: run.flowOutputs,
+        executionState: run.executionState,
+        storedResponses: run.storedResponses,
         logTail: run.logs.slice(-20),
         runTtl: ttlInfo('run', run.expiresAt)
       });

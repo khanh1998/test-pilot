@@ -17,6 +17,7 @@
   import type { TestFlow } from '$lib/types/test-flow';
   import type { Environment } from '$lib/types/environment';
   import type { ExecutionPreferences } from '$lib/flow-runner/execution-engine';
+  import { browserFlowHttpTransport } from '$lib/flow-runner/browser-http-transport';
   import { isDesktop } from '$lib/environment';
 
   let projectId: number | null = $state(null);
@@ -777,6 +778,7 @@
         selectedEnvironment: selectedEnv,
         selectedSubEnvironment: selectedSubEnvironment!,
         preferences: executionPreferences,
+        httpTransport: browserFlowHttpTransport,
         onLog: (level, message, details) => {
           console.log(`[${sequence.name}] [${level}] ${message}`, details);
         },
@@ -864,6 +866,7 @@
         selectedEnvironment: selectedEnv,
         selectedSubEnvironment: selectedSubEnvironment,
         preferences: executionPreferences,
+        httpTransport: browserFlowHttpTransport,
         onLog: (level, message, details) => {
           console.log(`[SEQUENCE ${sequence.name}] [${level}] ${message}`, details);
         },

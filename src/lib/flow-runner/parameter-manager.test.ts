@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { resolveFlowParameterValues } from './parameter-manager';
+import { describe, expect, it, vi } from 'vitest';
+import { ParameterManager, resolveFlowParameterValues } from './parameter-manager';
 import type { TestFlowData } from '$lib/components/test-flows/types';
 
 describe('resolveFlowParameterValues', () => {
@@ -89,5 +89,58 @@ describe('resolveFlowParameterValues', () => {
         source: 'default'
       }
     ]);
+  });
+});
+
+describe('ParameterManager logging', () => {
+  it('redacts sensitive parameter values in logs while preserving execution values', () => {
+    const addLog = vi.fn();
+    const flowData: TestFlowData = {
+      parameters: [
+        {
+          name: 'username',
+          type: 'string',
+          required: true,
+          defaultValue: 'admin'
+        },
+        {
+          name: 'password',
+          type: 'string',
+          required: true,
+          defaultValue: 'super-secret'
+        },
+        {
+          name: 'api_key',
+          type: 'string',
+          required: true,
+          defaultValue: 'key-secret'
+        }
+      ],
+      settings: {
+        environment: {
+          environmentId: null,
+          subEnvironment: null
+        }
+      },
+      steps: []
+    };
+
+    const manager = new ParameterManager({
+      flowData,
+      environmentVariables: {},
+      selectedEnvironment: null,
+      addLog
+    });
+
+    const values = manager.prepareParameters();
+
+    expect(values).toEqual({
+      username: 'admin',
+      password: 'super-secret',
+      api_key: 'key-secret'
+    });
+    expect(JSON.stringify(addLog.mock.calls)).toContain('[REDACTED]');
+    expect(JSON.stringify(addLog.mock.calls)).not.toContain('super-secret');
+    expect(JSON.stringify(addLog.mock.calls)).not.toContain('key-secret');
   });
 });

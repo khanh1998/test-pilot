@@ -17,6 +17,7 @@
     FlowStep
   } from './types';
   import { getEndpointById, type EndpointDetails } from '$lib/http_client/endpoints';
+  import { runTestFlowSync } from '$lib/http_client/test-flow';
   import type { Environment } from '$lib/types/environment';
   import { createTemplateContextFromFlowRunner } from '$lib/template/utils';
   import { createTemplateFunctions } from '$lib/template/functions';
@@ -35,6 +36,7 @@
     type FlowRunnerOptions,
     type ExecutionPreferences
   } from '$lib/flow-runner';
+  import { browserFlowHttpTransport } from '$lib/flow-runner/browser-http-transport';
 
   import { writable } from 'svelte/store';
   import { onMount, onDestroy, untrack } from 'svelte';
@@ -64,6 +66,7 @@
   let isRunning = $state(false);
   let flowRunner: FlowRunner | undefined = $state();
   let isLoadingEndpointDetails = $state(false); // Add loading state for endpoint fetching
+  let runTarget: 'local' | 'backend' = $state('local');
 
   // Bind to FlowRunner's current parameter values to use in template context
   let currentParameterValues: Record<string, unknown> = $state({});
@@ -74,6 +77,7 @@
 
   // Track pending single step execution
   let pendingSingleStepExecution: { step: FlowStep; stepIndex?: number } | null = $state(null);
+  let pendingBackendFlowExecution = $state(false);
 
   // Local state derived from flow runner
   let currentStep = 0;
@@ -272,6 +276,7 @@
     message: string,
     details?: string
   ) {
+    executionLogs = [...executionLogs, { level, message, details, timestamp: new Date() }];
     dispatch('log', { level, message, details });
   }
 
@@ -305,6 +310,7 @@
     const options: FlowRunnerOptions = {
       flowData,
       preferences,
+      httpTransport: browserFlowHttpTransport,
       selectedEnvironment: environment,
       environmentVariables,
       onLog: addLog,
@@ -488,6 +494,11 @@
       return;
     }
 
+    if (runTarget === 'backend') {
+      await runFlowOnBackend();
+      return;
+    }
+
     if (!flowRunner) {
       console.error('Flow runner not initialized');
       return;
@@ -513,6 +524,167 @@
     error = flowRunner.error;
     executionStore.set(flowRunner.executionState);
     currentParameterValues = flowRunner.parameterValues;
+  }
+
+  async function runFlowOnBackend(parameters: Record<string, unknown> = currentParameterValues) {
+    if (!testFlowId) {
+      dispatch('error', {
+        message: 'Please save this test flow before running it on the backend.'
+      });
+      return;
+    }
+
+    const normalizedTestFlowId = Number(testFlowId);
+    if (!Number.isInteger(normalizedTestFlowId) || normalizedTestFlowId <= 0) {
+      dispatch('error', {
+        message: 'Backend runs require a saved test flow ID.'
+      });
+      return;
+    }
+
+    executionStore.set({});
+    outputResults = {};
+    outputExecutionError = null;
+    executionLogs = [];
+    error = null;
+    isRunning = true;
+    pendingBackendFlowExecution = false;
+    dispatch('executionStart');
+
+    try {
+      const result = await runTestFlowSync(normalizedTestFlowId, {
+        parameters,
+        environment: buildBackendRunEnvironment(),
+        preferences
+      });
+
+      if (result.status === 'missing_parameters') {
+        parametersWithMissingValues = mapMissingBackendParameters(result.missingParameters || []);
+        pendingBackendFlowExecution = true;
+        showParameterInputModal = true;
+        currentParameterValues = result.parameterValues;
+        isRunning = false;
+        return;
+      }
+
+      applyBackendRunResult(result);
+    } catch (runError) {
+      error = runError;
+      outputResults = {};
+      outputExecutionError = runError;
+      addLog(
+        'error',
+        'Backend flow run failed',
+        runError instanceof Error ? runError.message : String(runError)
+      );
+      dispatch('error', {
+        message: runError instanceof Error ? runError.message : 'Backend flow run failed'
+      });
+      dispatch('executionComplete', {
+        success: false,
+        error: runError,
+        storedResponses: {},
+        storedTransformations: {},
+        executionState: $executionStore,
+        parameterValues: currentParameterValues,
+        flowOutputs: {}
+      });
+    } finally {
+      isRunning = false;
+    }
+  }
+
+  function buildBackendRunEnvironment() {
+    const environmentId =
+      environment?.id ??
+      flowData.settings.environment?.environmentId ??
+      flowData.settings.linkedEnvironment?.environmentId ??
+      undefined;
+
+    const subEnvironment =
+      selectedSubEnvironment ?? flowData.settings.environment?.subEnvironment ?? undefined;
+
+    if (!environmentId && !subEnvironment) {
+      return undefined;
+    }
+
+    return {
+      environmentId: environmentId ?? undefined,
+      subEnvironment: subEnvironment ?? undefined
+    };
+  }
+
+  function mapMissingBackendParameters(names: string[]): FlowParameter[] {
+    const parametersByName = new Map(
+      (flowData.parameters || []).map((parameter) => [parameter.name, parameter])
+    );
+
+    return names.map((name) => {
+      const existing = parametersByName.get(name);
+      return {
+        ...(existing ?? {
+          name,
+          type: 'string',
+          required: true
+        }),
+        value: currentParameterValues[name] ?? existing?.defaultValue ?? null
+      } as FlowParameter;
+    });
+  }
+
+  function applyBackendRunResult(result: Awaited<ReturnType<typeof runTestFlowSync>>) {
+    const executionState = {
+      ...result.executionState,
+      progress: result.executionState.progress ?? 100,
+      currentStep:
+        result.executionState.currentStep ??
+        Math.max(0, flowData.steps.length > 0 ? flowData.steps.length - 1 : 0)
+    } as ExecutionState;
+
+    executionStore.set(executionState);
+    if (flowRunner) {
+      flowRunner.hydrateExecutionSnapshot(executionState, result.parameterValues);
+    }
+
+    currentStep = executionState.currentStep || 0;
+    progress = executionState.progress || 0;
+    error = result.error ? new Error(result.error) : null;
+    currentParameterValues = result.parameterValues;
+    outputResults = result.flowOutputs;
+    outputExecutionError = result.success ? null : result.error || result.summary;
+    executionLogs = result.logs.map((log) => ({ ...log, timestamp: new Date() }));
+    if (result.error && !executionLogs.some((log) => log.level === 'error')) {
+      executionLogs = [
+        ...executionLogs,
+        {
+          level: 'error',
+          message: 'Backend flow run failed',
+          details: result.error,
+          timestamp: new Date()
+        }
+      ];
+    }
+
+    if (result.success) {
+      saveRunSnapshot({
+        testFlowId,
+        flowData,
+        executionState,
+        parameterValues: result.parameterValues,
+        flowOutputs: result.flowOutputs
+      });
+    }
+
+    dispatch('executionStateUpdate', executionState);
+    dispatch('executionComplete', {
+      success: result.success,
+      error,
+      storedResponses: result.storedResponses,
+      storedTransformations: result.storedTransformations,
+      executionState,
+      parameterValues: result.parameterValues,
+      flowOutputs: result.flowOutputs
+    });
   }
 
   // Execute a single step from the UI
@@ -635,10 +807,26 @@
   function handleParameterModalClose() {
     showParameterInputModal = false;
     pendingSingleStepExecution = null;
+    pendingBackendFlowExecution = false;
   }
 
   async function handleParameterModalSubmit(payload: { parameters: FlowParameter[] }) {
     if (!flowRunner) return;
+
+    if (pendingBackendFlowExecution) {
+      const parameterValues = { ...currentParameterValues };
+      for (const parameter of payload.parameters) {
+        if (parameter.value !== undefined && parameter.value !== null) {
+          parameterValues[parameter.name] = parameter.value;
+        }
+      }
+
+      currentParameterValues = parameterValues;
+      showParameterInputModal = false;
+      pendingBackendFlowExecution = false;
+      await runFlowOnBackend(parameterValues);
+      return;
+    }
 
     flowRunner.updateParameterValues(payload.parameters);
     showParameterInputModal = false;
@@ -865,6 +1053,7 @@
     {isLoadingEnvironment}
     executionStore={$executionStore}
     {executionLogs}
+    {runTarget}
     hasValidApiHosts={hasValidApiHosts()}
     hasSteps={flowData.steps.length > 0}
     totalSteps={flowData.steps.length}
@@ -875,6 +1064,7 @@
     }}
     onToggleParameters={() => (showParametersPanel = !showParametersPanel)}
     onOpenLogs={openLogsViewer}
+    onRunTargetChange={(target: 'local' | 'backend') => (runTarget = target)}
     onRunFlow={runFlow}
     onStop={handleStop}
   />

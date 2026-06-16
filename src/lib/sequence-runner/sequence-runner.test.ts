@@ -143,6 +143,9 @@ describe('SequenceRunner loop mode', () => {
       selectedEnvironment: environment,
       selectedSubEnvironment: 'dev',
       preferences,
+      httpTransport: {
+        execute: vi.fn()
+      },
       onLog: vi.fn()
     });
   }

@@ -4,6 +4,7 @@ import type { Environment } from '$lib/types/environment';
 import type { TestFlow } from '$lib/types/test-flow';
 import type { Project } from '$lib/types/project';
 import type { ExecutionPreferences } from '$lib/flow-runner/execution-engine';
+import type { FlowHttpTransport } from '$lib/flow-runner/http-transport';
 
 export interface SequenceRunnerOptions {
   sequence: FlowSequence;
@@ -12,6 +13,7 @@ export interface SequenceRunnerOptions {
   selectedEnvironment: Environment;
   selectedSubEnvironment: string; // Selected sub-environment (dev, sit, uat, etc.)
   preferences: ExecutionPreferences;
+  httpTransport: FlowHttpTransport;
   onLog: (level: 'info' | 'debug' | 'error' | 'warning', message: string, details?: string) => void;
   onSequenceStart?: () => void;
   onSequenceComplete?: (data: {

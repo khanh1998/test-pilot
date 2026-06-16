@@ -1,17 +1,10 @@
 import type { ExecutionState, TestFlowData } from '$lib/components/test-flows/types';
+export { sanitizeExecutionState } from '$lib/flow-runner/sanitize';
+import { sanitizeExecutionState, sanitizeValue } from '$lib/flow-runner/sanitize';
 
 const CACHE_VERSION = 1;
 const CACHE_KEY_PREFIX = 'test-pilot:test-flow-run-cache:';
 const MAX_SNAPSHOT_BYTES = 4 * 1024 * 1024;
-const REDACTED_VALUE = '[redacted]';
-const SENSITIVE_HEADER_NAMES = new Set([
-  'authorization',
-  'cookie',
-  'set-cookie',
-  'x-api-key',
-  'x-auth-token',
-  'proxy-authorization'
-]);
 
 type JsonRecord = Record<string, unknown>;
 
@@ -116,50 +109,6 @@ export function clearRunSnapshot(testFlowId: string | number | undefined): void 
   } catch (error) {
     console.warn('Failed to clear test flow run snapshot from localStorage:', error);
   }
-}
-
-export function sanitizeExecutionState(executionState: ExecutionState): ExecutionState {
-  return sanitizeValue(executionState, { parentKey: 'executionState' }) as ExecutionState;
-}
-
-function sanitizeValue(
-  value: unknown,
-  context: { parentKey?: string; key?: string } = {}
-): unknown {
-  if (Array.isArray(value)) {
-    return value.map((item) => sanitizeValue(item, context));
-  }
-
-  if (!isPlainObject(value)) {
-    return value;
-  }
-
-  const sanitized: JsonRecord = {};
-  for (const [key, childValue] of Object.entries(value)) {
-    const isHeadersObject = key === 'headers' && isPlainObject(childValue);
-    if (isHeadersObject) {
-      sanitized[key] = sanitizeHeaders(childValue as Record<string, unknown>);
-    } else if (isSensitiveHeaderName(context.parentKey, key)) {
-      sanitized[key] = REDACTED_VALUE;
-    } else {
-      sanitized[key] = sanitizeValue(childValue, { parentKey: key, key });
-    }
-  }
-
-  return sanitized;
-}
-
-function sanitizeHeaders(headers: Record<string, unknown>): Record<string, unknown> {
-  const sanitizedHeaders: Record<string, unknown> = {};
-  for (const [name, value] of Object.entries(headers)) {
-    sanitizedHeaders[name] = isSensitiveHeaderName('headers', name) ? REDACTED_VALUE : value;
-  }
-
-  return sanitizedHeaders;
-}
-
-function isSensitiveHeaderName(parentKey: string | undefined, key: string): boolean {
-  return parentKey === 'headers' && SENSITIVE_HEADER_NAMES.has(key.toLowerCase());
 }
 
 function isValidSnapshot(snapshot: TestFlowRunSnapshot, testFlowId: string): boolean {
