@@ -759,6 +759,18 @@ async function resolveModuleId(sequenceId: number): Promise<number> {
   return row.moduleId;
 }
 
+async function resolveProjectIdFromModule(moduleId: number): Promise<number> {
+  const { db } = await import('$lib/server/db');
+  const { projectModules } = await import('$lib/server/db/schema');
+  const { eq } = await import('drizzle-orm');
+  const [row] = await db
+    .select({ projectId: projectModules.projectId })
+    .from(projectModules)
+    .where(eq(projectModules.id, moduleId));
+  if (!row) throw new Error(`Module ${moduleId} not found.`);
+  return row.projectId;
+}
+
 async function getSequenceForMcp(
   input: {
     sequenceId: number;
@@ -1512,6 +1524,96 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
         executionState: syncResult.executionState,
         logs: syncResult.logs,
         storedResponses: syncResult.storedResponses
+      });
+    }
+  );
+
+  server.registerTool(
+    'run_sequence',
+    {
+      title: 'Run Sequence',
+      description: [
+        'Run one or more flow sequences on the server using the SequenceRunner engine.',
+        'Provide either sequenceIds (array of specific IDs to run) or moduleId (runs all non-empty sequences in that module).',
+        'Exactly one of sequenceIds or moduleId must be provided.',
+        'environmentId and subEnvironment are required — sequences cannot resolve variables or API hosts without them.',
+        'If you hit a timeout, retry with fewer sequences by passing sequenceIds instead of moduleId.',
+        'Returns per-sequence pass/fail, flow-level results, and aggregate counts.'
+      ].join(' '),
+      inputSchema: {
+        sequenceIds: z.array(z.number()).optional().describe('Specific sequence IDs to run. Mutually exclusive with moduleId.'),
+        moduleId: z.number().optional().describe('Run all non-empty sequences in this module. Mutually exclusive with sequenceIds.'),
+        projectId: z.number().optional().describe('Project ID — required when using moduleId. Inferred automatically if omitted.'),
+        environmentId: z.number().describe('Environment ID to use for variable and API host resolution.'),
+        subEnvironment: z.string().describe('Sub-environment name (e.g. "dev", "staging") within the selected environment.'),
+        mode: z.enum(['sequential', 'parallel']).optional().describe('Execution order when running multiple sequences. Defaults to sequential.'),
+        preferences: z
+          .object({
+            stopOnError: z.boolean().optional(),
+            retryCount: z.number().optional(),
+            timeout: z.number().optional()
+          })
+          .optional()
+      }
+    },
+    async ({ sequenceIds, moduleId, projectId, environmentId, subEnvironment, mode, preferences }) => {
+      const user = requireAuthContext(authContext);
+
+      const hasSequenceIds = Array.isArray(sequenceIds) && sequenceIds.length > 0;
+      const hasModuleId = moduleId !== undefined;
+
+      if (!hasSequenceIds && !hasModuleId) {
+        throw new Error('Provide either sequenceIds (array) or moduleId — exactly one is required.');
+      }
+      if (hasSequenceIds && hasModuleId) {
+        throw new Error('Provide either sequenceIds or moduleId, not both.');
+      }
+
+      const { runSequencesByIds, runSequencesByModuleId } = await import(
+        '$lib/server/service/sequences/run_sequences_sync'
+      );
+
+      const runInput = {
+        environment: { environmentId, subEnvironment },
+        preferences,
+        mode: mode ?? 'sequential'
+      };
+
+      let result;
+      if (hasSequenceIds) {
+        result = await runSequencesByIds(sequenceIds!, user.userId, runInput);
+      } else {
+        const resolvedProjectId =
+          projectId ?? (await resolveProjectIdFromModule(moduleId!));
+        result = await runSequencesByModuleId(moduleId!, resolvedProjectId, user.userId, runInput);
+      }
+
+      return asTextResult({
+        success: result.success,
+        summary: result.summary,
+        totalSequences: result.totalSequences,
+        successCount: result.successCount,
+        failCount: result.failCount,
+        skippedCount: result.skippedCount,
+        results: result.results.map((r) => ({
+          sequenceId: r.sequenceId,
+          sequenceName: r.sequenceName,
+          success: r.success,
+          status: r.status,
+          completedFlows: r.completedFlows,
+          totalFlows: r.totalFlows,
+          error: r.error,
+          flowResults: r.flowResults.map((f) => ({
+            flowId: f.flowId,
+            flowName: f.flowName,
+            stepOrder: f.stepOrder,
+            success: f.success,
+            expectsError: f.expectsError,
+            matchedExpectation: f.matchedExpectation,
+            executionTime: f.executionTime,
+            error: f.error instanceof Error ? f.error.message : f.error
+          }))
+        }))
       });
     }
   );

@@ -194,7 +194,7 @@ export class SequenceRunner {
     sequenceStep: FlowSequenceStep,
     flowIndex: number
   ): Promise<SequenceFlowResult> {
-    const startTime = performance.now();
+    const startTime = Date.now();
 
     this.options.onFlowStart?.({
       flowIndex,
@@ -286,7 +286,7 @@ export class SequenceRunner {
     apiHosts: Record<string, string>,
     loopContext?: SequenceLoopExecutionContext
   ): Promise<SequenceFlowResult> {
-    const startTime = performance.now();
+    const startTime = Date.now();
 
     try {
       const resolvedExecution = SequenceParameterResolver.resolveFlowParameters(
@@ -334,7 +334,7 @@ export class SequenceRunner {
       // Execute flow directly, bypassing parameter validation since we already resolved all parameters
       const result = await flowRunner.executeFlowAfterParameterCheck();
 
-      const endTime = performance.now();
+      const endTime = Date.now();
       const executionTime = Math.round(endTime - startTime);
 
       // Check for errors in responses
@@ -519,7 +519,7 @@ export class SequenceRunner {
       iterationResults.length === loopContexts.length &&
       iterationResults.every((result) => result.success);
     const expectsError = sequenceStep.expects_error ?? false;
-    const endTime = performance.now();
+    const endTime = Date.now();
 
     return {
       flowId: parseInt(flow.id),
@@ -617,7 +617,7 @@ export class SequenceRunner {
     startTime: number,
     error: unknown
   ): SequenceFlowResult {
-    const endTime = performance.now();
+    const endTime = Date.now();
     const expectsError = sequenceStep.expects_error ?? false;
 
     this.options.onLog(

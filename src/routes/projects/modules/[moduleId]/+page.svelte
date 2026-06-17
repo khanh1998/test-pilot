@@ -6,6 +6,7 @@
   import { projectStore } from '$lib/store/project';
   import * as projectClient from '$lib/http_client/projects';
   import * as testFlowClient from '$lib/http_client/test-flow';
+  import { runSequenceOnBackend, runSequencesBatchOnBackend } from '$lib/http_client/sequences';
   import { SequenceRunner, type SequenceRunnerOptions } from '$lib/sequence-runner';
   import type { SequenceFlowResult } from '$lib/sequence-runner/types';
   import SequenceRow from '$lib/components/modules/SequenceRow.svelte';
@@ -49,6 +50,7 @@
   let isRunningAll = $state(false);
   let runningSequences = $state(new Set<number>()); // Track which sequences are running
   let runAllMode: 'parallel' | 'sequential' = $state('sequential');
+  let sequenceRunTarget: 'local' | 'backend' = $state('local');
 
   // Save selected sub-environment to local storage
   function saveSelectedSubEnvironment(moduleId: number, subEnv: string | null) {
@@ -695,6 +697,48 @@
       return;
     }
 
+    if (sequenceRunTarget === 'backend') {
+      isRunningAll = true;
+      try {
+        const result = await runSequencesBatchOnBackend(projectId!, moduleId, {
+          environment: { environmentId: selectedEnv.id, subEnvironment: selectedSubEnvironment! },
+          mode: runAllMode
+        });
+        result.results.forEach((r) => {
+          sequenceResultsMap.set(r.sequenceId, r.flowResults);
+        });
+        sequenceResultsMap = new Map(sequenceResultsMap);
+        const skippedMsg =
+          result.skippedCount > 0 ? ` ${result.skippedCount} empty sequence(s) skipped.` : '';
+        if (result.failCount > 0) {
+          showExecutionResults(
+            'warning',
+            'Some Sequences Failed',
+            result.summary,
+            `${result.failCount} sequence(s) encountered errors.${skippedMsg}`
+          );
+        } else {
+          showExecutionResults(
+            'success',
+            'All Sequences Completed',
+            result.summary,
+            `Successfully executed all ${result.successCount} sequences.${skippedMsg}`
+          );
+        }
+      } catch (err) {
+        console.error('Failed to run all sequences on backend:', err);
+        showExecutionResults(
+          'error',
+          'Execution Failed',
+          'Failed to execute sequences on backend',
+          err instanceof Error ? err.message : 'Unknown error'
+        );
+      } finally {
+        isRunningAll = false;
+      }
+      return;
+    }
+
     isRunningAll = true;
     console.log('Running all sequences with environment:', {
       environment: selectedEnv.name,
@@ -849,6 +893,34 @@
     runningSequences = new Set(runningSequences); // Trigger reactivity
     sequenceResultsMap.set(sequence.id, []);
     sequenceResultsMap = new Map(sequenceResultsMap); // Clear stale highlights before this run
+
+    if (sequenceRunTarget === 'backend') {
+      try {
+        const result = await runSequenceOnBackend(projectId!, moduleId, sequence.id, {
+          environment: { environmentId: selectedEnv.id, subEnvironment: selectedSubEnvironment! }
+        });
+        sequenceResultsMap.set(sequence.id, result.flowResults);
+        sequenceResultsMap = new Map(sequenceResultsMap);
+        showExecutionResults(
+          result.success ? 'success' : 'error',
+          result.success ? 'Sequence Completed' : 'Sequence Failed',
+          `"${sequence.name}" ran on backend`,
+          result.summary
+        );
+      } catch (err) {
+        console.error(`Failed to run sequence "${sequence.name}" on backend:`, err);
+        showExecutionResults(
+          'error',
+          'Execution Error',
+          `Failed to run "${sequence.name}" on backend`,
+          err instanceof Error ? err.message : 'Unknown error'
+        );
+      } finally {
+        runningSequences.delete(sequence.id);
+        runningSequences = new Set(runningSequences);
+      }
+      return;
+    }
 
     console.log('Running sequence:', {
       sequenceName: sequence.name,
@@ -1293,6 +1365,18 @@
                 <option value="sequential">Sequential</option>
               </select>
             </div>
+
+            <label class="flex items-center gap-2 text-sm text-gray-600">
+              <span class="font-medium text-gray-700">Run on</span>
+              <select
+                bind:value={sequenceRunTarget}
+                disabled={isRunningAll || runningSequences.size > 0}
+                class="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-gray-100"
+              >
+                <option value="local">Local</option>
+                <option value="backend">Backend</option>
+              </select>
+            </label>
 
             <!-- Execution Options Button -->
             <button
