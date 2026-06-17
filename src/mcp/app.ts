@@ -835,7 +835,9 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
           dataDependencies: ['suggest_expression', 'explain_expression'],
           validation: ['validate_flow', 'explain_flow'],
           execution: ['run_flow', 'save_flow'],
-          coverage: ['get_coverage_gaps', 'explain_sequence', 'browse_endpoints', 'validate_flow_sequence']
+          coverage: ['get_coverage_gaps', 'explain_sequence', 'browse_endpoints', 'validate_flow_sequence'],
+          modules: ['create_module', 'update_module'],
+          sequences: ['create_sequence', 'update_sequence', 'delete_sequence', 'clone_sequence']
         },
         coverageWorkflow: [
           '1. list_projects → get_project_context(projectId) — get module IDs, API IDs, and existing flows.',
@@ -2124,6 +2126,48 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
         user.userId
       );
       return asTextResult({ sequence });
+    }
+  );
+
+  server.registerTool(
+    'create_module',
+    {
+      title: 'Create Module',
+      description:
+        'Create a new project module (folder) to organise sequences under. Returns the created module with its id — use that id immediately in create_sequence calls. Modules carry no business logic; they are purely organisational.',
+      inputSchema: {
+        projectId: z.number(),
+        name: z.string(),
+        description: z.string().optional()
+      }
+    },
+    async ({ projectId, name, description }) => {
+      const user = requireAuthContext(authContext);
+      const { ProjectModuleService } = await import('$lib/server/service/projects/module_service');
+      const service = new ProjectModuleService();
+      const module = await service.createModule(projectId, user.userId, { name, description });
+      return asTextResult({ module });
+    }
+  );
+
+  server.registerTool(
+    'update_module',
+    {
+      title: 'Update Module',
+      description: 'Rename a module or update its description.',
+      inputSchema: {
+        projectId: z.number(),
+        moduleId: z.number(),
+        name: z.string().optional(),
+        description: z.string().optional()
+      }
+    },
+    async ({ projectId, moduleId, name, description }) => {
+      const user = requireAuthContext(authContext);
+      const { ProjectModuleService } = await import('$lib/server/service/projects/module_service');
+      const service = new ProjectModuleService();
+      const module = await service.updateModule(moduleId, projectId, user.userId, { name, description });
+      return asTextResult({ module });
     }
   );
 
