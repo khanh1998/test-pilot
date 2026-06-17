@@ -45,7 +45,10 @@ function normalizeLinkedEnvironment(
 
 	const { selectedSubEnvironment: _selectedSubEnvironment, ...storedLinkedEnvironment } =
 		linkedEnvironment;
-	return storedLinkedEnvironment;
+	return {
+		...storedLinkedEnvironment,
+		parameterMappings: storedLinkedEnvironment.parameterMappings ?? {}
+	};
 }
 
 /**

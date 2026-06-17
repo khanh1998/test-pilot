@@ -31,6 +31,7 @@ export class ParameterManager {
 
   prepareParameters(): Record<string, unknown> {
     const selectedEnvMapping = this.getSelectedEnvironmentMapping();
+    const parameterMappings = selectedEnvMapping?.parameterMappings ?? {};
     const resolvedParameters = resolveFlowParameterValues(
       this.context.flowData,
       this.context.environmentVariables
@@ -40,7 +41,7 @@ export class ParameterManager {
       'debug',
       `Evaluating parameters for execution. Environment mapping: ${
         selectedEnvMapping
-          ? `${selectedEnvMapping.environmentName} (${Object.keys(selectedEnvMapping.parameterMappings).length} mappings)`
+          ? `${selectedEnvMapping.environmentName} (${Object.keys(parameterMappings).length} mappings)`
           : 'None'
       }`
     );
@@ -51,7 +52,7 @@ export class ParameterManager {
     );
 
     this.context.flowData.parameters.forEach((parameter) => {
-      const envVariableName = selectedEnvMapping?.parameterMappings[parameter.name];
+      const envVariableName = parameterMappings[parameter.name];
       const resolvedParameter = resolvedByName.get(parameter.name);
 
       if (envVariableName && resolvedParameter?.source !== 'environment') {
@@ -201,9 +202,10 @@ export function resolveFlowParameterValues(
 ): ResolvedFlowParameter[] {
   const selectedEnvMapping = getSelectedEnvironmentMapping(flowData);
   const resolvedParameters: ResolvedFlowParameter[] = [];
+  const parameterMappings = selectedEnvMapping?.parameterMappings ?? {};
 
   for (const parameter of flowData.parameters || []) {
-    const envVariableName = selectedEnvMapping?.parameterMappings[parameter.name];
+    const envVariableName = parameterMappings[parameter.name];
     const envValue = envVariableName ? environmentVariables[envVariableName] : undefined;
 
     if (envValue !== undefined && envValue !== null) {

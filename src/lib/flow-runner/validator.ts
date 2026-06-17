@@ -1,4 +1,6 @@
 import type { TestFlowData } from '$lib/components/test-flows/types';
+import type { Environment } from '$lib/types/environment';
+import { resolveApiHostCoverage } from './api-hosts';
 
 export class FlowValidator {
   static validateFlow(flowData: TestFlowData): { isValid: boolean; errors: string[] } {
@@ -23,10 +25,16 @@ export class FlowValidator {
     };
   }
 
-  static validateApiHosts(flowData: TestFlowData): boolean {
-    return !!(flowData.settings && 
-      flowData.settings.api_hosts && 
-      Object.values(flowData.settings.api_hosts).some(host => host.url && host.url.trim() !== ''));
+  static validateApiHosts(
+    flowData: TestFlowData,
+    environment: Environment | null = null,
+    selectedSubEnvironment: string | null = null
+  ): boolean {
+    return resolveApiHostCoverage({
+      flowData,
+      environment,
+      selectedSubEnvironment
+    }).hasRequiredHosts;
   }
 
   static getValidationErrorMessage(flowData: TestFlowData): string | null {

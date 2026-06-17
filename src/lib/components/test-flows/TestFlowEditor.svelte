@@ -33,6 +33,7 @@
   import {
     FlowRunner,
     resolveFlowParameterValues,
+    resolveApiHostCoverage,
     type FlowRunnerOptions,
     type ExecutionPreferences
   } from '$lib/flow-runner';
@@ -124,6 +125,14 @@
     retryCount: 0,
     timeout: 30000
   });
+
+  let apiHostCoverage = $derived(
+    resolveApiHostCoverage({
+      flowData,
+      environment,
+      selectedSubEnvironment
+    })
+  );
 
   function computeEnvironmentVariables(
     env: Environment | null,
@@ -481,9 +490,12 @@
   // Run the entire flow
   async function runFlow() {
     // Check for API hosts before running
-    if (!hasValidApiHosts()) {
+    if (!apiHostCoverage.hasRequiredHosts) {
       dispatch('error', {
-        message: 'Please configure at least one API host before running the flow.'
+        message:
+          apiHostCoverage.missingApiIds.length > 0
+            ? `Please configure API hosts for API ID(s): ${apiHostCoverage.missingApiIds.join(', ')}.`
+            : 'Please add at least one endpoint with a resolvable API host before running the flow.'
       });
       return;
     }
@@ -727,17 +739,9 @@
     }
   }
 
-  // Check if there are valid API hosts configured
+  // Check if all API IDs used by the flow can resolve a host from environment or fallback settings.
   function hasValidApiHosts(): boolean {
-    // Check if we have api_hosts structure with at least one valid host
-    if (flowData.settings.api_hosts && Object.keys(flowData.settings.api_hosts).length > 0) {
-      // Check if at least one API host has a valid URL
-      return Object.values(flowData.settings.api_hosts).some(
-        (hostInfo) => hostInfo && hostInfo.url && hostInfo.url.trim() !== ''
-      );
-    }
-
-    return false;
+    return apiHostCoverage.hasRequiredHosts;
   }
 
   // Flow output editor functions

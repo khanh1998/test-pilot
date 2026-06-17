@@ -90,6 +90,41 @@ describe('resolveFlowParameterValues', () => {
       }
     ]);
   });
+
+  it('falls back to defaults when linked environment has no parameter mappings', () => {
+    const flowData: Pick<TestFlowData, 'parameters' | 'settings'> = {
+      parameters: [
+        {
+          name: 'username',
+          type: 'string',
+          required: true,
+          defaultValue: 'admin'
+        }
+      ],
+      settings: {
+        environment: {
+          environmentId: 9,
+          subEnvironment: 'sit'
+        },
+        linkedEnvironment: {
+          environmentId: 9,
+          environmentName: 'Swim'
+        } as TestFlowData['settings']['linkedEnvironment']
+      }
+    };
+
+    const resolved = resolveFlowParameterValues(flowData, {
+      username: 'env-admin'
+    });
+
+    expect(resolved).toEqual([
+      {
+        name: 'username',
+        value: 'admin',
+        source: 'default'
+      }
+    ]);
+  });
 });
 
 describe('ParameterManager logging', () => {

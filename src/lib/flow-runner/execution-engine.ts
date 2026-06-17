@@ -7,6 +7,7 @@ import type {
 import { createTemplateContextFromFlowRunner, resolveTemplate } from '$lib/template';
 import { createTemplateFunctions, defaultTemplateFunctions } from '$lib/template';
 import type { FlowHttpTransport, RequestCookie } from './http-transport';
+import { resolveEndpointApiHost } from './api-hosts';
 
 export interface ExecutionPreferences {
   parallelExecution: boolean;
@@ -211,44 +212,35 @@ export class FlowExecutionEngine {
   }
 
   private getEndpointHost(endpoint: StepEndpoint): string {
-    let endpointHost = '';
+    const resolvedHost = resolveEndpointApiHost({
+      endpoint,
+      flowData: this.context.flowData,
+      environment: this.context.selectedEnvironment,
+      selectedSubEnvironment: this.context.flowData.settings.environment?.subEnvironment
+    });
 
-    // Check environment override first
-    if (
-      this.context.selectedEnvironment &&
-      this.context.flowData.settings.environment?.subEnvironment
-    ) {
-      const subEnv = this.context.flowData.settings.environment.subEnvironment;
-      const subEnvironmentConfig = this.context.selectedEnvironment.config.environments[subEnv];
-
-      if (subEnvironmentConfig?.api_hosts && endpoint.api_id) {
-        const envHost = subEnvironmentConfig.api_hosts[String(endpoint.api_id)];
-        if (envHost) {
-          endpointHost = envHost;
-          this.context.addLog(
-            'debug',
-            `Using environment host override for API ID ${endpoint.api_id}: ${endpointHost}`,
-            `Environment: ${this.context.selectedEnvironment.name} (${subEnv})`
-          );
-        }
-      }
+    if (resolvedHost?.source === 'environment') {
+      this.context.addLog(
+        'debug',
+        `Using environment host override for API ID ${resolvedHost.apiId}: ${resolvedHost.url}`,
+        `Environment: ${resolvedHost.environmentName} (${resolvedHost.subEnvironment})`
+      );
+      return resolvedHost.url;
     }
 
-    // Fallback to flow's api_hosts
-    if (!endpointHost && endpoint.api_id && this.context.flowData.settings?.api_hosts) {
-      const apiHostInfo = this.context.flowData.settings.api_hosts[endpoint.api_id];
-      if (apiHostInfo && apiHostInfo.url) {
-        endpointHost = apiHostInfo.url;
-        this.context.addLog(
-          'debug',
-          `Using flow host for API ID ${endpoint.api_id}: ${endpointHost}`
-        );
-      } else {
-        this.context.addLog('warning', `API host not found for ID: ${endpoint.api_id}`);
-      }
+    if (resolvedHost?.source === 'flow') {
+      this.context.addLog(
+        'debug',
+        `Using flow host for API ID ${resolvedHost.apiId}: ${resolvedHost.url}`
+      );
+      return resolvedHost.url;
     }
 
-    return endpointHost;
+    if (endpoint.api_id) {
+      this.context.addLog('warning', `API host not found for ID: ${endpoint.api_id}`);
+    }
+
+    return '';
   }
 
   private prepareRequest(endpointDef: any, endpoint: StepEndpoint, endpointHost: string) {

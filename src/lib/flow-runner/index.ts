@@ -14,3 +14,10 @@ export { FlowOutputEvaluator, type OutputEvaluatorContext } from './output-evalu
 export { FlowValidator } from './validator';
 export type { FlowHttpRequest, FlowHttpTransport, RequestCookie } from './http-transport';
 export { sanitizeExecutionState, sanitizeHeaders, sanitizeValue } from './sanitize';
+export {
+  resolveApiHostCoverage,
+  resolveEndpointApiHost,
+  type ApiHostCoverage,
+  type ApiHostSource,
+  type ResolvedApiHost
+} from './api-hosts';
