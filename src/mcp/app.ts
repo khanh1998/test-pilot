@@ -2189,7 +2189,11 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
       const result = await projectService.listUserProjects(user.userId, limit, offset);
       return asTextResult({
         total: result.total,
-        projects: result.projects
+        projects: result.projects.map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          description: p.description ?? null
+        }))
       });
     }
   );
@@ -2207,10 +2211,31 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
     },
     async ({ projectId, includeEnvironmentValues = true }) => {
       const context = await buildProjectContext(projectId, authContext, includeEnvironmentValues);
+
+      let endpointTags: string[] = [];
+      const apiIds = context.apis.map((a) => a.id);
+      if (apiIds.length > 0) {
+        const { db } = await import('$lib/server/db');
+        const { apiEndpoints: apiEndpointsTable } = await import('$lib/server/db/schema');
+        const { inArray } = await import('drizzle-orm');
+        const tagRows = await db
+          .select({ tags: apiEndpointsTable.tags })
+          .from(apiEndpointsTable)
+          .where(inArray(apiEndpointsTable.apiId, apiIds));
+        const tagSet = new Set<string>();
+        for (const row of tagRows) {
+          for (const tag of row.tags ?? []) {
+            if (tag) tagSet.add(tag);
+          }
+        }
+        endpointTags = [...tagSet].sort();
+      }
+
       return asTextResult({
         project: context.project,
         modules: context.modules,
         apis: context.apis,
+        endpointTags,
         environments: context.environments,
         counts: {
           apis: context.counts.apis,
@@ -2344,26 +2369,50 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
     'list_test_flows',
     {
       title: 'List Test Flows',
-      description: 'Find reusable test flows before generating a new one.',
+      description:
+        'Find reusable test flows before generating a new one. Each flow includes endpointPaths (e.g. ["GET /conversations", "POST /messages"]) so you can see coverage at a glance without loading each flow individually.',
       inputSchema: {
-        userId: z.number().optional(),
         page: z.number().optional(),
         limit: z.number().optional(),
         search: z.string().optional(),
         projectId: z.number().optional()
       }
     },
-    async ({ userId, page, limit, search, projectId }) => {
+    async ({ page, limit, search, projectId }) => {
+      const user = requireAuthContext(authContext);
       const { getTestFlowsForUser } = await import(
         '$lib/server/service/test_flows/list_test_flows'
       );
-      const flows = await getTestFlowsForUser(getUserId(userId, authContext), {
-        page,
-        limit,
-        search,
-        projectId
-      });
-      return asTextResult(flows as unknown as Record<string, unknown>);
+      const flows = await getTestFlowsForUser(user.userId, { page, limit, search, projectId });
+
+      const flowIds = flows.testFlows.map((f) => f.id);
+      let endpointPathsById: Record<number, string[]> = {};
+      if (flowIds.length > 0) {
+        const { db } = await import('$lib/server/db');
+        const { testFlows: testFlowsTable } = await import('$lib/server/db/schema');
+        const { inArray } = await import('drizzle-orm');
+        const jsonRows = await db
+          .select({ id: testFlowsTable.id, flowJson: testFlowsTable.flowJson })
+          .from(testFlowsTable)
+          .where(inArray(testFlowsTable.id, flowIds));
+        for (const row of jsonRows) {
+          const paths = new Set<string>();
+          for (const step of (row.flowJson as any)?.steps ?? []) {
+            for (const ep of step.endpoints ?? []) {
+              if (ep.method && ep.path) paths.add(`${ep.method} ${ep.path}`);
+            }
+          }
+          endpointPathsById[row.id] = [...paths];
+        }
+      }
+
+      return asTextResult({
+        ...flows,
+        testFlows: flows.testFlows.map((f) => ({
+          ...f,
+          endpointPaths: endpointPathsById[f.id] ?? []
+        }))
+      } as unknown as Record<string, unknown>);
     }
   );
 
@@ -2371,18 +2420,40 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
     'get_test_flow',
     {
       title: 'Get Test Flow',
-      description: 'Load an existing test flow along with the endpoints it uses.',
+      description:
+        'Load a test flow. By default returns an explain_flow-style human-readable summary (lightweight). Pass includeFull: true to get the raw flowJson — only needed when you intend to edit the flow config directly.',
       inputSchema: {
-        flowId: z.number()
+        flowId: z.number(),
+        includeFull: z.boolean().optional()
       }
     },
-    async ({ flowId }) => {
+    async ({ flowId, includeFull }) => {
+      const user = requireAuthContext(authContext);
       const { getTestFlow } = await import('$lib/server/service/test_flows/get_test_flow');
-      const result = await getTestFlow(flowId, requireAuthContext(authContext).userId);
-      if (!result) {
-        throw new Error(`Test flow ${flowId} was not found.`);
+      const result = await getTestFlow(flowId, user.userId);
+      if (!result) throw new Error(`Test flow ${flowId} was not found.`);
+
+      if (includeFull) {
+        return asTextResult(result as unknown as Record<string, unknown>);
       }
-      return asTextResult(result as unknown as Record<string, unknown>);
+
+      const flowDocument: FlowDocument = {
+        name: result.testFlow.name,
+        flowData: {
+          ...result.testFlow.flowJson,
+          endpoints: result.testFlow.endpoints ?? result.testFlow.flowJson.endpoints ?? []
+        }
+      };
+      const explanation = explainFlowDocument(flowDocument);
+      return asTextResult({
+        flowId,
+        name: result.testFlow.name,
+        description: result.testFlow.description ?? null,
+        projectId: result.testFlow.projectId ?? null,
+        createdAt: result.testFlow.createdAt,
+        updatedAt: result.testFlow.updatedAt,
+        ...explanation
+      });
     }
   );
 
