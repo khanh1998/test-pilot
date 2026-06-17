@@ -800,6 +800,17 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
           purpose:
             'Generate, edit, validate, run, and save API test flows from imported OpenAPI/Swagger endpoints.'
         },
+        conceptualModel: {
+          hierarchy: [
+            '1. API Endpoint — one imported HTTP call (method + path). The atomic unit.',
+            '2. Test Flow — a linear chain of API endpoint calls with typed input parameters, assertions, and named outputs. Designed to be self-contained and reusable across multiple sequences.',
+            '3. Test Sequence — a chain of test flows. Wires flows together by mapping one flow\'s output to the next flow\'s input parameters. Business scenarios live here.',
+            '4. Project Module — a grouping container for test sequences, like a folder. No business logic — purely organizational.'
+          ],
+          dataFlowDirection: 'Endpoints → Flows → Sequences. Data flows in one direction: endpoint responses feed flow outputs; flow outputs feed sequence parameter mappings.',
+          reuseContract: 'Flows are built to be reusable. The same flow can appear in many sequences with different parameter values. Put reusable logic in flows; put scenario-specific wiring in sequences.',
+          moduleNote: 'moduleId is required by sequence tools but carries no business meaning — it is just the folder a sequence lives in. Retrieve it once from get_project_context (modules array) and reuse. When a project has only one module, that is the moduleId for all sequences.'
+        },
         agentWorkflow: [
           'Call prepare_flow_context(projectId) to inspect APIs, environments, and existing flows.',
           'If guidance says clarification is needed, ask the human to choose APIs and/or environment first.',
@@ -1640,13 +1651,39 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
         return asTextResult(result as unknown as Record<string, unknown>);
       }
 
+      // Resolve module names and flow names with two lightweight parallel queries
+      const { db } = await import('$lib/server/db');
+      const { projectModules: modulesTable, testFlows: testFlowsTable } = await import('$lib/server/db/schema');
+      const { inArray } = await import('drizzle-orm');
+
+      const moduleIds = [...new Set(result.sequences.map((seq) => seq.moduleId))];
+      const allFlowIds = [...new Set(
+        result.sequences.flatMap((seq) => (seq.sequenceConfig.steps ?? []).map((s) => s.test_flow_id))
+      )];
+
+      const [moduleRows, flowRows] = await Promise.all([
+        moduleIds.length > 0
+          ? db.select({ id: modulesTable.id, name: modulesTable.name }).from(modulesTable).where(inArray(modulesTable.id, moduleIds))
+          : Promise.resolve([]),
+        allFlowIds.length > 0
+          ? db.select({ id: testFlowsTable.id, name: testFlowsTable.name }).from(testFlowsTable).where(inArray(testFlowsTable.id, allFlowIds))
+          : Promise.resolve([])
+      ]);
+
+      const moduleNameById = Object.fromEntries(moduleRows.map((m) => [m.id, m.name ?? '']));
+      const flowNameById = Object.fromEntries(flowRows.map((f) => [f.id, f.name ?? '']));
+
       const summary = result.sequences.map((seq) => ({
         id: seq.id,
         name: seq.name,
         description: seq.description ?? null,
         moduleId: seq.moduleId,
+        moduleName: moduleNameById[seq.moduleId] ?? null,
         stepCount: seq.sequenceConfig.steps?.length ?? 0,
-        flowIds: (seq.sequenceConfig.steps ?? []).map((s) => s.test_flow_id),
+        flows: (seq.sequenceConfig.steps ?? []).map((s) => ({
+          id: s.test_flow_id,
+          name: flowNameById[s.test_flow_id] ?? null
+        })),
         updatedAt: seq.updatedAt
       }));
       return asTextResult({ sequences: summary, total: result.total });
@@ -1760,8 +1797,27 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
           .sort((a, b) => b.total - a.total);
       }
 
+      const interpretationParts: string[] = [];
+      if (unusedFlows.length === 0) interpretationParts.push('all flows are sequenced');
+      else interpretationParts.push(`${unusedFlows.length} flow${unusedFlows.length === 1 ? '' : 's'} not referenced by any sequence`);
+      if (apiIds.length > 0) {
+        if (uncoveredEndpoints.length === 0) interpretationParts.push('all imported endpoints are covered');
+        else interpretationParts.push(`${uncoveredEndpoints.length} endpoint${uncoveredEndpoints.length === 1 ? '' : 's'} have no test coverage`);
+      }
+      const coverageSummary = {
+        flowReuse: `${flows.length - unusedFlows.length}/${flows.length} flows referenced by at least one sequence`,
+        ...(apiIds.length > 0 ? {
+          endpointCoverage: `${coveredEndpoints.length}/${allEndpoints.length} (${allEndpoints.length > 0 ? Math.round((coveredEndpoints.length / allEndpoints.length) * 100) : 0}%) endpoints hit by at least one flow`
+        } : {}),
+        interpretation: interpretationParts.join('; ') + '.',
+        warningNote: unusedFlows.length === 0 && uncoveredEndpoints.length > 0
+          ? 'unusedFlows: [] does NOT mean full coverage — it means all existing flows are sequenced, but there may still be uncovered endpoints with no flow at all.'
+          : undefined
+      };
+
       return asTextResult({
         projectId,
+        coverageSummary,
         totalFlows: flows.length,
         totalSequences: seqResult.total,
         unusedFlows,
@@ -1782,7 +1838,7 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
     'get_flow_sequence',
     {
       title: 'Get Flow Sequence',
-      description: 'Load a flow sequence, including ordered flow steps and parameter mappings.',
+      description: 'Load the full raw config for a flow sequence, including complete flowJson for every step. Can return 20–100 KB depending on sequence size. For analysis or auditing use explain_sequence instead — it is human-readable and lightweight. Use this tool only when you need the raw config for editing.',
       inputSchema: {
         projectId: z.number(),
         moduleId: z.number(),
