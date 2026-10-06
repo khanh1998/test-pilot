@@ -21,13 +21,13 @@ Test-Pilot is a cross-platform application (web + Tauri desktop) that helps soft
 
 While tools like Postman excel at testing individual endpoints, Test-Pilot is designed for **workflow automation**:
 
-| Feature | Postman Collection Runner | Test-Pilot |
-|---------|---------------------------|------------|
-| Sequential execution | ✅ Requires JavaScript scripting | ✅ Visual editor with templates |
-| Data extraction | ✅ Via code in Tests tab | ✅ Template expressions `{{res:step1-0.$.id}}` |
-| Visual assertions | ❌ Must write code | ✅ Visual assertion builder |
-| Visual transformations | ❌ Must write code | ✅ Pipeline-based transformations |
-| Learning curve | Higher (requires JavaScript) | Lower (low-code approach) |
+| Feature                | Postman Collection Runner        | Test-Pilot                                     |
+| ---------------------- | -------------------------------- | ---------------------------------------------- |
+| Sequential execution   | ✅ Requires JavaScript scripting | ✅ Visual editor with templates                |
+| Data extraction        | ✅ Via code in Tests tab         | ✅ Template expressions `{{res:step1-0.$.id}}` |
+| Visual assertions      | ❌ Must write code               | ✅ Visual assertion builder                    |
+| Visual transformations | ❌ Must write code               | ✅ Pipeline-based transformations              |
+| Learning curve         | Higher (requires JavaScript)     | Lower (low-code approach)                      |
 
 ## 🚀 Quick Start for Users
 
@@ -45,6 +45,7 @@ While tools like Postman excel at testing individual endpoints, Test-Pilot is de
 The desktop app is built with Tauri and is **required for testing APIs on localhost** or APIs with strict CORS policies.
 
 **Download:**
+
 - [Download for macOS](#) (Coming soon)
 - [Download for Windows](#) (Coming soon)
 - [Download for Linux](#) (Coming soon)
@@ -74,6 +75,7 @@ npm run tauri:build
 ```
 
 **Why use the desktop app?**
+
 - ✅ Test local APIs (localhost, 127.0.0.1)
 - ✅ Bypass CORS restrictions
 - ✅ Native HTTP client for better cookie/session handling
@@ -113,7 +115,7 @@ npm run tauri:build
 
 ### 5. Execute Your Flow
 
-- Click **Run Flow** 
+- Click **Run Flow**
 - Watch real-time execution progress
 - Review results, assertions, and timing
 - Debug failures with detailed logs
@@ -146,6 +148,7 @@ We welcome contributions! This section is for developers who want to contribute 
    - Supabase account (for authentication)
 
 2. **Clone and Install**
+
    ```bash
    git clone https://github.com/khanh1998/test-pilot.git
    cd test-pilot
@@ -153,39 +156,43 @@ We welcome contributions! This section is for developers who want to contribute 
    ```
 
 3. **Configure Environment**
+
    ```bash
    cp .env.example .env
    ```
-   
+
    Edit `.env` with your values:
+
    ```env
    # Supabase
    PUBLIC_SUPABASE_URL=your_supabase_url
    PUBLIC_SUPABASE_ANON_KEY=your_anon_key
    SUPABASE_SERVICE_KEY=your_service_key
-   
+
    # Database
    DATABASE_URL=postgresql://user:password@localhost:5432/testpilot
    ```
 
 4. **Database Setup**
+
    ```bash
    # Run migrations and seed data
    npm run setup
-   
+
    # Or manually:
    npm run drizzle:push
    npm run db:seed
    ```
 
 5. **Start Development**
+
    ```bash
    # Web only
    npm run dev
-   
+
    # Web + local database
    npm run dev:with-db
-   
+
    # Desktop (Tauri)
    npm run tauri dev
    ```
@@ -302,8 +309,13 @@ This project is open source. See LICENSE file for details.
 ## 🙏 Acknowledgments
 
 Built with:
+
 - [SvelteKit](https://kit.svelte.dev/)
 - [Supabase](https://supabase.com/)
 - [Drizzle ORM](https://orm.drizzle.team/)
 - [TailwindCSS](https://tailwindcss.com/)
 - [Tauri](https://tauri.app/)
+
+## REST API documentation
+
+Test-Pilot's own API is documented in [`openapi.json`](openapi.json). Run `npm run swagger:generate` to regenerate and validate it, or `npm run swagger:check` to detect a stale artifact. Import the file into an OpenAPI client and set your Test-Pilot server URL. Protected endpoints use the bearer JWT returned by sign-in. See the [API contract guide](docs/api-contract.md) for authentication, agent-token support, and schema maintenance.

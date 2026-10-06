@@ -1,110 +1,86 @@
+import { parseJsonRequest } from '$lib/server/http/parse-json-request';
 import { json } from '@sveltejs/kit';
 import type { RequestEvent } from '@sveltejs/kit';
 import { FlowSequenceService } from '../../../../../../../../lib/server/service/projects/sequence_service.js';
+import { sequenceParams, UpdateSequenceRequest } from '$lib/schemas/sequences';
 
 const sequenceService = new FlowSequenceService();
 
-// GET /api/projects/[id]/modules/[moduleId]/sequences/[sequenceId] - Get sequence detail
 export async function GET({ params, locals }: RequestEvent) {
+  if (!locals.user) return json({ error: 'Unauthorized' }, { status: 401 });
+
+  const parsed = sequenceParams.safeParse(params);
+  if (!parsed.success)
+    return json({ error: 'Invalid project, module, or sequence ID' }, { status: 400 });
+
   try {
-    // Check if user is authenticated
-    if (!locals.user) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const projectId = parseInt(params.id as string);
-    const moduleId = parseInt(params.moduleId as string);
-    const sequenceId = parseInt(params.sequenceId as string);
-    
-    if (isNaN(projectId) || isNaN(moduleId) || isNaN(sequenceId)) {
-      return json({ error: 'Invalid project, module, or sequence ID' }, { status: 400 });
-    }
-
-    const sequence = await sequenceService.getFlowSequence(sequenceId, moduleId, projectId, locals.user.userId);
-    
+    const sequence = await sequenceService.getFlowSequence(
+      parsed.data.sequenceId,
+      parsed.data.moduleId,
+      parsed.data.id,
+      locals.user.userId
+    );
     return json({ sequence });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Internal server error';
     console.error('Error getting sequence:', error);
-    
-    if (error.message.includes('not found') || error.message.includes('access denied')) {
+    if (message.includes('not found') || message.includes('access denied'))
       return json({ error: 'Sequence, module, or project not found' }, { status: 404 });
-    }
-    
     return json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
-// PUT /api/projects/[id]/modules/[moduleId]/sequences/[sequenceId] - Update sequence
 export async function PUT({ params, request, locals }: RequestEvent) {
+  if (!locals.user) return json({ error: 'Unauthorized' }, { status: 401 });
+
+  const parsedParams = sequenceParams.safeParse(params);
+  if (!parsedParams.success)
+    return json({ error: 'Invalid project, module, or sequence ID' }, { status: 400 });
+
+  const parsedBody = await parseJsonRequest(request, UpdateSequenceRequest);
+  if (!parsedBody.success)
+    return json({ error: parsedBody.error.issues[0].message }, { status: 400 });
+
   try {
-    // Check if user is authenticated
-    if (!locals.user) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const projectId = parseInt(params.id as string);
-    const moduleId = parseInt(params.moduleId as string);
-    const sequenceId = parseInt(params.sequenceId as string);
-    
-    if (isNaN(projectId) || isNaN(moduleId) || isNaN(sequenceId)) {
-      return json({ error: 'Invalid project, module, or sequence ID' }, { status: 400 });
-    }
-
-    const data = await request.json();
-
-    // Validate fields if present
-    if (data.name !== undefined && (typeof data.name !== 'string' || !data.name.trim())) {
-      return json({ error: 'Sequence name cannot be empty' }, { status: 400 });
-    }
-
-    if (data.description !== undefined && typeof data.description !== 'string') {
-      return json({ error: 'Description must be a string' }, { status: 400 });
-    }
-
-    const sequence = await sequenceService.updateSequence(sequenceId, moduleId, projectId, locals.user.userId, data);
-
+    const sequence = await sequenceService.updateSequence(
+      parsedParams.data.sequenceId,
+      parsedParams.data.moduleId,
+      parsedParams.data.id,
+      locals.user.userId,
+      parsedBody.data
+    );
     return json({ sequence });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Internal server error';
     console.error('Error updating sequence:', error);
-    
-    if (error.message.includes('not found') || error.message.includes('access denied')) {
+    if (message.includes('not found') || message.includes('access denied'))
       return json({ error: 'Sequence, module, or project not found' }, { status: 404 });
-    }
-    
-    if (error.message.includes('required') || error.message.includes('exceed') || error.message.includes('empty')) {
-      return json({ error: error.message }, { status: 400 });
-    }
-    
+    if (message.includes('required') || message.includes('exceed') || message.includes('empty'))
+      return json({ error: message }, { status: 400 });
     return json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
-// DELETE /api/projects/[id]/modules/[moduleId]/sequences/[sequenceId] - Delete sequence
 export async function DELETE({ params, locals }: RequestEvent) {
+  if (!locals.user) return json({ error: 'Unauthorized' }, { status: 401 });
+
+  const parsed = sequenceParams.safeParse(params);
+  if (!parsed.success)
+    return json({ error: 'Invalid project, module, or sequence ID' }, { status: 400 });
+
   try {
-    // Check if user is authenticated
-    if (!locals.user) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const projectId = parseInt(params.id as string);
-    const moduleId = parseInt(params.moduleId as string);
-    const sequenceId = parseInt(params.sequenceId as string);
-    
-    if (isNaN(projectId) || isNaN(moduleId) || isNaN(sequenceId)) {
-      return json({ error: 'Invalid project, module, or sequence ID' }, { status: 400 });
-    }
-
-    await sequenceService.deleteSequence(sequenceId, moduleId, projectId, locals.user.userId);
-
+    await sequenceService.deleteSequence(
+      parsed.data.sequenceId,
+      parsed.data.moduleId,
+      parsed.data.id,
+      locals.user.userId
+    );
     return json({ message: 'Sequence deleted successfully' });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Internal server error';
     console.error('Error deleting sequence:', error);
-    
-    if (error.message.includes('not found') || error.message.includes('access denied')) {
+    if (message.includes('not found') || message.includes('access denied'))
       return json({ error: 'Sequence, module, or project not found' }, { status: 404 });
-    }
-    
     return json({ error: 'Internal server error' }, { status: 500 });
   }
 }

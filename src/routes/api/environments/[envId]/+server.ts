@@ -1,127 +1,68 @@
+import { parseJsonRequest } from '$lib/server/http/parse-json-request';
 import { json } from '@sveltejs/kit';
 import type { RequestEvent } from '@sveltejs/kit';
 import { getEnvironmentForUser } from '$lib/server/service/environments/get_environments';
 import { updateEnvironment } from '$lib/server/service/environments/update_environment';
 import { deleteEnvironment } from '$lib/server/service/environments/delete_environment';
-import type { UpdateEnvironmentData } from '$lib/types/environment';
+import { envIdParam, UpdateEnvironmentRequest } from '$lib/schemas/environments';
 
 export async function GET({ params, locals }: RequestEvent) {
-  // Check authentication
-  if (!locals.user) {
-    return new Response(JSON.stringify({ error: 'Authentication required' }), {
-      status: 401,
-      headers: { 'Content-Type': 'application/json' }
-    });
-  }
+  if (!locals.user) return json({ error: 'Authentication required' }, { status: 401 });
 
-  const envId = parseInt(params.envId || '');
-  if (isNaN(envId)) {
-    return new Response(JSON.stringify({ error: 'Invalid environment ID' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' }
-    });
-  }
+  const parsed = envIdParam.safeParse(params);
+  if (!parsed.success) return json({ error: 'Invalid environment ID' }, { status: 400 });
 
   try {
-    const environment = await getEnvironmentForUser(envId, locals.user.userId);
-    
-    if (!environment) {
-      return new Response(JSON.stringify({ error: 'Environment not found' }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-
+    const environment = await getEnvironmentForUser(parsed.data.envId, locals.user.userId);
+    if (!environment) return json({ error: 'Environment not found' }, { status: 404 });
     return json(environment);
   } catch (err) {
     console.error('Error fetching environment:', err);
-    return new Response(JSON.stringify({ error: 'Failed to fetch environment' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return json({ error: 'Failed to fetch environment' }, { status: 500 });
   }
 }
 
 export async function PUT({ params, request, locals }: RequestEvent) {
-  // Check authentication
-  if (!locals.user) {
-    return new Response(JSON.stringify({ error: 'Authentication required' }), {
-      status: 401,
-      headers: { 'Content-Type': 'application/json' }
-    });
-  }
+  if (!locals.user) return json({ error: 'Authentication required' }, { status: 401 });
 
-  const envId = parseInt(params.envId || '');
-  if (isNaN(envId)) {
-    return new Response(JSON.stringify({ error: 'Invalid environment ID' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' }
-    });
-  }
+  const parsedParams = envIdParam.safeParse(params);
+  if (!parsedParams.success) return json({ error: 'Invalid environment ID' }, { status: 400 });
+
+  const parsedBody = await parseJsonRequest(request, UpdateEnvironmentRequest);
+  if (!parsedBody.success)
+    return json({ error: parsedBody.error.issues[0].message }, { status: 400 });
 
   try {
-    const data: UpdateEnvironmentData = await request.json();
-
-    const environment = await updateEnvironment(envId, locals.user.userId, data);
-    
-    if (!environment) {
-      return new Response(JSON.stringify({ error: 'Environment not found' }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-
+    const environment = await updateEnvironment(
+      parsedParams.data.envId,
+      locals.user.userId,
+      parsedBody.data
+    );
+    if (!environment) return json({ error: 'Environment not found' }, { status: 404 });
     return json(environment);
   } catch (err) {
     console.error('Error updating environment:', err);
-    
     if (err instanceof Error && err.name === 'EnvironmentUpdateError') {
-      return new Response(JSON.stringify({ error: err.message }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return json({ error: err.message }, { status: 400 });
     }
-
-    return new Response(JSON.stringify({ error: 'Failed to update environment' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return json({ error: 'Failed to update environment' }, { status: 500 });
   }
 }
 
 export async function DELETE({ params, locals }: RequestEvent) {
-  // Check authentication
-  if (!locals.user) {
-    return new Response(JSON.stringify({ error: 'Authentication required' }), {
-      status: 401,
-      headers: { 'Content-Type': 'application/json' }
-    });
-  }
+  if (!locals.user) return json({ error: 'Authentication required' }, { status: 401 });
 
-  const envId = parseInt(params.envId || '');
-  if (isNaN(envId)) {
-    return new Response(JSON.stringify({ error: 'Invalid environment ID' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' }
-    });
-  }
+  const parsed = envIdParam.safeParse(params);
+  if (!parsed.success) return json({ error: 'Invalid environment ID' }, { status: 400 });
 
   try {
-    await deleteEnvironment(envId, locals.user.userId);
-    return json({ success: true, id: envId });
+    await deleteEnvironment(parsed.data.envId, locals.user.userId);
+    return json({ success: true, id: parsed.data.envId });
   } catch (err) {
     console.error('Error deleting environment:', err);
-    
     if (err instanceof Error && err.name === 'EnvironmentDeletionError') {
-      return new Response(JSON.stringify({ error: err.message }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return json({ error: err.message }, { status: 404 });
     }
-
-    return new Response(JSON.stringify({ error: 'Failed to delete environment' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return json({ error: 'Failed to delete environment' }, { status: 500 });
   }
 }

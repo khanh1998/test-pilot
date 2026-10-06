@@ -28,7 +28,9 @@
     "tauri": "tauri",
     "tauri:dev": "cross-env VITE_APP_ENV=desktop tauri dev",
     "tauri:build": "npm run build:desktop && tauri build --debug",
-    "deploy": "npm run build:web && vercel deploy"
+    "deploy": "npm run build:web && vercel deploy",
+    "swagger:generate": "node --import tsx scripts/generate-openapi.ts",
+    "swagger:check": "npm run swagger:generate -- --check"
   },
   "devDependencies": {
     "@eslint/compat": "^1.2.5",
@@ -68,6 +70,7 @@
     "vitest-browser-svelte": "^0.1.0"
   },
   "dependencies": {
+    "@asteasolutions/zod-to-openapi": "^8.5.0",
     "@modelcontextprotocol/sdk": "^1.28.0",
     "@supabase/supabase-js": "^2.50.3",
     "@tauri-apps/plugin-http": "^2.5.0",
@@ -80,6 +83,6 @@
     "postgres": "^3.4.7",
     "swagger-parser": "^10.0.3",
     "uuid": "^11.1.0",
-    "zod": "^3.25.76"
+    "zod": "^4.4.3"
   }
 }

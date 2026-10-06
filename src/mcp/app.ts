@@ -1,5 +1,5 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import * as z from 'zod/v4';
+import * as z from 'zod';
 import { isValidOperator } from '$lib/assertions';
 import type { Assertion, AssertionOperator } from '$lib/assertions/types';
 import type { StepEndpoint } from '$lib/components/test-flows/types';

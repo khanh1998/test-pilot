@@ -1,77 +1,60 @@
+import { parseJsonRequest } from '$lib/server/http/parse-json-request';
 import { json } from '@sveltejs/kit';
 import type { RequestEvent } from '@sveltejs/kit';
 import { ProjectModuleService } from '../../../../../lib/server/service/projects/module_service.js';
+import { projectIdParam } from '$lib/schemas/projects';
+import { CreateModuleRequest } from '$lib/schemas/modules';
 
 const projectModuleService = new ProjectModuleService();
 
-// GET /api/projects/[id]/modules - List modules for a project
 export async function GET({ params, locals }: RequestEvent) {
+  if (!locals.user) return json({ error: 'Unauthorized' }, { status: 401 });
+
+  const parsed = projectIdParam.safeParse(params);
+  if (!parsed.success) return json({ error: 'Invalid project ID' }, { status: 400 });
+
   try {
-    // Check if user is authenticated
-    if (!locals.user) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const projectId = parseInt(params.id as string);
-    if (isNaN(projectId)) {
-      return json({ error: 'Invalid project ID' }, { status: 400 });
-    }
-
-    const moduleListResponse = await projectModuleService.listProjectModules(projectId, locals.user.userId);
-    
+    const moduleListResponse = await projectModuleService.listProjectModules(
+      parsed.data.id,
+      locals.user.userId
+    );
     return json(moduleListResponse);
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Internal server error';
     console.error('Error listing modules:', error);
-    
-    if (error.message.includes('not found') || error.message.includes('access denied')) {
+    if (message.includes('not found') || message.includes('access denied'))
       return json({ error: 'Project not found' }, { status: 404 });
-    }
-    
     return json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
-// POST /api/projects/[id]/modules - Create new module
 export async function POST({ params, request, locals }: RequestEvent) {
+  if (!locals.user) return json({ error: 'Unauthorized' }, { status: 401 });
+
+  const parsedParams = projectIdParam.safeParse(params);
+  if (!parsedParams.success) return json({ error: 'Invalid project ID' }, { status: 400 });
+
+  const parsedBody = await parseJsonRequest(request, CreateModuleRequest);
+  if (!parsedBody.success)
+    return json({ error: parsedBody.error.issues[0].message }, { status: 400 });
+
   try {
-    // Check if user is authenticated
-    if (!locals.user) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const projectId = parseInt(params.id as string);
-    if (isNaN(projectId)) {
-      return json({ error: 'Invalid project ID' }, { status: 400 });
-    }
-
-    const data = await request.json();
-
-    // Validate required fields
-    if (!data.name || typeof data.name !== 'string' || !data.name.trim()) {
-      return json({ error: 'Module name is required' }, { status: 400 });
-    }
-
-    if (data.description !== undefined && typeof data.description !== 'string') {
-      return json({ error: 'Description must be a string' }, { status: 400 });
-    }
-
-    const module = await projectModuleService.createModule(projectId, locals.user.userId, {
-      name: data.name.trim(),
-      description: data.description || null
-    });
-
+    const module = await projectModuleService.createModule(
+      parsedParams.data.id,
+      locals.user.userId,
+      {
+        name: parsedBody.data.name.trim(),
+        description: parsedBody.data.description || undefined
+      }
+    );
     return json({ module }, { status: 201 });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Internal server error';
     console.error('Error creating module:', error);
-    
-    if (error.message.includes('not found') || error.message.includes('access denied')) {
+    if (message.includes('not found') || message.includes('access denied'))
       return json({ error: 'Project not found' }, { status: 404 });
-    }
-    
-    if (error.message.includes('required') || error.message.includes('exceed') || error.message.includes('empty')) {
-      return json({ error: error.message }, { status: 400 });
-    }
-    
+    if (message.includes('required') || message.includes('exceed') || message.includes('empty'))
+      return json({ error: message }, { status: 400 });
     return json({ error: 'Internal server error' }, { status: 500 });
   }
 }

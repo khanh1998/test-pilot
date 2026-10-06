@@ -1,71 +1,58 @@
+import { parseJsonRequest } from '$lib/server/http/parse-json-request';
 import { json } from '@sveltejs/kit';
 import * as projectService from '$lib/server/service/projects/project_apis';
 import type { RequestEvent } from '@sveltejs/kit';
+import { UpdateProjectApiRequest } from '$lib/schemas/projects';
+import { z } from 'zod';
 
-// PUT /api/projects/[id]/apis/[apiId] - Update API settings in project
+const projectApiParams = z.object({
+  id: z.coerce.number().int().positive(),
+  apiId: z.coerce.number().int().positive()
+});
+
 export async function PUT({ params, request, locals }: RequestEvent) {
+  if (!locals.user) return json({ error: 'Unauthorized' }, { status: 401 });
+
+  const parsedParams = projectApiParams.safeParse(params);
+  if (!parsedParams.success) return json({ error: 'Invalid project or API ID' }, { status: 400 });
+
+  const parsedBody = await parseJsonRequest(request, UpdateProjectApiRequest);
+  if (!parsedBody.success)
+    return json({ error: parsedBody.error.issues[0].message }, { status: 400 });
+
   try {
-    if (!locals.user) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const projectId = parseInt(params.id!);
-    const apiId = parseInt(params.apiId!);
-    
-    if (isNaN(projectId) || isNaN(apiId)) {
-      return json({ error: 'Invalid project or API ID' }, { status: 400 });
-    }
-
-    const body = await request.json();
-    const { defaultHost } = body;
-
     const result = await projectService.updateProjectApi({
-      projectId,
-      apiId,
-      defaultHost,
+      projectId: parsedParams.data.id,
+      apiId: parsedParams.data.apiId,
+      defaultHost: parsedBody.data.defaultHost,
       userId: locals.user.userId
     });
-
     return json(result);
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Internal server error';
     console.error('Error updating project API:', error);
-    
-    if (error.message.includes('not found')) {
-      return json({ error: error.message }, { status: 404 });
-    }
-
+    if (message.includes('not found')) return json({ error: message }, { status: 404 });
     return json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
-// DELETE /api/projects/[id]/apis/[apiId] - Unlink API from project
 export async function DELETE({ params, locals }: RequestEvent) {
+  if (!locals.user) return json({ error: 'Unauthorized' }, { status: 401 });
+
+  const parsedParams = projectApiParams.safeParse(params);
+  if (!parsedParams.success) return json({ error: 'Invalid project or API ID' }, { status: 400 });
+
   try {
-    if (!locals.user) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const projectId = parseInt(params.id!);
-    const apiId = parseInt(params.apiId!);
-    
-    if (isNaN(projectId) || isNaN(apiId)) {
-      return json({ error: 'Invalid project or API ID' }, { status: 400 });
-    }
-
     const result = await projectService.unlinkApiFromProject({
-      projectId,
-      apiId,
+      projectId: parsedParams.data.id,
+      apiId: parsedParams.data.apiId,
       userId: locals.user.userId
     });
-
     return json(result);
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Internal server error';
     console.error('Error unlinking API from project:', error);
-    
-    if (error.message.includes('not found')) {
-      return json({ error: error.message }, { status: 404 });
-    }
-
+    if (message.includes('not found')) return json({ error: message }, { status: 404 });
     return json({ error: 'Internal server error' }, { status: 500 });
   }
 }

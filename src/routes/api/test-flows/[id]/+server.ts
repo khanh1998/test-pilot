@@ -1,115 +1,50 @@
+import { parseJsonRequest } from '$lib/server/http/parse-json-request';
 import { json } from '@sveltejs/kit';
 import type { RequestEvent } from '@sveltejs/kit';
 import { getTestFlow } from '$lib/server/service/test_flows/get_test_flow';
 import { updateTestFlow } from '$lib/server/service/test_flows/update_test_flow';
+import { testFlowIdParam, UpdateTestFlowRequest } from '$lib/schemas/test-flows';
 
-// Get a specific test flow by ID
 export async function GET({ params, locals }: RequestEvent) {
+  if (!locals.user) return json({ error: 'Unauthorized' }, { status: 401 });
+
+  const parsed = testFlowIdParam.safeParse(params);
+  if (!parsed.success) return json({ error: 'Invalid test flow ID' }, { status: 400 });
+
   try {
-    const id = parseInt(params.id || '');
-
-    if (isNaN(id)) {
-      return new Response(JSON.stringify({ error: 'Invalid test flow ID' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-
-    // Check if user is authenticated
-    if (!locals.user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-
-    // Get the test flow using the service
-    const result = await getTestFlow(id, locals.user.userId);
-
+    const result = await getTestFlow(parsed.data.id, locals.user.userId);
     if (!result) {
-      return new Response(
-        JSON.stringify({ error: 'Test flow not found or does not belong to the user' }),
-        {
-          status: 404,
-          headers: { 'Content-Type': 'application/json' }
-        }
-      );
+      return json({ error: 'Test flow not found or does not belong to the user' }, { status: 404 });
     }
-
     return json(result);
   } catch (error) {
     console.error('Error fetching test flow:', error);
-    return new Response(JSON.stringify({ error: 'Failed to fetch test flow' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return json({ error: 'Failed to fetch test flow' }, { status: 500 });
   }
 }
 
-// Update an existing test flow
 export async function PUT({ params, request, locals }: RequestEvent) {
+  if (!locals.user) return json({ error: 'Unauthorized' }, { status: 401 });
+
+  const parsedParams = testFlowIdParam.safeParse(params);
+  if (!parsedParams.success) return json({ error: 'Invalid test flow ID' }, { status: 400 });
+
+  const parsedBody = await parseJsonRequest(request, UpdateTestFlowRequest);
+  if (!parsedBody.success) {
+    return json({ error: parsedBody.error.issues[0].message }, { status: 400 });
+  }
+
   try {
-    const id = parseInt(params.id || '');
-
-    if (isNaN(id)) {
-      return new Response(JSON.stringify({ error: 'Invalid test flow ID' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-
-    // Check if user is authenticated
-    if (!locals.user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-
-    const body = await request.json();
-    const { name, description, apiIds, flowJson } = body;
-
-    // Validate required fields
-    if (!name) {
-      return new Response(JSON.stringify({ error: 'Name is required' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-
-    // Use the service to update the test flow
-    const result = await updateTestFlow(id, locals.user.userId, {
-      name,
-      description,
-      apiIds,
-      flowJson
-    });
-
+    const result = await updateTestFlow(parsedParams.data.id, locals.user.userId, parsedBody.data);
     if (!result) {
-      return new Response(
-        JSON.stringify({ error: 'Test flow not found or does not belong to the user' }),
-        {
-          status: 404,
-          headers: { 'Content-Type': 'application/json' }
-        }
-      );
+      return json({ error: 'Test flow not found or does not belong to the user' }, { status: 404 });
     }
-
     return json(result);
   } catch (error) {
     console.error('Error updating test flow:', error);
-    
-    // Handle specific service errors
     if (error instanceof Error && error.message.includes('APIs not found')) {
-      return new Response(JSON.stringify({ error: error.message }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return json({ error: error.message }, { status: 400 });
     }
-
-    return new Response(JSON.stringify({ error: 'Failed to update test flow' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return json({ error: 'Failed to update test flow' }, { status: 500 });
   }
 }

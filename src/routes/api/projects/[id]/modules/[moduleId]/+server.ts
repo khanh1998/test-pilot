@@ -1,107 +1,81 @@
+import { parseJsonRequest } from '$lib/server/http/parse-json-request';
 import { json } from '@sveltejs/kit';
 import type { RequestEvent } from '@sveltejs/kit';
 import { ProjectModuleService } from '../../../../../../lib/server/service/projects/module_service.js';
+import { projectModuleIdParam, UpdateModuleRequest } from '$lib/schemas/modules';
 
 const projectModuleService = new ProjectModuleService();
 
-// GET /api/projects/[id]/modules/[moduleId] - Get module detail
 export async function GET({ params, locals }: RequestEvent) {
+  if (!locals.user) return json({ error: 'Unauthorized' }, { status: 401 });
+
+  const parsed = projectModuleIdParam.safeParse(params);
+  if (!parsed.success) return json({ error: 'Invalid project or module ID' }, { status: 400 });
+
   try {
-    // Check if user is authenticated
-    if (!locals.user) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const projectId = parseInt(params.id as string);
-    const moduleId = parseInt(params.moduleId as string);
-    
-    if (isNaN(projectId) || isNaN(moduleId)) {
-      return json({ error: 'Invalid project or module ID' }, { status: 400 });
-    }
-
-    const module = await projectModuleService.getProjectModule(moduleId, projectId, locals.user.userId);
-    
+    const module = await projectModuleService.getProjectModule(
+      parsed.data.moduleId,
+      parsed.data.id,
+      locals.user.userId
+    );
     return json({ module });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Internal server error';
     console.error('Error getting module:', error);
-    
-    if (error.message.includes('not found') || error.message.includes('access denied')) {
+    if (message.includes('not found') || message.includes('access denied'))
       return json({ error: 'Module or project not found' }, { status: 404 });
-    }
-    
     return json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
-// PUT /api/projects/[id]/modules/[moduleId] - Update module
 export async function PUT({ params, request, locals }: RequestEvent) {
+  if (!locals.user) return json({ error: 'Unauthorized' }, { status: 401 });
+
+  const parsedParams = projectModuleIdParam.safeParse(params);
+  if (!parsedParams.success)
+    return json({ error: 'Invalid project or module ID' }, { status: 400 });
+
+  const parsedBody = await parseJsonRequest(request, UpdateModuleRequest);
+  if (!parsedBody.success)
+    return json({ error: parsedBody.error.issues[0].message }, { status: 400 });
+
   try {
-    // Check if user is authenticated
-    if (!locals.user) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const projectId = parseInt(params.id as string);
-    const moduleId = parseInt(params.moduleId as string);
-    
-    if (isNaN(projectId) || isNaN(moduleId)) {
-      return json({ error: 'Invalid project or module ID' }, { status: 400 });
-    }
-
-    const data = await request.json();
-
-    // Validate fields if present
-    if (data.name !== undefined && (typeof data.name !== 'string' || !data.name.trim())) {
-      return json({ error: 'Module name cannot be empty' }, { status: 400 });
-    }
-
-    if (data.description !== undefined && typeof data.description !== 'string') {
-      return json({ error: 'Description must be a string' }, { status: 400 });
-    }
-
-    const module = await projectModuleService.updateModule(moduleId, projectId, locals.user.userId, data);
-
+    const module = await projectModuleService.updateModule(
+      parsedParams.data.moduleId,
+      parsedParams.data.id,
+      locals.user.userId,
+      parsedBody.data
+    );
     return json({ module });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Internal server error';
     console.error('Error updating module:', error);
-    
-    if (error.message.includes('not found') || error.message.includes('access denied')) {
+    if (message.includes('not found') || message.includes('access denied'))
       return json({ error: 'Module or project not found' }, { status: 404 });
-    }
-    
-    if (error.message.includes('required') || error.message.includes('exceed') || error.message.includes('empty')) {
-      return json({ error: error.message }, { status: 400 });
-    }
-    
+    if (message.includes('required') || message.includes('exceed') || message.includes('empty'))
+      return json({ error: message }, { status: 400 });
     return json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
-// DELETE /api/projects/[id]/modules/[moduleId] - Delete module
 export async function DELETE({ params, locals }: RequestEvent) {
+  if (!locals.user) return json({ error: 'Unauthorized' }, { status: 401 });
+
+  const parsed = projectModuleIdParam.safeParse(params);
+  if (!parsed.success) return json({ error: 'Invalid project or module ID' }, { status: 400 });
+
   try {
-    // Check if user is authenticated
-    if (!locals.user) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const projectId = parseInt(params.id as string);
-    const moduleId = parseInt(params.moduleId as string);
-    
-    if (isNaN(projectId) || isNaN(moduleId)) {
-      return json({ error: 'Invalid project or module ID' }, { status: 400 });
-    }
-
-    await projectModuleService.deleteModule(moduleId, projectId, locals.user.userId);
-
+    await projectModuleService.deleteModule(
+      parsed.data.moduleId,
+      parsed.data.id,
+      locals.user.userId
+    );
     return json({ message: 'Module deleted successfully' });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Internal server error';
     console.error('Error deleting module:', error);
-    
-    if (error.message.includes('not found') || error.message.includes('access denied')) {
+    if (message.includes('not found') || message.includes('access denied'))
       return json({ error: 'Module or project not found' }, { status: 404 });
-    }
-    
     return json({ error: 'Internal server error' }, { status: 500 });
   }
 }

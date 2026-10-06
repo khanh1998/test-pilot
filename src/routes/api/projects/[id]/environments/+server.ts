@@ -1,155 +1,119 @@
+import { parseJsonRequest } from '$lib/server/http/parse-json-request';
 import { json } from '@sveltejs/kit';
 import type { RequestEvent } from '@sveltejs/kit';
 import { ProjectEnvironmentService } from '../../../../../lib/server/service/projects/environment_service.js';
+import { projectIdParam, LinkProjectEnvironmentRequest } from '$lib/schemas/projects';
+import { z } from 'zod';
 
 const environmentService = new ProjectEnvironmentService();
 
-// GET /api/projects/[id]/environments - List environments linked to project
+const projEnvDeleteParams = z.object({
+  id: z.coerce.number().int().positive(),
+  environmentId: z.coerce.number().int().positive()
+});
+
 export async function GET({ params, locals }: RequestEvent) {
+  if (!locals.user) return json({ error: 'Unauthorized' }, { status: 401 });
+
+  const parsed = projectIdParam.safeParse(params);
+  if (!parsed.success) return json({ error: 'Invalid project ID' }, { status: 400 });
+
   try {
-    // Check if user is authenticated
-    if (!locals.user) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const projectId = parseInt(params.id as string);
-    if (isNaN(projectId)) {
-      return json({ error: 'Invalid project ID' }, { status: 400 });
-    }
-
-    const environmentsResponse = await environmentService.listProjectEnvironments(projectId, locals.user.userId);
-    
+    const environmentsResponse = await environmentService.listProjectEnvironments(
+      parsed.data.id,
+      locals.user.userId
+    );
     return json({ environments: environmentsResponse.environmentLinks });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Internal server error';
     console.error('Error listing project environments:', error);
-    
-    if (error.message.includes('not found') || error.message.includes('access denied')) {
+    if (message.includes('not found') || message.includes('access denied')) {
       return json({ error: 'Project not found' }, { status: 404 });
     }
-    
     return json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
-// POST /api/projects/[id]/environments - Link environment to project
 export async function POST({ params, request, locals }: RequestEvent) {
+  if (!locals.user) return json({ error: 'Unauthorized' }, { status: 401 });
+
+  const parsedParams = projectIdParam.safeParse(params);
+  if (!parsedParams.success) return json({ error: 'Invalid project ID' }, { status: 400 });
+
+  const parsedBody = await parseJsonRequest(request, LinkProjectEnvironmentRequest);
+  if (!parsedBody.success)
+    return json({ error: parsedBody.error.issues[0].message }, { status: 400 });
+
   try {
-    // Check if user is authenticated
-    if (!locals.user) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const projectId = parseInt(params.id as string);
-    if (isNaN(projectId)) {
-      return json({ error: 'Invalid project ID' }, { status: 400 });
-    }
-
-    const data = await request.json();
-
-    // Validate required fields
-    if (!data.environment_id || typeof data.environment_id !== 'number') {
-      return json({ error: 'Environment ID is required and must be a number' }, { status: 400 });
-    }
-
-    if (data.variableMappings !== undefined && typeof data.variableMappings !== 'object') {
-      return json({ error: 'Variable mappings must be an object' }, { status: 400 });
-    }
-
     const link = await environmentService.linkEnvironment(
-      projectId, 
+      parsedParams.data.id,
       locals.user.userId,
-      { 
-        environmentId: data.environment_id,
-        variableMappings: data.variableMappings || {}
+      {
+        environmentId: parsedBody.data.environment_id,
+        variableMappings: parsedBody.data.variableMappings || {}
       }
     );
-
     return json({ link }, { status: 201 });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Internal server error';
     console.error('Error linking environment:', error);
-    
-    if (error.message.includes('not found') || error.message.includes('access denied')) {
+    if (message.includes('not found') || message.includes('access denied'))
       return json({ error: 'Project or environment not found' }, { status: 404 });
-    }
-    
-    if (error.message.includes('already linked')) {
+    if (message.includes('already linked'))
       return json({ error: 'Environment is already linked to this project' }, { status: 409 });
-    }
-    
     return json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
-// PUT /api/projects/[id]/environments - Update environment mapping for project
 export async function PUT({ params, request, locals }: RequestEvent) {
+  if (!locals.user) return json({ error: 'Unauthorized' }, { status: 401 });
+
+  const parsedParams = projectIdParam.safeParse(params);
+  if (!parsedParams.success) return json({ error: 'Invalid project ID' }, { status: 400 });
+
+  const parsedBody = await parseJsonRequest(request, LinkProjectEnvironmentRequest);
+  if (!parsedBody.success)
+    return json({ error: parsedBody.error.issues[0].message }, { status: 400 });
+
   try {
-    // Check if user is authenticated
-    if (!locals.user) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const projectId = parseInt(params.id as string);
-    if (isNaN(projectId)) {
-      return json({ error: 'Invalid project ID' }, { status: 400 });
-    }
-
-    const data = await request.json();
-
-    // Validate required fields
-    if (!data.environment_id || typeof data.environment_id !== 'number') {
-      return json({ error: 'Environment ID is required and must be a number' }, { status: 400 });
-    }
-
-    if (data.variableMappings !== undefined && typeof data.variableMappings !== 'object') {
-      return json({ error: 'Variable mappings must be an object' }, { status: 400 });
-    }
-
     const link = await environmentService.updateEnvironmentLink(
-      projectId, 
-      data.environment_id,
+      parsedParams.data.id,
+      parsedBody.data.environment_id,
       locals.user.userId,
-      { 
-        variableMappings: data.variableMappings || {}
-      }
+      { variableMappings: parsedBody.data.variableMappings || {} }
     );
-
     return json({ link });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Internal server error';
     console.error('Error updating environment mapping:', error);
-    
-    if (error.message.includes('not found') || error.message.includes('access denied')) {
+    if (message.includes('not found') || message.includes('access denied'))
       return json({ error: 'Project or environment not found' }, { status: 404 });
-    }
-    
     return json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
-// DELETE /api/projects/[id]/environments/[environmentId] - Unlink environment from project
-export async function DELETE({ params, locals }: RequestEvent) {
+export async function DELETE({ params, url, locals }: RequestEvent) {
+  if (!locals.user) return json({ error: 'Unauthorized' }, { status: 401 });
+
+  const parsedParams = projEnvDeleteParams.safeParse({
+    ...params,
+    environmentId: url.searchParams.get('environmentId')
+  });
+  if (!parsedParams.success)
+    return json({ error: 'Invalid project or environment ID' }, { status: 400 });
+
   try {
-    // Check if user is authenticated
-    if (!locals.user) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const projectId = parseInt(params.id as string);
-    const environmentId = parseInt(params.environmentId as string);
-    
-    if (isNaN(projectId) || isNaN(environmentId)) {
-      return json({ error: 'Invalid project or environment ID' }, { status: 400 });
-    }
-
-    await environmentService.unlinkEnvironment(projectId, environmentId, locals.user.userId);
-
+    await environmentService.unlinkEnvironment(
+      parsedParams.data.id,
+      parsedParams.data.environmentId,
+      locals.user.userId
+    );
     return json({ message: 'Environment unlinked successfully' });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Internal server error';
     console.error('Error unlinking environment:', error);
-    
-    if (error.message.includes('not found') || error.message.includes('access denied')) {
+    if (message.includes('not found') || message.includes('access denied'))
       return json({ error: 'Project, environment, or link not found' }, { status: 404 });
-    }
-    
     return json({ error: 'Internal server error' }, { status: 500 });
   }
 }
