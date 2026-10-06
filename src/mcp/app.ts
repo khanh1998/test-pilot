@@ -29,7 +29,10 @@ import {
   type AddStepInput,
   type UpdateStepInput
 } from '$lib/server/service/test_flows/edit/steps';
-import { patchEndpointInTestFlow, type EndpointPatch } from '$lib/server/service/test_flows/edit/endpoint';
+import {
+  patchEndpointInTestFlow,
+  type EndpointPatch
+} from '$lib/server/service/test_flows/edit/endpoint';
 import {
   addFlowParameterToTestFlow,
   setFlowOutputInTestFlow,
@@ -56,6 +59,17 @@ function asTextResult(structuredContent: Record<string, unknown>) {
 }
 
 const primitiveParameterTypeSchema = z.enum(['string', 'number', 'boolean', 'null']);
+const apiEndpointDefinitionSchema = {
+  path: z.string().startsWith('/'),
+  method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD']),
+  operationId: z.string().nullable().optional(),
+  summary: z.string().nullable().optional(),
+  description: z.string().nullable().optional(),
+  requestSchema: z.unknown().nullable().optional(),
+  responseSchema: z.unknown().nullable().optional(),
+  parameters: z.array(z.record(z.string(), z.unknown())).optional(),
+  tags: z.array(z.string()).optional()
+};
 const flowOutputTypeSchema = z.enum([
   'string',
   'number',
@@ -393,7 +407,7 @@ async function resolveApiScope(
     const envApiIds = [
       ...new Set(
         envLinks.environmentLinks.flatMap(
-          (link) => ((link.environment?.config as { linked_apis?: number[] })?.linked_apis ?? [])
+          (link) => (link.environment?.config as { linked_apis?: number[] })?.linked_apis ?? []
         )
       )
     ];
@@ -482,15 +496,18 @@ async function buildProjectContext(
   }));
 
   if (projectApis.length === 0) {
-    const envApiIds = [
-      ...new Set(environments.flatMap((e) => (e.linkedApiIds as number[]) ?? []))
-    ];
+    const envApiIds = [...new Set(environments.flatMap((e) => (e.linkedApiIds as number[]) ?? []))];
     if (envApiIds.length > 0) {
       const { db } = await import('$lib/server/db');
       const { apis: apisTable } = await import('$lib/server/db/schema');
       const { inArray } = await import('drizzle-orm');
       const apiRows = await db
-        .select({ id: apisTable.id, name: apisTable.name, description: apisTable.description, host: apisTable.host })
+        .select({
+          id: apisTable.id,
+          name: apisTable.name,
+          description: apisTable.description,
+          host: apisTable.host
+        })
         .from(apisTable)
         .where(inArray(apisTable.id, envApiIds));
       projectApis = apiRows.map((a) => ({
@@ -830,12 +847,15 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
           hierarchy: [
             '1. API Endpoint — one imported HTTP call (method + path). The atomic unit.',
             '2. Test Flow — a linear chain of API endpoint calls with typed input parameters, assertions, and named outputs. Designed to be self-contained and reusable across multiple sequences.',
-            '3. Test Sequence — a chain of test flows. Wires flows together by mapping one flow\'s output to the next flow\'s input parameters. Business scenarios live here.',
+            "3. Test Sequence — a chain of test flows. Wires flows together by mapping one flow's output to the next flow's input parameters. Business scenarios live here.",
             '4. Project Module — a grouping container for test sequences, like a folder. No business logic — purely organizational.'
           ],
-          dataFlowDirection: 'Endpoints → Flows → Sequences. Data flows in one direction: endpoint responses feed flow outputs; flow outputs feed sequence parameter mappings.',
-          reuseContract: 'Flows are built to be reusable. The same flow can appear in many sequences with different parameter values. Put reusable logic in flows; put scenario-specific wiring in sequences.',
-          moduleNote: 'moduleId is required by sequence tools but carries no business meaning — it is just the folder a sequence lives in. Retrieve it once from get_project_context (modules array) and reuse. When a project has only one module, that is the moduleId for all sequences.'
+          dataFlowDirection:
+            'Endpoints → Flows → Sequences. Data flows in one direction: endpoint responses feed flow outputs; flow outputs feed sequence parameter mappings.',
+          reuseContract:
+            'Flows are built to be reusable. The same flow can appear in many sequences with different parameter values. Put reusable logic in flows; put scenario-specific wiring in sequences.',
+          moduleNote:
+            'moduleId is required by sequence tools but carries no business meaning — it is just the folder a sequence lives in. Retrieve it once from get_project_context (modules array) and reuse. When a project has only one module, that is the moduleId for all sequences.'
         },
         agentWorkflow: [
           'Call prepare_flow_context(projectId) to inspect APIs, environments, and existing flows.',
@@ -848,8 +868,19 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
           'Commit with commit_flow_draft(draftFlowId) to overwrite the original, or pass saveAsNew: true to create a new flow. Discard with discard_flow_draft to cancel.'
         ],
         keyTools: {
-          context: ['prepare_flow_context', 'get_project_context', 'list_test_flows', 'get_test_flow'],
+          context: [
+            'prepare_flow_context',
+            'get_project_context',
+            'list_test_flows',
+            'get_test_flow'
+          ],
           endpointDiscovery: ['search_endpoints', 'browse_endpoints', 'get_endpoint_details'],
+          endpointManagement: [
+            'list_api_endpoints',
+            'create_api_endpoint',
+            'update_api_endpoint',
+            'delete_api_endpoint'
+          ],
           drafting: [
             'create_flow_draft',
             'add_step',
@@ -861,7 +892,12 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
           dataDependencies: ['suggest_expression', 'explain_expression'],
           validation: ['validate_flow', 'explain_flow'],
           execution: ['run_flow', 'save_flow'],
-          coverage: ['get_coverage_gaps', 'explain_sequence', 'browse_endpoints', 'validate_flow_sequence'],
+          coverage: [
+            'get_coverage_gaps',
+            'explain_sequence',
+            'browse_endpoints',
+            'validate_flow_sequence'
+          ],
           modules: ['create_module', 'update_module'],
           sequences: ['create_sequence', 'update_sequence', 'delete_sequence', 'clone_sequence']
         },
@@ -1037,9 +1073,7 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
         const { db } = await import('$lib/server/db');
         const { testFlows } = await import('$lib/server/db/schema');
         const { and, eq } = await import('drizzle-orm');
-        const { getTestFlowApiIds } = await import(
-          '$lib/server/repository/db/test-flows'
-        );
+        const { getTestFlowApiIds } = await import('$lib/server/repository/db/test-flows');
         const { createBasicTestFlow } = await import(
           '$lib/server/service/test_flows/create_test_flow'
         );
@@ -1061,9 +1095,7 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
           flowJson: draft.flowJson
         });
 
-        const { discardTestFlowDraft } = await import(
-          '$lib/server/service/test_flows/draft_flow'
-        );
+        const { discardTestFlowDraft } = await import('$lib/server/service/test_flows/draft_flow');
         await discardTestFlowDraft(draftFlowId, user.userId);
 
         return asTextResult({
@@ -1210,7 +1242,9 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
         patch: z.object({
           body: z.record(z.string(), z.unknown()).optional(),
           headers: z
-            .array(z.object({ name: z.string(), value: z.string(), enabled: z.boolean().optional() }))
+            .array(
+              z.object({ name: z.string(), value: z.string(), enabled: z.boolean().optional() })
+            )
             .optional(),
           queryParams: z.record(z.string(), z.union([z.string(), z.array(z.string())])).optional(),
           pathParams: z.record(z.string(), z.string()).optional(),
@@ -1245,10 +1279,18 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
       const normalizedPatch: EndpointPatch = {
         ...patch,
         assertions: patch.assertions
-          ? patch.assertions.map((a) => normalizeAssertionInput(a as Parameters<typeof normalizeAssertionInput>[0]))
+          ? patch.assertions.map((a) =>
+              normalizeAssertionInput(a as Parameters<typeof normalizeAssertionInput>[0])
+            )
           : undefined
       };
-      const updated = await patchEndpointInTestFlow(flowId, user.userId, stepId, endpointIndex, normalizedPatch);
+      const updated = await patchEndpointInTestFlow(
+        flowId,
+        user.userId,
+        stepId,
+        endpointIndex,
+        normalizedPatch
+      );
       return asTextResult({ flowId, stepId, endpointIndex, flowJson: updated.flowJson });
     }
   );
@@ -1318,7 +1360,13 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
         parameterMappings: z.record(z.string(), z.string()).optional()
       }
     },
-    async ({ flowId, environmentId, environmentName, selectedSubEnvironment, parameterMappings }) => {
+    async ({
+      flowId,
+      environmentId,
+      environmentName,
+      selectedSubEnvironment,
+      parameterMappings
+    }) => {
       const user = requireAuthContext(authContext);
       const updated = await linkEnvironmentToTestFlow(flowId, user.userId, {
         environmentId,
@@ -1480,9 +1528,7 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
             }
           : runnableDocument;
 
-      const { runFlowDataSync } = await import(
-        '$lib/server/service/test_flows/run_test_flow_sync'
-      );
+      const { runFlowDataSync } = await import('$lib/server/service/test_flows/run_test_flow_sync');
 
       const syncResult = await runFlowDataSync(
         effectiveDocument.flowData,
@@ -1541,12 +1587,34 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
         'Returns per-sequence pass/fail, flow-level results, and aggregate counts.'
       ].join(' '),
       inputSchema: {
-        sequenceIds: z.array(z.number()).optional().describe('Specific sequence IDs to run. Mutually exclusive with moduleId.'),
-        moduleId: z.number().optional().describe('Run all non-empty sequences in this module. Mutually exclusive with sequenceIds.'),
-        projectId: z.number().optional().describe('Project ID — required when using moduleId. Inferred automatically if omitted.'),
-        environmentId: z.number().describe('Environment ID to use for variable and API host resolution.'),
-        subEnvironment: z.string().describe('Sub-environment name (e.g. "dev", "staging") within the selected environment.'),
-        mode: z.enum(['sequential', 'parallel']).optional().describe('Execution order when running multiple sequences. Defaults to sequential.'),
+        sequenceIds: z
+          .array(z.number())
+          .optional()
+          .describe('Specific sequence IDs to run. Mutually exclusive with moduleId.'),
+        moduleId: z
+          .number()
+          .optional()
+          .describe(
+            'Run all non-empty sequences in this module. Mutually exclusive with sequenceIds.'
+          ),
+        projectId: z
+          .number()
+          .optional()
+          .describe(
+            'Project ID — required when using moduleId. Inferred automatically if omitted.'
+          ),
+        environmentId: z
+          .number()
+          .describe('Environment ID to use for variable and API host resolution.'),
+        subEnvironment: z
+          .string()
+          .describe(
+            'Sub-environment name (e.g. "dev", "staging") within the selected environment.'
+          ),
+        mode: z
+          .enum(['sequential', 'parallel'])
+          .optional()
+          .describe('Execution order when running multiple sequences. Defaults to sequential.'),
         preferences: z
           .object({
             stopOnError: z.boolean().optional(),
@@ -1556,14 +1624,24 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
           .optional()
       }
     },
-    async ({ sequenceIds, moduleId, projectId, environmentId, subEnvironment, mode, preferences }) => {
+    async ({
+      sequenceIds,
+      moduleId,
+      projectId,
+      environmentId,
+      subEnvironment,
+      mode,
+      preferences
+    }) => {
       const user = requireAuthContext(authContext);
 
       const hasSequenceIds = Array.isArray(sequenceIds) && sequenceIds.length > 0;
       const hasModuleId = moduleId !== undefined;
 
       if (!hasSequenceIds && !hasModuleId) {
-        throw new Error('Provide either sequenceIds (array) or moduleId — exactly one is required.');
+        throw new Error(
+          'Provide either sequenceIds (array) or moduleId — exactly one is required.'
+        );
       }
       if (hasSequenceIds && hasModuleId) {
         throw new Error('Provide either sequenceIds or moduleId, not both.');
@@ -1583,8 +1661,7 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
       if (hasSequenceIds) {
         result = await runSequencesByIds(sequenceIds!, user.userId, runInput);
       } else {
-        const resolvedProjectId =
-          projectId ?? (await resolveProjectIdFromModule(moduleId!));
+        const resolvedProjectId = projectId ?? (await resolveProjectIdFromModule(moduleId!));
         result = await runSequencesByModuleId(moduleId!, resolvedProjectId, user.userId, runInput);
       }
 
@@ -1645,17 +1722,23 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
           projectId: z.number().optional(),
           environmentId: z.number().optional(),
           sourceFlowId: z.number().optional(),
-          flowData: z.object({
-            steps: z.array(z.unknown()),
-            parameters: z.array(z.unknown()).optional(),
-            outputs: z.array(z.unknown()).optional(),
-            endpoints: z.array(z.unknown()).optional(),
-            settings: z.object({
-              api_hosts: z.record(z.string(), z.unknown()).optional(),
-              environment: z.object({ environmentId: z.number(), subEnvironment: z.string().optional() }).optional(),
-              linkedEnvironment: z.unknown().optional()
-            }).optional()
-          }).optional()
+          flowData: z
+            .object({
+              steps: z.array(z.unknown()),
+              parameters: z.array(z.unknown()).optional(),
+              outputs: z.array(z.unknown()).optional(),
+              endpoints: z.array(z.unknown()).optional(),
+              settings: z
+                .object({
+                  api_hosts: z.record(z.string(), z.unknown()).optional(),
+                  environment: z
+                    .object({ environmentId: z.number(), subEnvironment: z.string().optional() })
+                    .optional(),
+                  linkedEnvironment: z.unknown().optional()
+                })
+                .optional()
+            })
+            .optional()
         }),
         flowId: z.number().optional(),
         projectId: z.number().optional(),
@@ -1670,13 +1753,17 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
         const bare = normalizedDoc as unknown as Record<string, unknown>;
         normalizedDoc = {
           name: (bare.name as string) ?? 'Untitled',
-          flowData: normalizedDoc as unknown as import('$lib/components/test-flows/types').TestFlowData
+          flowData:
+            normalizedDoc as unknown as import('$lib/components/test-flows/types').TestFlowData
         };
       }
       if (normalizedDoc.flowData && !normalizedDoc.flowData.settings) {
         normalizedDoc = {
           ...normalizedDoc,
-          flowData: { ...normalizedDoc.flowData, settings: {} as import('$lib/components/test-flows/types').TestFlowData['settings'] }
+          flowData: {
+            ...normalizedDoc.flowData,
+            settings: {} as import('$lib/components/test-flows/types').TestFlowData['settings']
+          }
         };
       }
       const runnableDocument = await ensureFlowHasApiHosts(normalizedDoc, authContext);
@@ -1771,20 +1858,32 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
 
       // Resolve module names and flow names with two lightweight parallel queries
       const { db } = await import('$lib/server/db');
-      const { projectModules: modulesTable, testFlows: testFlowsTable } = await import('$lib/server/db/schema');
+      const { projectModules: modulesTable, testFlows: testFlowsTable } = await import(
+        '$lib/server/db/schema'
+      );
       const { inArray } = await import('drizzle-orm');
 
       const moduleIds = [...new Set(result.sequences.map((seq) => seq.moduleId))];
-      const allFlowIds = [...new Set(
-        result.sequences.flatMap((seq) => (seq.sequenceConfig.steps ?? []).map((s) => s.test_flow_id))
-      )];
+      const allFlowIds = [
+        ...new Set(
+          result.sequences.flatMap((seq) =>
+            (seq.sequenceConfig.steps ?? []).map((s) => s.test_flow_id)
+          )
+        )
+      ];
 
       const [moduleRows, flowRows] = await Promise.all([
         moduleIds.length > 0
-          ? db.select({ id: modulesTable.id, name: modulesTable.name }).from(modulesTable).where(inArray(modulesTable.id, moduleIds))
+          ? db
+              .select({ id: modulesTable.id, name: modulesTable.name })
+              .from(modulesTable)
+              .where(inArray(modulesTable.id, moduleIds))
           : Promise.resolve([]),
         allFlowIds.length > 0
-          ? db.select({ id: testFlowsTable.id, name: testFlowsTable.name }).from(testFlowsTable).where(inArray(testFlowsTable.id, allFlowIds))
+          ? db
+              .select({ id: testFlowsTable.id, name: testFlowsTable.name })
+              .from(testFlowsTable)
+              .where(inArray(testFlowsTable.id, allFlowIds))
           : Promise.resolve([])
       ]);
 
@@ -1833,7 +1932,11 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
 
       // Fetch all flows with flowJson for endpoint scanning (up to 200)
       const flows = await db
-        .select({ id: testFlowsTable.id, name: testFlowsTable.name, flowJson: testFlowsTable.flowJson })
+        .select({
+          id: testFlowsTable.id,
+          name: testFlowsTable.name,
+          flowJson: testFlowsTable.flowJson
+        })
         .from(testFlowsTable)
         .where(dbEq(testFlowsTable.projectId, projectId))
         .limit(200);
@@ -1873,7 +1976,9 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
       // Collect all endpoint_ids used across all flows
       const usedEndpointIds = new Set<number>();
       for (const flow of flows) {
-        const flowData = flow.flowJson as { steps?: Array<{ endpoints?: Array<{ endpoint_id?: number | string }> }> };
+        const flowData = flow.flowJson as {
+          steps?: Array<{ endpoints?: Array<{ endpoint_id?: number | string }> }>;
+        };
         for (const step of flowData?.steps ?? []) {
           for (const ep of step.endpoints ?? []) {
             if (ep.endpoint_id != null) usedEndpointIds.add(Number(ep.endpoint_id));
@@ -1891,17 +1996,37 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
       }
 
       let allEndpoints: Awaited<ReturnType<typeof browseEndpoints>> = [];
-      let coveredEndpoints: Array<{ id: number; method: string; path: string; summary: string | null }> = [];
-      let uncoveredEndpoints: Array<{ id: number; method: string; path: string; summary: string | null }> = [];
+      let coveredEndpoints: Array<{
+        id: number;
+        method: string;
+        path: string;
+        summary: string | null;
+      }> = [];
+      let uncoveredEndpoints: Array<{
+        id: number;
+        method: string;
+        path: string;
+        summary: string | null;
+      }> = [];
       let coverageByTag: Array<{ tag: string; total: number; covered: number }> = [];
       if (apiIds.length > 0) {
         allEndpoints = await browseEndpoints({ userId: user.userId, apiIds, limit: 1000 });
         coveredEndpoints = allEndpoints
           .filter((ep) => usedEndpointIds.has(ep.id))
-          .map((ep) => ({ id: ep.id, method: ep.method, path: ep.path, summary: ep.summary ?? null }));
+          .map((ep) => ({
+            id: ep.id,
+            method: ep.method,
+            path: ep.path,
+            summary: ep.summary ?? null
+          }));
         uncoveredEndpoints = allEndpoints
           .filter((ep) => !usedEndpointIds.has(ep.id))
-          .map((ep) => ({ id: ep.id, method: ep.method, path: ep.path, summary: ep.summary ?? null }));
+          .map((ep) => ({
+            id: ep.id,
+            method: ep.method,
+            path: ep.path,
+            summary: ep.summary ?? null
+          }));
         const tagMap: Record<string, { total: number; covered: number }> = {};
         for (const ep of allEndpoints) {
           for (const tag of ep.tags ?? []) {
@@ -1917,20 +2042,30 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
 
       const interpretationParts: string[] = [];
       if (unusedFlows.length === 0) interpretationParts.push('all flows are sequenced');
-      else interpretationParts.push(`${unusedFlows.length} flow${unusedFlows.length === 1 ? '' : 's'} not referenced by any sequence`);
+      else
+        interpretationParts.push(
+          `${unusedFlows.length} flow${unusedFlows.length === 1 ? '' : 's'} not referenced by any sequence`
+        );
       if (apiIds.length > 0) {
-        if (uncoveredEndpoints.length === 0) interpretationParts.push('all imported endpoints are covered');
-        else interpretationParts.push(`${uncoveredEndpoints.length} endpoint${uncoveredEndpoints.length === 1 ? '' : 's'} have no test coverage`);
+        if (uncoveredEndpoints.length === 0)
+          interpretationParts.push('all imported endpoints are covered');
+        else
+          interpretationParts.push(
+            `${uncoveredEndpoints.length} endpoint${uncoveredEndpoints.length === 1 ? '' : 's'} have no test coverage`
+          );
       }
       const coverageSummary = {
         flowReuse: `${flows.length - unusedFlows.length}/${flows.length} flows referenced by at least one sequence`,
-        ...(apiIds.length > 0 ? {
-          endpointCoverage: `${coveredEndpoints.length}/${allEndpoints.length} (${allEndpoints.length > 0 ? Math.round((coveredEndpoints.length / allEndpoints.length) * 100) : 0}%) endpoints hit by at least one flow`
-        } : {}),
+        ...(apiIds.length > 0
+          ? {
+              endpointCoverage: `${coveredEndpoints.length}/${allEndpoints.length} (${allEndpoints.length > 0 ? Math.round((coveredEndpoints.length / allEndpoints.length) * 100) : 0}%) endpoints hit by at least one flow`
+            }
+          : {}),
         interpretation: interpretationParts.join('; ') + '.',
-        warningNote: unusedFlows.length === 0 && uncoveredEndpoints.length > 0
-          ? 'unusedFlows: [] does NOT mean full coverage — it means all existing flows are sequenced, but there may still be uncovered endpoints with no flow at all.'
-          : undefined
+        warningNote:
+          unusedFlows.length === 0 && uncoveredEndpoints.length > 0
+            ? 'unusedFlows: [] does NOT mean full coverage — it means all existing flows are sequenced, but there may still be uncovered endpoints with no flow at all.'
+            : undefined
       };
 
       return asTextResult({
@@ -1956,7 +2091,8 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
     'get_flow_sequence',
     {
       title: 'Get Flow Sequence',
-      description: 'Load the full raw config for a flow sequence, including complete flowJson for every step. Can return 20–100 KB depending on sequence size. For analysis or auditing use explain_sequence instead — it is human-readable and lightweight. Use this tool only when you need the raw config for editing.',
+      description:
+        'Load the full raw config for a flow sequence, including complete flowJson for every step. Can return 20–100 KB depending on sequence size. For analysis or auditing use explain_sequence instead — it is human-readable and lightweight. Use this tool only when you need the raw config for editing.',
       inputSchema: {
         projectId: z.number(),
         moduleId: z.number().optional(),
@@ -2166,10 +2302,16 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
       const resolvedModuleId = moduleId ?? (await resolveModuleId(sequenceId));
       const { FlowSequenceService } = await import('$lib/server/service/projects/sequence_service');
       const service = new FlowSequenceService();
-      const sequence = await service.updateSequence(sequenceId, resolvedModuleId, projectId, user.userId, {
-        name,
-        description
-      });
+      const sequence = await service.updateSequence(
+        sequenceId,
+        resolvedModuleId,
+        projectId,
+        user.userId,
+        {
+          name,
+          description
+        }
+      );
       return asTextResult({ sequence });
     }
   );
@@ -2214,10 +2356,16 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
       const resolvedModuleId = moduleId ?? (await resolveModuleId(sequenceId));
       const { FlowSequenceService } = await import('$lib/server/service/projects/sequence_service');
       const service = new FlowSequenceService();
-      const sequence = await service.cloneSequence(sequenceId, resolvedModuleId, projectId, user.userId, {
-        name,
-        description
-      });
+      const sequence = await service.cloneSequence(
+        sequenceId,
+        resolvedModuleId,
+        projectId,
+        user.userId,
+        {
+          name,
+          description
+        }
+      );
       return asTextResult({ sequence });
     }
   );
@@ -2287,7 +2435,10 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
       const user = requireAuthContext(authContext);
       const { ProjectModuleService } = await import('$lib/server/service/projects/module_service');
       const service = new ProjectModuleService();
-      const module = await service.updateModule(moduleId, projectId, user.userId, { name, description });
+      const module = await service.updateModule(moduleId, projectId, user.userId, {
+        name,
+        description
+      });
       return asTextResult({ module });
     }
   );
@@ -2487,6 +2638,109 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
   );
 
   server.registerTool(
+    'list_api_endpoints',
+    {
+      title: 'List API Endpoints',
+      description:
+        'List all endpoint definitions for one API, including request schemas, response schemas, parameters, and tags.',
+      inputSchema: {
+        userId: z.number().optional(),
+        apiId: z.number()
+      }
+    },
+    async ({ userId, apiId }) => {
+      const { getApiEndpoints } = await import(
+        '$lib/server/service/api_endpoints/list_api_endpoints'
+      );
+      return asTextResult(
+        (await getApiEndpoints({
+          apiId,
+          userId: getUserId(userId, authContext)
+        })) as unknown as Record<string, unknown>
+      );
+    }
+  );
+
+  server.registerTool(
+    'create_api_endpoint',
+    {
+      title: 'Create API Endpoint',
+      description:
+        'Create an API endpoint. This atomically updates both the endpoint catalog and the stored OpenAPI/Swagger document.',
+      inputSchema: {
+        userId: z.number().optional(),
+        apiId: z.number(),
+        ...apiEndpointDefinitionSchema
+      }
+    },
+    async ({ userId, apiId, ...endpoint }) => {
+      const { createManagedEndpoint } = await import(
+        '$lib/server/service/api_endpoints/manage_endpoint'
+      );
+      const created = await createManagedEndpoint(
+        {
+          apiId,
+          ...endpoint,
+          parameters: endpoint.parameters ?? [],
+          tags: endpoint.tags ?? []
+        },
+        getUserId(userId, authContext)
+      );
+      return asTextResult({ endpoint: created });
+    }
+  );
+
+  server.registerTool(
+    'update_api_endpoint',
+    {
+      title: 'Update API Endpoint',
+      description:
+        'Replace an API endpoint definition while preserving its endpoint id. Method or path changes are reflected in the stored OpenAPI/Swagger document.',
+      inputSchema: {
+        userId: z.number().optional(),
+        endpointId: z.number(),
+        ...apiEndpointDefinitionSchema
+      }
+    },
+    async ({ userId, endpointId, ...endpoint }) => {
+      const { updateManagedEndpoint } = await import(
+        '$lib/server/service/api_endpoints/manage_endpoint'
+      );
+      const updated = await updateManagedEndpoint(
+        endpointId,
+        {
+          ...endpoint,
+          parameters: endpoint.parameters ?? [],
+          tags: endpoint.tags ?? []
+        },
+        getUserId(userId, authContext)
+      );
+      return asTextResult({ endpoint: updated });
+    }
+  );
+
+  server.registerTool(
+    'delete_api_endpoint',
+    {
+      title: 'Delete API Endpoint',
+      description:
+        'Delete an endpoint from the catalog and OpenAPI document. The operation is blocked when saved test flows reference the endpoint unless force is explicitly true.',
+      inputSchema: {
+        userId: z.number().optional(),
+        endpointId: z.number(),
+        force: z.boolean().optional()
+      }
+    },
+    async ({ userId, endpointId, force = false }) => {
+      const { deleteManagedEndpoint } = await import(
+        '$lib/server/service/api_endpoints/manage_endpoint'
+      );
+      const result = await deleteManagedEndpoint(endpointId, getUserId(userId, authContext), force);
+      return asTextResult({ deleted: true, ...result });
+    }
+  );
+
+  server.registerTool(
     'list_test_flows',
     {
       title: 'List Test Flows',
@@ -2510,7 +2764,9 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
       let endpointPathsById: Record<number, string[]> = {};
       if (flowIds.length > 0) {
         const { db } = await import('$lib/server/db');
-        const { testFlows: testFlowsTable, apiEndpoints: apiEndpointsTable } = await import('$lib/server/db/schema');
+        const { testFlows: testFlowsTable, apiEndpoints: apiEndpointsTable } = await import(
+          '$lib/server/db/schema'
+        );
         const { inArray } = await import('drizzle-orm');
 
         // Load flowJson for each flow to extract endpoint_id references
@@ -2541,7 +2797,11 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
         const endpointMap: Record<number, string> = {};
         if (allEndpointIds.size > 0) {
           const epRows = await db
-            .select({ id: apiEndpointsTable.id, method: apiEndpointsTable.method, path: apiEndpointsTable.path })
+            .select({
+              id: apiEndpointsTable.id,
+              method: apiEndpointsTable.method,
+              path: apiEndpointsTable.path
+            })
             .from(apiEndpointsTable)
             .where(inArray(apiEndpointsTable.id, [...allEndpointIds]));
           for (const ep of epRows) {

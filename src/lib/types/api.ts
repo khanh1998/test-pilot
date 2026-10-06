@@ -6,6 +6,16 @@ export type Api = Omit<typeof apis.$inferSelect, 'specFormat' | 'specContent' | 
 
 export type ApiEndpoint = typeof apiEndpoints.$inferSelect;
 
+export type EndpointMutationInput = Pick<ApiEndpoint, 'path' | 'method'> & {
+  operationId?: string | null;
+  summary?: string | null;
+  description?: string | null;
+  requestSchema?: unknown;
+  responseSchema?: unknown;
+  parameters: Array<Record<string, unknown>>;
+  tags: string[];
+};
+
 export type GetApisResponse = {
   apis: Api[];
 };

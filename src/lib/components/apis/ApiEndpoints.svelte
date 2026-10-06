@@ -6,10 +6,17 @@
     };
   }
 
-    import { onMount } from 'svelte';
-  import { getApiDetails, getApiEndpoints } from '$lib/http_client/apis';
-  import type { Api, ApiEndpoint } from '$lib/types/api';
+  import { onMount } from 'svelte';
+  import {
+    createApiEndpoint,
+    deleteApiEndpoint,
+    getApiDetails,
+    getApiEndpoints,
+    updateApiEndpoint
+  } from '$lib/http_client/apis';
+  import type { Api, ApiEndpoint, EndpointMutationInput } from '$lib/types/api';
   import EndpointDetails from './EndpointDetails.svelte';
+  import EndpointEditor from './EndpointEditor.svelte';
 
   interface Props {
     [key: string]: unknown;
@@ -26,16 +33,18 @@
   let error: string | null = $state(null);
 
   // Group endpoints by path for better organization
-  let groupedEndpoints = $derived(endpoints.reduce(
-    (acc, endpoint) => {
-      if (!acc[endpoint.path]) {
-        acc[endpoint.path] = [];
-      }
-      acc[endpoint.path].push(endpoint);
-      return acc;
-    },
-    {} as Record<string, typeof endpoints>
-  ));
+  let groupedEndpoints = $derived(
+    endpoints.reduce(
+      (acc, endpoint) => {
+        if (!acc[endpoint.path]) {
+          acc[endpoint.path] = [];
+        }
+        acc[endpoint.path].push(endpoint);
+        return acc;
+      },
+      {} as Record<string, typeof endpoints>
+    )
+  );
 
   // Get unique tags across all endpoints
   let allTags = $derived([...new Set(endpoints.flatMap((e) => e.tags || []))].sort());
@@ -47,27 +56,34 @@
   // Endpoint details state
   let showEndpointDetails = $state(false);
   let selectedEndpoint: ApiEndpoint | null = $state(null);
+  let showEndpointEditor = $state(false);
+  let editedEndpoint: ApiEndpoint | null = $state(null);
+  let savingEndpoint = $state(false);
+  let mutationError: string | null = $state(null);
 
   // Filter endpoints by tag and search query
-  let filteredEndpointPaths = $derived(Object.keys(groupedEndpoints).filter((path) => {
-    const endpointsForPath = groupedEndpoints[path];
+  let filteredEndpointPaths = $derived(
+    Object.keys(groupedEndpoints).filter((path) => {
+      const endpointsForPath = groupedEndpoints[path];
 
-    // If tag filter is active, check if any endpoint has the tag
-    const matchesTag = !selectedTag || endpointsForPath.some((e) => e.tags?.includes(selectedTag));
+      // If tag filter is active, check if any endpoint has the tag
+      const matchesTag =
+        !selectedTag || endpointsForPath.some((e) => e.tags?.includes(selectedTag));
 
-    // If search is active, check if path or any endpoint info matches
-    const matchesSearch =
-      !searchQuery ||
-      path.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      endpointsForPath.some(
-        (e) =>
-          e.summary?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          e.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          e.operationId?.toLowerCase().includes(searchQuery.toLowerCase())
-      );
+      // If search is active, check if path or any endpoint info matches
+      const matchesSearch =
+        !searchQuery ||
+        path.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        endpointsForPath.some(
+          (e) =>
+            e.summary?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            e.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            e.operationId?.toLowerCase().includes(searchQuery.toLowerCase())
+        );
 
-    return matchesTag && matchesSearch;
-  }));
+      return matchesTag && matchesSearch;
+    })
+  );
 
   onMount(async () => {
     try {
@@ -112,6 +128,58 @@
     showEndpointDetails = false;
     selectedEndpoint = null;
   }
+
+  function openCreateEndpoint() {
+    editedEndpoint = null;
+    mutationError = null;
+    showEndpointEditor = true;
+  }
+
+  function openEditEndpoint(endpoint: ApiEndpoint) {
+    editedEndpoint = endpoint;
+    mutationError = null;
+    showEndpointEditor = true;
+  }
+
+  async function saveEndpoint(input: EndpointMutationInput) {
+    savingEndpoint = true;
+    mutationError = null;
+    try {
+      const saved = editedEndpoint
+        ? await updateApiEndpoint(editedEndpoint.id, input)
+        : await createApiEndpoint(apiId, input);
+      endpoints = editedEndpoint
+        ? endpoints.map((endpoint) => (endpoint.id === saved.id ? saved : endpoint))
+        : [...endpoints, saved];
+      showEndpointEditor = false;
+      editedEndpoint = null;
+    } catch (caught) {
+      mutationError = caught instanceof Error ? caught.message : 'Failed to save endpoint';
+    } finally {
+      savingEndpoint = false;
+    }
+  }
+
+  async function removeEndpoint(endpoint: ApiEndpoint) {
+    if (!confirm(`Delete ${endpoint.method} ${endpoint.path}?`)) return;
+    try {
+      await deleteApiEndpoint(endpoint.id);
+      endpoints = endpoints.filter((candidate) => candidate.id !== endpoint.id);
+    } catch (caught) {
+      const endpointError = caught as Error & { code?: string };
+      if (
+        endpointError.code === 'IN_USE' &&
+        confirm(
+          `${endpointError.message}. Delete it anyway? Existing flows will show a missing endpoint.`
+        )
+      ) {
+        await deleteApiEndpoint(endpoint.id, true);
+        endpoints = endpoints.filter((candidate) => candidate.id !== endpoint.id);
+        return;
+      }
+      error = endpointError.message;
+    }
+  }
 </script>
 
 <div class="container mx-auto px-4 py-8">
@@ -148,7 +216,13 @@
   {:else if endpoints.length === 0}
     <div class="rounded-md border border-gray-200 bg-gray-50 p-8 text-center">
       <h3 class="mb-2 text-lg font-medium text-gray-700">No endpoints found</h3>
-      <p class="text-gray-500">The uploaded API specification does not contain any endpoints.</p>
+      <p class="text-gray-500">The API specification does not contain any endpoints.</p>
+      <button
+        onclick={openCreateEndpoint}
+        class="mt-4 rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+      >
+        Create endpoint
+      </button>
     </div>
   {:else}
     <!-- Search and Filters -->
@@ -183,6 +257,12 @@
         >
           Reset
         </button>
+        <button
+          onclick={openCreateEndpoint}
+          class="flex-shrink-0 rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700"
+        >
+          Create endpoint
+        </button>
       </div>
     </div>
 
@@ -199,7 +279,7 @@
             <div>
               {#each groupedEndpoints[path] as endpoint (endpoint.id)}
                 <div class="border-t border-gray-200 first:border-t-0">
-                  <div 
+                  <div
                     class="cursor-pointer px-4 py-4 transition-colors hover:bg-blue-50"
                     onclick={() => showEndpointDetail(endpoint)}
                     onkeydown={(e) => e.key === 'Enter' && showEndpointDetail(endpoint)}
@@ -232,7 +312,9 @@
                               <span
                                 class="inline-flex cursor-pointer items-center rounded bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 hover:bg-blue-200"
                                 onclick={stopPropagation(() => (selectedTag = tag))}
-                                onkeydown={stopPropagation((e) => e.key === 'Enter' && (selectedTag = tag))}
+                                onkeydown={stopPropagation(
+                                  (e) => e.key === 'Enter' && (selectedTag = tag)
+                                )}
                                 tabindex="0"
                                 role="button"
                               >
@@ -242,9 +324,27 @@
                           </div>
                         {/if}
                       </div>
-                      <div class="ml-4 flex-shrink-0">
-                        <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                      <div class="ml-4 flex flex-shrink-0 items-center gap-2">
+                        <button
+                          class="rounded px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
+                          onclick={stopPropagation(() => openEditEndpoint(endpoint))}>Edit</button
+                        >
+                        <button
+                          class="rounded px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-100"
+                          onclick={stopPropagation(() => removeEndpoint(endpoint))}>Delete</button
+                        >
+                        <svg
+                          class="h-5 w-5 text-gray-400"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M9 5l7 7-7 7"
+                          ></path>
                         </svg>
                       </div>
                     </div>
@@ -264,4 +364,16 @@
   bind:isOpen={showEndpointDetails}
   endpoint={selectedEndpoint}
   onClose={closeEndpointDetails}
+/>
+
+<EndpointEditor
+  bind:isOpen={showEndpointEditor}
+  endpoint={editedEndpoint}
+  saving={savingEndpoint}
+  error={mutationError}
+  onSave={saveEndpoint}
+  onClose={() => {
+    editedEndpoint = null;
+    mutationError = null;
+  }}
 />

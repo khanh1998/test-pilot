@@ -40,6 +40,18 @@ export const ApiEndpoint = registry.register(
   })
 );
 
+const EndpointCreateBody = z.object({
+  path: z.string().trim().startsWith('/'),
+  method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD']),
+  operationId: z.string().trim().nullable().optional(),
+  summary: z.string().trim().nullable().optional(),
+  description: z.string().trim().nullable().optional(),
+  requestSchema: z.unknown().nullable().optional(),
+  responseSchema: z.unknown().nullable().optional(),
+  parameters: z.array(z.record(z.string(), z.unknown())).default([]),
+  tags: z.array(z.string().trim().min(1)).default([])
+});
+
 // ── Response schemas ──────────────────────────────────────────────────────────
 
 const GetApisResponse = registry.register('GetApisResponse', z.object({ apis: z.array(Api) }));
@@ -79,6 +91,37 @@ registry.registerPath({
   responses: {
     200: { description: 'Success', content: { 'application/json': { schema: GetApisResponse } } },
     401: { description: 'Unauthorized', content: { 'application/json': { schema: ErrorResponse } } }
+  }
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/apis/{id}/endpoints',
+  summary: 'Create an endpoint and add it to the OpenAPI document',
+  tags: ['APIs', 'Endpoints'],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: apiIdParam,
+    body: { content: { 'application/json': { schema: EndpointCreateBody } } }
+  },
+  responses: {
+    201: { description: 'Created', content: { 'application/json': { schema: ApiEndpoint } } },
+    400: {
+      description: 'Invalid endpoint',
+      content: { 'application/json': { schema: ErrorResponse } }
+    },
+    401: {
+      description: 'Unauthorized',
+      content: { 'application/json': { schema: ErrorResponse } }
+    },
+    404: {
+      description: 'API not found',
+      content: { 'application/json': { schema: ErrorResponse } }
+    },
+    409: {
+      description: 'Endpoint already exists',
+      content: { 'application/json': { schema: ErrorResponse } }
+    }
   }
 });
 

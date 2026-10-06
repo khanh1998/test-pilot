@@ -10,6 +10,25 @@ export const SearchEndpointsQuery = z.object({
   limit: z.coerce.number().int().positive().default(10).optional()
 });
 
+export const EndpointMutationBody = z.object({
+  path: z.string().trim().startsWith('/'),
+  method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD']),
+  operationId: z.string().trim().nullable().optional(),
+  summary: z.string().trim().nullable().optional(),
+  description: z.string().trim().nullable().optional(),
+  requestSchema: z.unknown().nullable().optional(),
+  responseSchema: z.unknown().nullable().optional(),
+  parameters: z.array(z.record(z.string(), z.unknown())).default([]),
+  tags: z.array(z.string().trim().min(1)).default([])
+});
+
+export const DeleteEndpointQuery = z.object({
+  force: z
+    .enum(['true', 'false'])
+    .transform((value) => value === 'true')
+    .default(false)
+});
+
 // ── Response schemas ──────────────────────────────────────────────────────────
 
 const GetEndpointDetailsResponse = registry.register(
@@ -58,6 +77,55 @@ registry.registerPath({
       content: { 'application/json': { schema: ErrorResponse } }
     },
     404: { description: 'Not found', content: { 'application/json': { schema: ErrorResponse } } }
+  }
+});
+
+registry.registerPath({
+  method: 'patch',
+  path: '/api/endpoints/{id}',
+  summary: 'Update an endpoint and its OpenAPI operation',
+  tags: ['Endpoints'],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: endpointIdParam,
+    body: { content: { 'application/json': { schema: EndpointMutationBody } } }
+  },
+  responses: {
+    200: {
+      description: 'Updated',
+      content: { 'application/json': { schema: GetEndpointDetailsResponse } }
+    },
+    400: {
+      description: 'Invalid endpoint',
+      content: { 'application/json': { schema: ErrorResponse } }
+    },
+    401: {
+      description: 'Unauthorized',
+      content: { 'application/json': { schema: ErrorResponse } }
+    },
+    404: { description: 'Not found', content: { 'application/json': { schema: ErrorResponse } } },
+    409: { description: 'Conflict', content: { 'application/json': { schema: ErrorResponse } } }
+  }
+});
+
+registry.registerPath({
+  method: 'delete',
+  path: '/api/endpoints/{id}',
+  summary: 'Delete an endpoint and its OpenAPI operation',
+  tags: ['Endpoints'],
+  security: [{ bearerAuth: [] }],
+  request: { params: endpointIdParam, query: DeleteEndpointQuery },
+  responses: {
+    200: { description: 'Deleted' },
+    401: {
+      description: 'Unauthorized',
+      content: { 'application/json': { schema: ErrorResponse } }
+    },
+    404: { description: 'Not found', content: { 'application/json': { schema: ErrorResponse } } },
+    409: {
+      description: 'Endpoint is used by test flows',
+      content: { 'application/json': { schema: ErrorResponse } }
+    }
   }
 });
 

@@ -9,7 +9,9 @@ import type {
   GetApiEndpointsResponse,
   GetApisResponse,
   UpdateSwaggerResponse,
-  UploadSwaggerResponse
+  UploadSwaggerResponse,
+  ApiEndpoint,
+  EndpointMutationInput
 } from '$lib/types/api';
 
 export async function getApiList(projectId?: number): Promise<GetApisResponse | null> {
@@ -209,5 +211,47 @@ export async function getApiEndpoints(apiId: number): Promise<GetApiEndpointsRes
   } catch (error) {
     console.error(`Error fetching endpoints for API ${apiId}:`, error);
     return null;
+  }
+}
+
+export async function createApiEndpoint(
+  apiId: number,
+  input: EndpointMutationInput
+): Promise<ApiEndpoint> {
+  const response = await fetchWithAuth(`/api/apis/${apiId}/endpoints`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input)
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error || 'Failed to create endpoint');
+  return payload.data;
+}
+
+export async function updateApiEndpoint(
+  endpointId: number,
+  input: EndpointMutationInput
+): Promise<ApiEndpoint> {
+  const response = await fetchWithAuth(`/api/endpoints/${endpointId}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input)
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error || 'Failed to update endpoint');
+  return payload.data;
+}
+
+export async function deleteApiEndpoint(endpointId: number, force = false): Promise<void> {
+  const response = await fetchWithAuth(`/api/endpoints/${endpointId}?force=${force}`, {
+    method: 'DELETE'
+  });
+  const payload = await response.json();
+  if (!response.ok) {
+    const error = new Error(payload.error || 'Failed to delete endpoint') as Error & {
+      code?: string;
+    };
+    error.code = payload.code;
+    throw error;
   }
 }
