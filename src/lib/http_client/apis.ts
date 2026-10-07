@@ -113,6 +113,22 @@ export async function uploadSwaggerFile(
   }
 }
 
+export async function createApi(input: {
+  name: string;
+  description?: string;
+  host?: string;
+  projectId?: number;
+}): Promise<UploadSwaggerResponse> {
+  const response = await fetchWithAuth('/api/apis', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input)
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error || 'Failed to create API');
+  return payload;
+}
+
 export async function updateSwaggerFile(id: string, file: File): Promise<UpdateSwaggerResponse> {
   try {
     // Check if we're in desktop mode and Tauri upload is available
@@ -166,9 +182,9 @@ export async function updateSwaggerFile(id: string, file: File): Promise<UpdateS
   }
 }
 
-export async function deleteApi(id: number): Promise<DeleteApiResponse | null> {
+export async function deleteApi(id: number, force = false): Promise<DeleteApiResponse | null> {
   try {
-    const response = await fetchWithAuth(`/api/apis/${id}`, {
+    const response = await fetchWithAuth(`/api/apis/${id}?force=${force}`, {
       method: 'DELETE'
     });
 
@@ -176,10 +192,27 @@ export async function deleteApi(id: number): Promise<DeleteApiResponse | null> {
       return await response.json();
     } else {
       const errorData = await response.json();
-      throw new Error(errorData.error || `Failed to delete API (${response.status})`);
+      const error = new Error(
+        errorData.error || `Failed to delete API (${response.status})`
+      ) as Error & { code?: string };
+      error.code = errorData.code;
+      throw error;
     }
   } catch (error) {
     console.error('Error deleting API:', error);
+    throw error;
+  }
+}
+
+/** Delete an API, asking the user before overriding saved test flows that use it. */
+export async function deleteApiConfirmingUsage(id: number): Promise<DeleteApiResponse | null> {
+  try {
+    return await deleteApi(id);
+  } catch (error) {
+    const inUse = (error as Error & { code?: string }).code === 'IN_USE';
+    if (inUse && confirm(`${(error as Error).message}. Delete it anyway? Those flows will break.`)) {
+      return deleteApi(id, true);
+    }
     throw error;
   }
 }

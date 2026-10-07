@@ -82,6 +82,10 @@ const EnvironmentApiLinkResponse = registry.register(
 
 // ── Path param helpers ────────────────────────────────────────────────────────
 
+export const DeleteEnvironmentQuery = z.object({
+  force: z.enum(['true', 'false']).transform((value) => value === 'true')
+});
+
 export const envIdParam = z.object({
   envId: z.coerce.number().int().positive()
 });
@@ -174,7 +178,7 @@ registry.registerPath({
   summary: 'Delete an environment',
   tags: ['Environments'],
   security: [{ bearerAuth: [] }],
-  request: { params: envIdParam },
+  request: { params: envIdParam, query: DeleteEnvironmentQuery },
   responses: {
     200: {
       description: 'Deleted',
@@ -182,6 +186,11 @@ registry.registerPath({
     },
     401: {
       description: 'Unauthorized',
+      content: { 'application/json': { schema: ErrorResponse } }
+    },
+    409: {
+      description:
+        'Environment is linked to test flows (cannot be forced) or to projects (retry with force=true to unlink and delete)',
       content: { 'application/json': { schema: ErrorResponse } }
     },
     404: { description: 'Not found', content: { 'application/json': { schema: ErrorResponse } } }

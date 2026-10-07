@@ -65,6 +65,23 @@ export async function updateApi(params: UpdateApiParams) {
     .where(eq(apis.id, params.id));
 }
 
+export interface UpdateApiMetadataParams {
+  id: number;
+  name?: string;
+  description?: string | null;
+  host?: string | null;
+}
+
+export async function updateApiMetadata(params: UpdateApiMetadataParams) {
+  const { id, ...fields } = params;
+  const [updated] = await db
+    .update(apis)
+    .set({ ...fields, updatedAt: new Date() })
+    .where(eq(apis.id, id))
+    .returning();
+  return updated;
+}
+
 export async function getApiById(apiId: number, userId?: number) {
   const query = db
     .select({

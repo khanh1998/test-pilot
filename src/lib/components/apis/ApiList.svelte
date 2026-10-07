@@ -8,8 +8,9 @@
 
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { getApiList, deleteApi as deleteApiStore } from '$lib/http_client/apis';
+  import { getApiList, deleteApiConfirmingUsage as deleteApiStore } from '$lib/http_client/apis';
   import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+  import CreateApiDialog from './CreateApiDialog.svelte';
   import type { Project } from '$lib/store/project';
   import type { Api } from '$lib/types/api';
 
@@ -27,6 +28,8 @@
   let deleteApiId: number | null = $state(null);
   let deleteError: string | null = $state(null);
   
+  let showCreateDialog = $state(false);
+
   // Confirm dialog state
   let showConfirmDialog = $state(false);
   let pendingDeleteApiId: number | null = $state(null);
@@ -115,12 +118,20 @@
         </p>
       {/if}
     </div>
-    <a
-      href="/projects/apis/upload"
-      class="rounded bg-blue-500 px-4 py-2 text-white hover:bg-blue-600"
-    >
-      Upload Swagger Spec
-    </a>
+    <div class="flex gap-3">
+      <button
+        onclick={() => (showCreateDialog = true)}
+        class="rounded border border-blue-500 px-4 py-2 text-blue-600 hover:bg-blue-50"
+      >
+        Create API
+      </button>
+      <a
+        href="/projects/apis/upload"
+        class="rounded bg-blue-500 px-4 py-2 text-white hover:bg-blue-600"
+      >
+        Upload Swagger Spec
+      </a>
+    </div>
   </div>
 
   {#if loading}
@@ -145,15 +156,23 @@
       <h3 class="mb-2 text-lg font-medium text-gray-700">No APIs found</h3>
       <p class="mb-4 text-gray-500">
         {#if selectedProject}
-          No APIs found for project "{selectedProject.name}". Upload a Swagger/OpenAPI specification for this project.
+          No APIs found for project "{selectedProject.name}". Create an API and add endpoints by hand, or upload a Swagger/OpenAPI specification.
         {:else}
           Select a project to view its APIs, or upload your first Swagger/OpenAPI specification.
         {/if}
       </p>
       {#if selectedProject}
-        <a href="/projects/apis/upload" class="text-blue-500 hover:text-blue-600">
-          Upload Swagger Spec for {selectedProject.name}
-        </a>
+        <div class="flex items-center justify-center gap-4">
+          <button
+            onclick={() => (showCreateDialog = true)}
+            class="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            Create API
+          </button>
+          <a href="/projects/apis/upload" class="text-blue-500 hover:text-blue-600">
+            Upload Swagger Spec for {selectedProject.name}
+          </a>
+        </div>
       {:else}
         <div class="space-y-2">
           <div>
@@ -251,6 +270,8 @@
     </div>
   {/if}
 </div>
+
+<CreateApiDialog bind:isOpen={showCreateDialog} {selectedProject} />
 
 <!-- Confirm Delete Dialog -->
 <ConfirmDialog

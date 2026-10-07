@@ -1,5 +1,7 @@
 import { ProjectEnvironmentRepository } from '../../repository/db/project_environment.js';
 import { ProjectRepository } from '../../repository/db/project.js';
+import { getEnvironmentByIdAndUserId } from '../../repository/db/environment.js';
+import { assertNoOtherEnvironmentLinked } from './assert_single_environment.js';
 import type { 
   ProjectEnvironmentLink,
   LinkEnvironmentRequest,
@@ -58,14 +60,19 @@ export class ProjectEnvironmentService {
       throw new Error('Project not found or access denied');
     }
 
-    // TODO: Verify the environment belongs to the user
-    // This would require checking with the environment repository
+    // The environment must belong to the same user
+    const environment = await getEnvironmentByIdAndUserId(data.environmentId, userId);
+    if (!environment) {
+      throw new Error('Environment not found or access denied');
+    }
 
     // Check if environment is already linked
     const existingLink = await this.envRepo.isEnvironmentLinked(projectId, data.environmentId);
     if (existingLink) {
       throw new Error('Environment is already linked to this project');
     }
+
+    await assertNoOtherEnvironmentLinked(projectId, data.environmentId, this.envRepo);
 
     // Create basic link without variable mappings (those are handled separately)
     return await this.envRepo.linkEnvironment(projectId, {

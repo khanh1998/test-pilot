@@ -84,7 +84,7 @@ function validateEnvironmentData(data: CreateEnvironmentData): void {
 /**
  * Validate environment configuration structure
  */
-function validateEnvironmentConfig(config: any): void {
+export function validateEnvironmentConfig(config: any): void {
   if (!config.type || !['environment_set', 'single_environment'].includes(config.type)) {
     throw new EnvironmentValidationError(
       'Environment type must be either "environment_set" or "single_environment"',

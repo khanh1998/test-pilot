@@ -3,7 +3,7 @@
   import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
-  import { getApiDetails, deleteApi as deleteApiCall } from '$lib/http_client/apis';
+  import { getApiDetails, deleteApiConfirmingUsage as deleteApiCall } from '$lib/http_client/apis';
   import { setBreadcrumbOverride, clearBreadcrumbOverride } from '$lib/store/breadcrumb';
   import { onDestroy } from 'svelte';
 

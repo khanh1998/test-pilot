@@ -96,20 +96,39 @@ export async function updateEnvironment(envId: number, data: UpdateEnvironmentDa
 /**
  * Delete an environment
  */
-export async function deleteEnvironment(envId: number): Promise<boolean> {
+export async function deleteEnvironment(envId: number, force = false): Promise<boolean> {
   try {
-    const response = await fetchWithAuth(`/api/environments/${envId}`, {
+    const response = await fetchWithAuth(`/api/environments/${envId}?force=${force}`, {
       method: 'DELETE'
     });
 
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData.error || 'Failed to delete environment');
+      const error = new Error(errorData.error || 'Failed to delete environment') as Error & {
+        code?: string;
+        forceable?: boolean;
+      };
+      error.code = errorData.code;
+      error.forceable = errorData.forceable;
+      throw error;
     }
 
     return true;
   } catch (error) {
     console.error(`Error deleting environment ${envId}:`, error);
+    throw error;
+  }
+}
+
+/** Delete an environment, asking the user before unlinking it from projects. */
+export async function deleteEnvironmentConfirmingUsage(envId: number): Promise<boolean> {
+  try {
+    return await deleteEnvironment(envId);
+  } catch (error) {
+    const { code, forceable, message } = error as Error & { code?: string; forceable?: boolean };
+    if (code === 'IN_USE' && forceable && confirm(`${message} Continue?`)) {
+      return deleteEnvironment(envId, true);
+    }
     throw error;
   }
 }

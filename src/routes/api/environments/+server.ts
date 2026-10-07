@@ -1,7 +1,8 @@
 import { parseJsonRequest } from '$lib/server/http/parse-json-request';
 import { json } from '@sveltejs/kit';
 import type { RequestEvent } from '@sveltejs/kit';
-import { createEnvironment } from '$lib/server/service/environments/create_environment';
+import { createManagedEnvironment } from '$lib/server/service/environments/manage_environment';
+import { serviceErrorResponse } from '$lib/server/http/service-error';
 import { getEnvironmentsForUser } from '$lib/server/service/environments/get_environments';
 import { CreateEnvironmentRequest } from '$lib/schemas/environments';
 
@@ -30,16 +31,12 @@ export async function POST({ request, locals }: RequestEvent) {
   }
 
   try {
-    const environment = await createEnvironment(locals.user.userId, parsed.data);
+    const environment = await createManagedEnvironment(locals.user.userId, parsed.data);
     return json(environment, { status: 201 });
   } catch (err) {
+    const response = serviceErrorResponse(err);
+    if (response) return response;
     console.error('Error creating environment:', err);
-    if (
-      err instanceof Error &&
-      (err.name === 'EnvironmentValidationError' || err.name === 'EnvironmentCreationError')
-    ) {
-      return json({ error: err.message }, { status: 400 });
-    }
     return json({ error: 'Failed to create environment' }, { status: 500 });
   }
 }

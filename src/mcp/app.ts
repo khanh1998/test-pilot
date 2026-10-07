@@ -59,6 +59,23 @@ function asTextResult(structuredContent: Record<string, unknown>) {
 }
 
 const primitiveParameterTypeSchema = z.enum(['string', 'number', 'boolean', 'null']);
+const subEnvironmentInputSchema = z.object({
+  name: z.string().optional().describe('Display name; defaults to the key'),
+  description: z.string().optional(),
+  variables: z.record(z.string(), z.unknown()).optional(),
+  apiHosts: z
+    .record(z.string(), z.string())
+    .optional()
+    .describe('API id → full host URL, e.g. {"12": "https://dev.example.com"}')
+});
+
+const variableDefinitionInputSchema = z.object({
+  type: z.enum(['string', 'number', 'boolean', 'object', 'array']),
+  description: z.string().optional(),
+  required: z.boolean().optional(),
+  defaultValue: z.unknown().optional()
+});
+
 const apiEndpointDefinitionSchema = {
   path: z.string().startsWith('/'),
   method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD']),
@@ -875,6 +892,16 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
             'get_test_flow'
           ],
           endpointDiscovery: ['search_endpoints', 'browse_endpoints', 'get_endpoint_details'],
+          apiManagement: ['create_api', 'update_api', 'delete_api'],
+          environmentManagement: [
+            'list_environments',
+            'get_environment',
+            'create_environment',
+            'update_environment',
+            'delete_environment',
+            'link_environment_to_project',
+            'unlink_environment_from_project'
+          ],
           endpointManagement: [
             'list_api_endpoints',
             'create_api_endpoint',
@@ -2634,6 +2661,271 @@ export function createTestPilotMcpServer(authContext?: McpAuthContext): McpServe
         ? await getEndpointSummary({ endpointId, userId: getUserId(userId, authContext) })
         : await getEndpointDetails({ endpointId, userId: getUserId(userId, authContext) });
       return asTextResult({ endpoint });
+    }
+  );
+
+  server.registerTool(
+    'list_environments',
+    {
+      title: 'List Environments',
+      description:
+        'List your environments with their sub-environments (dev, sit, uat…), variable definitions, and linked API ids. Variable values are omitted; use get_environment for them. Use get_project_context to see which are linked to a project.',
+      inputSchema: { userId: z.number().optional() }
+    },
+    async ({ userId }) => {
+      const { summarizeEnvironment } = await import(
+        '$lib/server/service/environments/manage_environment'
+      );
+      const { getEnvironmentsForUser } = await import(
+        '$lib/server/service/environments/get_environments'
+      );
+      const environments = await getEnvironmentsForUser(getUserId(userId, authContext));
+      return asTextResult({
+        environments: environments.map((environment) => summarizeEnvironment(environment, false))
+      });
+    }
+  );
+
+  server.registerTool(
+    'get_environment',
+    {
+      title: 'Get Environment',
+      description:
+        "Get one environment including every sub-environment's variable values and per-API host overrides. Values may contain secrets such as passwords or tokens.",
+      inputSchema: { userId: z.number().optional(), environmentId: z.number() }
+    },
+    async ({ userId, environmentId }) => {
+      const { getManagedEnvironment, summarizeEnvironment } = await import(
+        '$lib/server/service/environments/manage_environment'
+      );
+      const environment = await getManagedEnvironment(
+        environmentId,
+        getUserId(userId, authContext)
+      );
+      return asTextResult({ environment: summarizeEnvironment(environment, true) });
+    }
+  );
+
+  server.registerTool(
+    'create_environment',
+    {
+      title: 'Create Environment',
+      description:
+        'Create an environment: named sub-environments (e.g. dev, sit, uat), each with variable values and per-API host URLs, plus optional variable definitions. A project has only one environment (its dev/staging/prod variants are sub-environments), so pass projectId only for a project with no environment yet: it links the new environment immediately, with variableMappings mapping project variable names to environment variable names. Use list_projects/get_project_context first to check.',
+      inputSchema: {
+        userId: z.number().optional(),
+        name: z.string().min(1),
+        description: z.string().optional(),
+        type: z.enum(['environment_set', 'single_environment']).optional(),
+        subEnvironments: z.record(z.string(), subEnvironmentInputSchema).optional(),
+        variableDefinitions: z.record(z.string(), variableDefinitionInputSchema).optional(),
+        linkedApiIds: z.array(z.number()).optional(),
+        projectId: z.number().optional(),
+        variableMappings: z.record(z.string(), z.string()).optional()
+      }
+    },
+    async ({ userId, name, description, projectId, variableMappings, ...configInput }) => {
+      const { buildEnvironmentConfig, createManagedEnvironment, summarizeEnvironment } =
+        await import('$lib/server/service/environments/manage_environment');
+      const environment = await createManagedEnvironment(getUserId(userId, authContext), {
+        name,
+        description,
+        config: buildEnvironmentConfig(configInput),
+        projectId,
+        variableMappings
+      });
+      return asTextResult({ environment: summarizeEnvironment(environment, true) });
+    }
+  );
+
+  server.registerTool(
+    'update_environment',
+    {
+      title: 'Update Environment',
+      description:
+        "Edit an environment with merge semantics, so only what you pass changes. subEnvironments: keys are merged, a sub-environment's variables and apiHosts are merged per key, and null removes a sub-environment, an apiHosts entry, or a variableDefinitions entry; use removeVariables to delete variables. linkedApiIds replaces the whole list.",
+      inputSchema: {
+        userId: z.number().optional(),
+        environmentId: z.number(),
+        name: z.string().min(1).optional(),
+        description: z.string().nullable().optional(),
+        linkedApiIds: z.array(z.number()).optional(),
+        variableDefinitions: z
+          .record(z.string(), variableDefinitionInputSchema.nullable())
+          .optional(),
+        subEnvironments: z
+          .record(
+            z.string(),
+            subEnvironmentInputSchema
+              .extend({
+                apiHosts: z.record(z.string(), z.string().nullable()).optional(),
+                removeVariables: z.array(z.string()).optional()
+              })
+              .nullable()
+          )
+          .optional()
+      }
+    },
+    async ({ userId, environmentId, ...patch }) => {
+      const { patchManagedEnvironment, summarizeEnvironment } = await import(
+        '$lib/server/service/environments/manage_environment'
+      );
+      const environment = await patchManagedEnvironment(
+        environmentId,
+        getUserId(userId, authContext),
+        patch
+      );
+      return asTextResult({ environment: summarizeEnvironment(environment, true) });
+    }
+  );
+
+  server.registerTool(
+    'delete_environment',
+    {
+      title: 'Delete Environment',
+      description:
+        'Permanently delete an environment. Blocked while test flows are linked to it (the error lists them; re-link them first). Blocked while linked to projects unless force is true, which unlinks it from those projects first.',
+      inputSchema: {
+        userId: z.number().optional(),
+        environmentId: z.number(),
+        force: z.boolean().optional()
+      }
+    },
+    async ({ userId, environmentId, force = false }) => {
+      const { deleteManagedEnvironment } = await import(
+        '$lib/server/service/environments/manage_environment'
+      );
+      const result = await deleteManagedEnvironment(
+        environmentId,
+        getUserId(userId, authContext),
+        force
+      );
+      return asTextResult({ deleted: true, ...result });
+    }
+  );
+
+  server.registerTool(
+    'link_environment_to_project',
+    {
+      title: 'Link Environment To Project',
+      description:
+        'Link an environment to a project, or replace the variable mappings if that environment is already linked. A project can have only one environment: if it already has a different one this fails, so unlink that first (or add a sub-environment such as dev, staging, or prod to the existing environment with update_environment). variableMappings maps project variable names to environment variable names (project_var → env_var).',
+      inputSchema: {
+        userId: z.number().optional(),
+        projectId: z.number(),
+        environmentId: z.number(),
+        variableMappings: z.record(z.string(), z.string()).optional()
+      }
+    },
+    async ({ userId, projectId, environmentId, variableMappings }) => {
+      const { linkManagedEnvironmentToProject } = await import(
+        '$lib/server/service/environments/manage_environment'
+      );
+      const result = await linkManagedEnvironmentToProject(
+        projectId,
+        getUserId(userId, authContext),
+        environmentId,
+        variableMappings ?? {}
+      );
+      return asTextResult(result);
+    }
+  );
+
+  server.registerTool(
+    'unlink_environment_from_project',
+    {
+      title: 'Unlink Environment From Project',
+      description:
+        "Remove an environment from a project, along with that project's variable mappings for it. The environment itself is kept.",
+      inputSchema: {
+        userId: z.number().optional(),
+        projectId: z.number(),
+        environmentId: z.number()
+      }
+    },
+    async ({ userId, projectId, environmentId }) => {
+      const { ProjectEnvironmentMappingService } = await import(
+        '$lib/server/service/projects/project_environment_mapping_service'
+      );
+      await new ProjectEnvironmentMappingService().unlinkEnvironment(
+        projectId,
+        getUserId(userId, authContext),
+        environmentId
+      );
+      return asTextResult({ unlinked: true, projectId, environmentId });
+    }
+  );
+
+  server.registerTool(
+    'create_api',
+    {
+      title: 'Create API',
+      description:
+        'Create an empty API (a minimal OpenAPI document with no endpoints) without uploading a spec file. Add endpoints afterwards with create_api_endpoint. Pass projectId to attach the API to a project (see list_projects).',
+      inputSchema: {
+        userId: z.number().optional(),
+        name: z.string().min(1),
+        description: z.string().optional(),
+        host: z.string().optional().describe('Host such as api.example.com'),
+        projectId: z.number().optional()
+      }
+    },
+    async ({ userId, name, description, host, projectId }) => {
+      const { createBlankApi } = await import('$lib/server/service/apis/create_blank_api');
+      const result = await createBlankApi({
+        name: name.trim(),
+        description: description?.trim() || undefined,
+        host: host?.trim() || undefined,
+        projectId,
+        userId: getUserId(userId, authContext)
+      });
+      return asTextResult(result as unknown as Record<string, unknown>);
+    }
+  );
+
+  server.registerTool(
+    'update_api',
+    {
+      title: 'Update API',
+      description:
+        "Update an API's name, description, or host. Only the provided fields change; pass null for description or host to clear it. The OpenAPI document and endpoints are not modified.",
+      inputSchema: {
+        userId: z.number().optional(),
+        apiId: z.number(),
+        name: z.string().min(1).optional(),
+        description: z.string().nullable().optional(),
+        host: z.string().nullable().optional()
+      }
+    },
+    async ({ userId, apiId, name, description, host }) => {
+      const { updateApi } = await import('$lib/server/service/apis/update_api');
+      const api = await updateApi({
+        apiId,
+        userId: getUserId(userId, authContext),
+        name,
+        description,
+        host
+      });
+      return asTextResult({ api });
+    }
+  );
+
+  server.registerTool(
+    'delete_api',
+    {
+      title: 'Delete API',
+      description:
+        'Permanently delete an API and all of its endpoints. The operation is blocked when saved test flows use any of its endpoints (the error lists them) unless force is explicitly true.',
+      inputSchema: {
+        userId: z.number().optional(),
+        apiId: z.number(),
+        force: z.boolean().optional()
+      }
+    },
+    async ({ userId, apiId, force = false }) => {
+      const { deleteApi } = await import('$lib/server/service/apis/delete_api');
+      const result = await deleteApi({ apiId, userId: getUserId(userId, authContext), force });
+      return asTextResult({ ...result });
     }
   );
 

@@ -1,10 +1,17 @@
 import { parseJsonRequest } from '$lib/server/http/parse-json-request';
 import { json } from '@sveltejs/kit';
 import type { RequestEvent } from '@sveltejs/kit';
-import { getEnvironmentForUser } from '$lib/server/service/environments/get_environments';
-import { updateEnvironment } from '$lib/server/service/environments/update_environment';
-import { deleteEnvironment } from '$lib/server/service/environments/delete_environment';
-import { envIdParam, UpdateEnvironmentRequest } from '$lib/schemas/environments';
+import {
+  deleteManagedEnvironment,
+  getManagedEnvironment,
+  updateManagedEnvironment
+} from '$lib/server/service/environments/manage_environment';
+import { serviceErrorResponse } from '$lib/server/http/service-error';
+import {
+  DeleteEnvironmentQuery,
+  envIdParam,
+  UpdateEnvironmentRequest
+} from '$lib/schemas/environments';
 
 export async function GET({ params, locals }: RequestEvent) {
   if (!locals.user) return json({ error: 'Authentication required' }, { status: 401 });
@@ -13,10 +20,10 @@ export async function GET({ params, locals }: RequestEvent) {
   if (!parsed.success) return json({ error: 'Invalid environment ID' }, { status: 400 });
 
   try {
-    const environment = await getEnvironmentForUser(parsed.data.envId, locals.user.userId);
-    if (!environment) return json({ error: 'Environment not found' }, { status: 404 });
-    return json(environment);
+    return json(await getManagedEnvironment(parsed.data.envId, locals.user.userId));
   } catch (err) {
+    const response = serviceErrorResponse(err);
+    if (response) return response;
     console.error('Error fetching environment:', err);
     return json({ error: 'Failed to fetch environment' }, { status: 500 });
   }
@@ -33,36 +40,42 @@ export async function PUT({ params, request, locals }: RequestEvent) {
     return json({ error: parsedBody.error.issues[0].message }, { status: 400 });
 
   try {
-    const environment = await updateEnvironment(
+    const environment = await updateManagedEnvironment(
       parsedParams.data.envId,
       locals.user.userId,
       parsedBody.data
     );
-    if (!environment) return json({ error: 'Environment not found' }, { status: 404 });
     return json(environment);
   } catch (err) {
+    const response = serviceErrorResponse(err);
+    if (response) return response;
     console.error('Error updating environment:', err);
-    if (err instanceof Error && err.name === 'EnvironmentUpdateError') {
-      return json({ error: err.message }, { status: 400 });
-    }
     return json({ error: 'Failed to update environment' }, { status: 500 });
   }
 }
 
-export async function DELETE({ params, locals }: RequestEvent) {
+export async function DELETE({ params, locals, url }: RequestEvent) {
   if (!locals.user) return json({ error: 'Authentication required' }, { status: 401 });
 
   const parsed = envIdParam.safeParse(params);
   if (!parsed.success) return json({ error: 'Invalid environment ID' }, { status: 400 });
 
+  const query = DeleteEnvironmentQuery.safeParse({ force: url.searchParams.get('force') ?? 'false' });
+  if (!query.success) return json({ error: 'Invalid force value' }, { status: 400 });
+
   try {
-    await deleteEnvironment(parsed.data.envId, locals.user.userId);
-    return json({ success: true, id: parsed.data.envId });
+    const result = await deleteManagedEnvironment(
+      parsed.data.envId,
+      locals.user.userId,
+      query.data.force
+    );
+    return json({ success: true, id: parsed.data.envId, ...result });
   } catch (err) {
+    const response = serviceErrorResponse(err, {
+      forceable: (err as { forceable?: unknown }).forceable
+    });
+    if (response) return response;
     console.error('Error deleting environment:', err);
-    if (err instanceof Error && err.name === 'EnvironmentDeletionError') {
-      return json({ error: err.message }, { status: 404 });
-    }
     return json({ error: 'Failed to delete environment' }, { status: 500 });
   }
 }

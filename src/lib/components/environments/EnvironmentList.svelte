@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { getEnvironments, deleteEnvironment } from '$lib/http_client/environments';
+  import { getEnvironments, deleteEnvironmentConfirmingUsage } from '$lib/http_client/environments';
   import EnvironmentCreator from './EnvironmentCreator.svelte';
   import EnvironmentCard from './EnvironmentCard.svelte';
   import type { Environment } from '$lib/types/environment';
@@ -58,7 +58,7 @@
       isDeleting = true;
       error = null;
       
-      const success = await deleteEnvironment(environment.id);
+      const success = await deleteEnvironmentConfirmingUsage(environment.id);
       
       if (success) {
         // Remove the environment from the local list

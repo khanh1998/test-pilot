@@ -52,6 +52,7 @@ export type UpdateSwaggerResponse = {
 export type DeleteApiResponse = {
   success: boolean;
   message: string;
+  affectedFlows: Array<{ id: number; name: string }>;
 };
 
 export type ErrorResponse = {

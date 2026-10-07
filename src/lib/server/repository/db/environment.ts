@@ -3,7 +3,12 @@
  */
 
 import { db } from '$lib/server/db';
-import { environments, environmentApis } from '$lib/server/db/schema';
+import {
+  environments,
+  environmentApis,
+  projectEnvironments,
+  testFlows
+} from '$lib/server/db/schema';
 import { eq, and, ne } from 'drizzle-orm';
 import type { Environment, CreateEnvironmentData, UpdateEnvironmentData } from '$lib/types/environment';
 
@@ -143,4 +148,25 @@ export async function checkEnvironmentNameExists(
     .where(and(...conditions));
 
   return !!result;
+}
+
+/**
+ * Test flows (owned by the user) that are linked to an environment
+ */
+export async function getFlowsUsingEnvironment(environmentId: number, userId: number) {
+  return await db
+    .select({ id: testFlows.id, name: testFlows.name })
+    .from(testFlows)
+    .where(and(eq(testFlows.environmentId, environmentId), eq(testFlows.userId, userId)));
+}
+
+/**
+ * Ids of projects an environment is linked to
+ */
+export async function getLinkedProjectIds(environmentId: number): Promise<number[]> {
+  const rows = await db
+    .select({ projectId: projectEnvironments.projectId })
+    .from(projectEnvironments)
+    .where(eq(projectEnvironments.environmentId, environmentId));
+  return rows.map((row) => row.projectId);
 }

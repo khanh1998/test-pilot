@@ -6,6 +6,23 @@ export const ListApisQuery = z.object({
   projectId: z.coerce.number().int().positive().optional()
 });
 
+export const CreateApiBody = z.object({
+  name: z.string().trim().min(1, 'Name is required'),
+  description: z.string().trim().optional(),
+  host: z.string().trim().optional(),
+  projectId: z.number().int().positive().optional()
+});
+
+export const UpdateApiBody = z.object({
+  name: z.string().trim().min(1, 'Name cannot be empty').optional(),
+  description: z.string().trim().nullable().optional(),
+  host: z.string().trim().nullable().optional()
+});
+
+export const DeleteApiQuery = z.object({
+  force: z.enum(['true', 'false']).transform((value) => value === 'true')
+});
+
 // ── Shared schemas ────────────────────────────────────────────────────────────
 
 export const Api = registry.register(
@@ -67,7 +84,8 @@ const DeleteApiResponse = registry.register(
   'DeleteApiResponse',
   z.object({
     success: z.boolean(),
-    message: z.string()
+    message: z.string(),
+    affectedFlows: z.array(z.object({ id: z.number().int(), name: z.string() }))
   })
 );
 
@@ -90,6 +108,33 @@ registry.registerPath({
   },
   responses: {
     200: { description: 'Success', content: { 'application/json': { schema: GetApisResponse } } },
+    401: { description: 'Unauthorized', content: { 'application/json': { schema: ErrorResponse } } }
+  }
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/api/apis',
+  summary: 'Create an API without a specification file',
+  tags: ['APIs'],
+  security: [{ bearerAuth: [] }],
+  request: { body: { content: { 'application/json': { schema: CreateApiBody } } } },
+  responses: {
+    200: {
+      description: 'Created',
+      content: {
+        'application/json': {
+          schema: z.object({
+            success: z.literal(true),
+            api: Api.omit({ createdAt: true, updatedAt: true }).required({ endpointCount: true })
+          })
+        }
+      }
+    },
+    400: {
+      description: 'Invalid request',
+      content: { 'application/json': { schema: ErrorResponse } }
+    },
     401: { description: 'Unauthorized', content: { 'application/json': { schema: ErrorResponse } } }
   }
 });
@@ -150,14 +195,52 @@ registry.registerPath({
 });
 
 registry.registerPath({
+  method: 'patch',
+  path: '/api/apis/{id}',
+  summary: "Update an API's name, description, or host",
+  tags: ['APIs'],
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: apiIdParam,
+    body: { content: { 'application/json': { schema: UpdateApiBody } } }
+  },
+  responses: {
+    200: {
+      description: 'Updated',
+      content: {
+        'application/json': {
+          schema: z.object({
+            success: z.literal(true),
+            api: Api.pick({ id: true, name: true, description: true, host: true, projectId: true })
+          })
+        }
+      }
+    },
+    400: {
+      description: 'Invalid request',
+      content: { 'application/json': { schema: ErrorResponse } }
+    },
+    401: {
+      description: 'Unauthorized',
+      content: { 'application/json': { schema: ErrorResponse } }
+    },
+    404: { description: 'Not found', content: { 'application/json': { schema: ErrorResponse } } }
+  }
+});
+
+registry.registerPath({
   method: 'delete',
   path: '/api/apis/{id}',
   summary: 'Delete an API',
   tags: ['APIs'],
   security: [{ bearerAuth: [] }],
-  request: { params: apiIdParam },
+  request: { params: apiIdParam, query: DeleteApiQuery },
   responses: {
     200: { description: 'Deleted', content: { 'application/json': { schema: DeleteApiResponse } } },
+    409: {
+      description: 'API is used by saved test flows; retry with force=true to delete anyway',
+      content: { 'application/json': { schema: ErrorResponse } }
+    },
     401: {
       description: 'Unauthorized',
       content: { 'application/json': { schema: ErrorResponse } }
